@@ -1,0 +1,47 @@
+---
+title: Add a custom notification channel
+description: Send on a channel the SDK doesn't have — a chat service, a pager — with the same outbox, retries and delivery log as email.
+---
+
+A channel is a name, an address check and a `send`. The SDK keeps everything else: queuing with your transaction, sending after the commit, retrying, and logging.
+
+<Languages>
+<Tab value="Java">
+
+<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/java/com/acme/notes/recipes/ChatChannel.java" region="custom-channel" title="ChatChannel.java" />
+
+Declare it as a bean; then `EgradxChannel.of("chat")` can be sent on.
+
+</Tab>
+<Tab value="Node">
+
+<RepoSnippet file="apps/egradx-devportal/examples/node/src/recipes/chat-channel.ts" region="custom-channel" title="src/recipes/chat-channel.ts" />
+
+</Tab>
+<Tab value="Python">
+
+<RepoSnippet file="apps/egradx-devportal/examples/python/recipes/chat_channel.py" region="custom-channel" title="recipes/chat_channel.py" />
+
+</Tab>
+</Languages>
+
+## What `send` returns
+
+| Result | The SDK |
+|---|---|
+| `sent()` | marks the delivery `SENT` |
+| `retryable(reason)` | tries again later: 30 seconds, doubling up to an hour, eight attempts |
+| `permanent(reason)` | marks it `DEAD` at once, with the reason, in the delivery log |
+
+Return a result rather than throwing; anything thrown counts as retryable.
+
+## Rules for a channel
+
+- **Bound every call** with a timeout. A hung call holds a dispatcher slot.
+- **Expect a delivery twice.** The dispatcher is at-least-once: if an instance dies mid-send, the delivery is sent again. Pass `deliveryId` on as an idempotency key, as above.
+- **Check addresses in `validateAddress`.** A bad address is then refused when the message is sent, not discovered later.
+- **Templates:** a channel named `chat` uses `chat.body.txt` (and `chat.subject.txt`) in each type's template folder.
+
+## See also
+
+- [Notifications](/docs/guides/notifications) · [Slack or Twilio](/docs/recipes/configure-slack-or-twilio)

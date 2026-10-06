@@ -1,0 +1,336 @@
+{
+  "capturedAt": "2026-10-05T14:15:41.723Z",
+  "sdkVersion": "1.0.0",
+  "languages": {
+    "java": [
+      {
+        "name": "login",
+        "title": "Sign in",
+        "request": {
+          "method": "POST",
+          "path": "/egradx/auth/login",
+          "body": {
+            "username": "ada@example.com",
+            "password": "…"
+          }
+        },
+        "response": {
+          "status": 200,
+          "body": {
+            "accessToken": "eyJhbGciOiJSUzI1… (redacted)",
+            "refreshToken": "IBetu1sLzg3Xbhmr… (redacted)",
+            "tokenType": "Bearer",
+            "expiresAt": "2026-10-05T15:15:25.562138500Z",
+            "user": {
+              "id": "b9e21442-f9ec-4f92-abb6-d69aecab3419",
+              "username": "ada@example.com",
+              "email": "ada@example.com",
+              "displayName": "Ada Admin",
+              "active": true,
+              "createdAt": "2026-10-05T14:15:23.679215Z"
+            },
+            "organizationId": "05817b4a-7d07-4442-930e-57fdd09d4c7d",
+            "platformOrganization": false,
+            "roleId": "076ddcaa-7d8f-4585-b383-a55878571e78",
+            "roleName": "Admin",
+            "authorities": [
+              "egradx.role.read",
+              "egradx.audit.read",
+              "note.write",
+              "egradx.user.read",
+              "egradx.user.manage",
+              "egradx.notification.manage",
+              "egradx.notification.read",
+              "egradx.role.manage",
+              "note.read"
+            ],
+            "organizationName": "Demo"
+          }
+        }
+      },
+      {
+        "name": "me",
+        "title": "Who is signed in",
+        "request": {
+          "method": "GET",
+          "path": "/egradx/auth/me"
+        },
+        "response": {
+          "status": 200,
+          "body": {
+            "id": "b9e21442-f9ec-4f92-abb6-d69aecab3419",
+            "username": "ada@example.com",
+            "email": "ada@example.com",
+            "displayName": "Ada Admin",
+            "active": true,
+            "createdAt": "2026-10-05T14:15:23.679215Z"
+          }
+        }
+      },
+      {
+        "name": "refresh",
+        "title": "A new access token from the refresh token",
+        "request": {
+          "method": "POST",
+          "path": "/egradx/auth/refresh",
+          "body": {
+            "refreshToken": "…"
+          }
+        },
+        "response": {
+          "status": 200,
+          "body": {
+            "accessToken": "eyJhbGciOiJSUzI1… (redacted)",
+            "refreshToken": "IBetu1sLzg3Xbhmr… (redacted)",
+            "tokenType": "Bearer",
+            "expiresAt": "2026-10-05T15:15:25.649865100Z",
+            "user": {
+              "id": "b9e21442-f9ec-4f92-abb6-d69aecab3419",
+              "username": "ada@example.com",
+              "email": "ada@example.com",
+              "displayName": "Ada Admin",
+              "active": true,
+              "createdAt": "2026-10-05T14:15:23.679215Z"
+            },
+            "organizationId": "05817b4a-7d07-4442-930e-57fdd09d4c7d",
+            "platformOrganization": false,
+            "roleId": "076ddcaa-7d8f-4585-b383-a55878571e78",
+            "roleName": "Admin",
+            "authorities": [
+              "egradx.role.read",
+              "egradx.audit.read",
+              "note.write",
+              "egradx.user.read",
+              "egradx.user.manage",
+              "egradx.notification.manage",
+              "egradx.notification.read",
+              "egradx.role.manage",
+              "note.read"
+            ],
+            "organizationName": "Demo"
+          }
+        }
+      }
+    ],
+    "node": [
+      {
+        "name": "login",
+        "title": "Sign in",
+        "request": {
+          "method": "POST",
+          "path": "/egradx/auth/login",
+          "body": {
+            "username": "ada@example.com",
+            "password": "…"
+          }
+        },
+        "response": {
+          "status": 200,
+          "body": {
+            "accessToken": "eyJhbGciOiJSUzI1… (redacted)",
+            "refreshToken": "o8jqDU-hSX-gGTSt… (redacted)",
+            "tokenType": "Bearer",
+            "expiresAt": "2026-10-05T15:15:33.685Z",
+            "user": {
+              "id": "ee2cb897-0694-440d-b000-e3aedd2f7e20",
+              "username": "ada@example.com",
+              "email": "ada@example.com",
+              "displayName": "Ada Admin",
+              "active": true,
+              "createdAt": "2026-10-05T14:15:32.270Z"
+            },
+            "organizationId": "8d41721e-4d59-494c-8f8c-8487d9adc1b2",
+            "platformOrganization": false,
+            "roleId": "7dc226a6-1b32-4876-bb0d-cb0bf54b9894",
+            "roleName": "Admin",
+            "authorities": [
+              "egradx.audit.read",
+              "egradx.notification.manage",
+              "egradx.notification.read",
+              "egradx.role.manage",
+              "egradx.role.read",
+              "egradx.user.manage",
+              "egradx.user.read",
+              "note.read",
+              "note.write"
+            ],
+            "organizationName": "Demo"
+          }
+        }
+      },
+      {
+        "name": "me",
+        "title": "Who is signed in",
+        "request": {
+          "method": "GET",
+          "path": "/egradx/auth/me"
+        },
+        "response": {
+          "status": 200,
+          "body": {
+            "id": "ee2cb897-0694-440d-b000-e3aedd2f7e20",
+            "username": "ada@example.com",
+            "email": "ada@example.com",
+            "displayName": "Ada Admin",
+            "active": true,
+            "createdAt": "2026-10-05T14:15:32.270Z"
+          }
+        }
+      },
+      {
+        "name": "refresh",
+        "title": "A new access token from the refresh token",
+        "request": {
+          "method": "POST",
+          "path": "/egradx/auth/refresh",
+          "body": {
+            "refreshToken": "…"
+          }
+        },
+        "response": {
+          "status": 200,
+          "body": {
+            "accessToken": "eyJhbGciOiJSUzI1… (redacted)",
+            "refreshToken": "o8jqDU-hSX-gGTSt… (redacted)",
+            "tokenType": "Bearer",
+            "expiresAt": "2026-10-05T15:15:33.737Z",
+            "user": {
+              "id": "ee2cb897-0694-440d-b000-e3aedd2f7e20",
+              "username": "ada@example.com",
+              "email": "ada@example.com",
+              "displayName": "Ada Admin",
+              "active": true,
+              "createdAt": "2026-10-05T14:15:32.270Z"
+            },
+            "organizationId": "8d41721e-4d59-494c-8f8c-8487d9adc1b2",
+            "platformOrganization": false,
+            "roleId": "7dc226a6-1b32-4876-bb0d-cb0bf54b9894",
+            "roleName": "Admin",
+            "authorities": [
+              "egradx.audit.read",
+              "egradx.notification.manage",
+              "egradx.notification.read",
+              "egradx.role.manage",
+              "egradx.role.read",
+              "egradx.user.manage",
+              "egradx.user.read",
+              "note.read",
+              "note.write"
+            ],
+            "organizationName": "Demo"
+          }
+        }
+      }
+    ],
+    "python": [
+      {
+        "name": "login",
+        "title": "Sign in",
+        "request": {
+          "method": "POST",
+          "path": "/egradx/auth/login",
+          "body": {
+            "username": "ada@example.com",
+            "password": "…"
+          }
+        },
+        "response": {
+          "status": 200,
+          "body": {
+            "accessToken": "eyJhbGciOiJSUzI1… (redacted)",
+            "refreshToken": "QsBNIkdCZwzsfQtB… (redacted)",
+            "tokenType": "Bearer",
+            "expiresAt": "2026-10-05T15:15:41.627373Z",
+            "user": {
+              "id": "a475acb7-6a2e-4fb1-a34b-e4228f34c92a",
+              "username": "ada@example.com",
+              "email": "ada@example.com",
+              "displayName": "Ada Admin",
+              "active": true,
+              "createdAt": "2026-10-05T14:15:40.567486Z"
+            },
+            "organizationId": "95602ad6-dc6e-440e-a8a5-5f01592d2c5f",
+            "platformOrganization": false,
+            "roleId": "4cd7dd5c-7ddc-451c-8fa6-ab54a958c20b",
+            "roleName": "Admin",
+            "authorities": [
+              "egradx.notification.manage",
+              "egradx.role.read",
+              "egradx.audit.read",
+              "egradx.user.manage",
+              "egradx.notification.read",
+              "egradx.role.manage",
+              "egradx.user.read",
+              "note.write",
+              "note.read"
+            ],
+            "organizationName": "Demo"
+          }
+        }
+      },
+      {
+        "name": "me",
+        "title": "Who is signed in",
+        "request": {
+          "method": "GET",
+          "path": "/egradx/auth/me"
+        },
+        "response": {
+          "status": 200,
+          "body": {
+            "id": "a475acb7-6a2e-4fb1-a34b-e4228f34c92a",
+            "username": "ada@example.com",
+            "email": "ada@example.com",
+            "displayName": "Ada Admin",
+            "active": true,
+            "createdAt": "2026-10-05T14:15:40.567486Z"
+          }
+        }
+      },
+      {
+        "name": "refresh",
+        "title": "A new access token from the refresh token",
+        "request": {
+          "method": "POST",
+          "path": "/egradx/auth/refresh",
+          "body": {
+            "refreshToken": "…"
+          }
+        },
+        "response": {
+          "status": 200,
+          "body": {
+            "accessToken": "eyJhbGciOiJSUzI1… (redacted)",
+            "refreshToken": "QsBNIkdCZwzsfQtB… (redacted)",
+            "tokenType": "Bearer",
+            "expiresAt": "2026-10-05T15:15:41.659406Z",
+            "user": {
+              "id": "a475acb7-6a2e-4fb1-a34b-e4228f34c92a",
+              "username": "ada@example.com",
+              "email": "ada@example.com",
+              "displayName": "Ada Admin",
+              "active": true,
+              "createdAt": "2026-10-05T14:15:40.567486Z"
+            },
+            "organizationId": "95602ad6-dc6e-440e-a8a5-5f01592d2c5f",
+            "platformOrganization": false,
+            "roleId": "4cd7dd5c-7ddc-451c-8fa6-ab54a958c20b",
+            "roleName": "Admin",
+            "authorities": [
+              "egradx.notification.manage",
+              "egradx.role.read",
+              "egradx.audit.read",
+              "egradx.user.manage",
+              "egradx.notification.read",
+              "egradx.role.manage",
+              "egradx.user.read",
+              "note.write",
+              "note.read"
+            ],
+            "organizationName": "Demo"
+          }
+        }
+      }
+    ]
+  }
+}

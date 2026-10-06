@@ -1,0 +1,110 @@
+---
+title: Troubleshooting
+description: The symptoms people actually hit with the SDK, what causes them, and the fix — sign-in, permissions, migrations, email, events and the browser.
+---
+
+## Sign-in and sessions
+
+### Every request is 401, even signed in (Java)
+
+You declared your own `SecurityFilterChain`, and it replaced the SDK's without adding its filter, so no request is ever authenticated. Add `egradxAuthenticationFilter` before `UsernamePasswordAuthenticationFilter`, and the SDK's entry point. See [identity](/docs/guides/identity#in-oim).
+
+### Sessions end at random, or 401 loops after a deploy
+
+Two instances made different keys. That happens when they started together on an empty keys folder, or used different folders. Tokens signed with one key are refused by instances holding the other. Give every instance the same folder and passphrase, start one first, then restart the rest. People sign in once more. See [keys](/docs/guides/keys#rules).
+
+### `SESSION_EXPIRED` right after signing in, on another instance
+
+The issuer differs between instances, or one of them can't read the keys (a different passphrase). Every instance needs the same `issuer` and keys.
+
+### `ORG_SELECTION_REQUIRED` at sign-in
+
+The person belongs to several organizations. Sign in again with `organizationId` set to one from `details.organizations`. The generated login form does this.
+
+### The platform administrator gets 403 on my endpoints
+
+That is by design: the platform administrator holds every SDK authority and none of yours. To work inside an organization they need a membership there.
+
+### A permission granted doesn't apply yet
+
+On other instances, a role's authorities are cached for up to 60 seconds. If it never applies: is the authority on the role the person holds **in the organization their session is in**?
+
+## Errors
+
+### My endpoint answers 500 for a `NotFoundException` (Java)
+
+A Java application on `egradx-sdk` alone doesn't put its own endpoints' errors in the envelope. Add the error advice that generated projects have (`ApiExceptionHandler`): see [errors](/docs/guides/errors#wiring-the-envelope-in). If your advice has a catch-all `@ExceptionHandler(Exception.class)`, it also catches `AccessDeniedException`, so refusals become 500s. Handle that exception too, as the generated one does.
+
+### Node: errors come back as HTML
+
+`app.use(...egradxErrors())` must come **after** every route.
+
+## Migrations
+
+### "…was changed after it was applied"
+
+An applied migration file was edited. Restore it, and put the change in a new migration.
+
+### `relation "egradx_organization" does not exist`
+
+Your migrations ran before the SDK's sign-in tables. In Node and Python, pass yours to `migrateEgradx` / `migrate_egradx` as the application step. See [migrations order](/docs/recipes/migrations-order).
+
+### The Java build seems to ignore my changes
+
+The IDE wrote `target/classes` and Maven skipped compiling. Run `mvn clean …`.
+
+## Email and notifications
+
+### Nothing arrives
+
+Look at the delivery log: `GET /egradx/notifications/admin/deliveries`. `lastError` says why. Common causes are a wrong host or port, TLS on the wrong port, or a missing `from`.
+
+### `CHANNEL_UNAVAILABLE` when sending
+
+The channel isn't set up for that organization. `GET /egradx/notifications/admin/channels` gives the `unavailableReason`.
+
+### Saving SMTP or Slack credentials fails (Node, Python)
+
+No secrets passphrase. Set `EGRADX_NOTIFICATION_SECRETS_PASSPHRASE`, or pass `secrets.passphrase` / `secrets_passphrase`.
+
+### No password-reset or invitation emails
+
+`links.base-url` isn't set. Invitations then fail with `INVITATION_DELIVERY_UNAVAILABLE`; reset requests still answer 202, with no email.
+
+### The bell doesn't update live
+
+A proxy is buffering `/egradx/notifications/stream`. Turn buffering off for it. With several instances, a notice is live only on the instance that published it.
+
+### The application doesn't start: a template uses an undeclared variable
+
+Add the variable to the type's `requires` / `optional`, or fix the template. The message names both.
+
+## Events
+
+### Events are never handled
+
+- Node and Python: `events.start()` was never called, or `migrateEvents` / `migrate_events` didn't run.
+- In-process with two different services on one database: one relays events the other should handle. Use a broker.
+- A handler keeps failing: see [dead letters](/docs/recipes/dead-letters).
+
+### An event arrives a couple of seconds late
+
+It was published with an explicit transaction (`{ tx }` / `connection=`). The relay picks it up on its next poll, up to 2 seconds later.
+
+## Running locally
+
+### Python on Windows: `ProactorEventLoop` errors from psycopg
+
+psycopg's async mode needs the selector event loop. The generated `main.py` and `tests/conftest.py` set it.
+
+### Python in a container: connection refused
+
+uvicorn listened on 127.0.0.1. Set `HOST=0.0.0.0`, as the generated Dockerfile does.
+
+### Garbled characters in a Windows console
+
+The console uses cp1252. Run `chcp 65001`, or set `PYTHONUTF8=1` for Python.
+
+## Still stuck
+
+Every error body has a `requestId`. Search the logs for it: the failure is logged with its stack trace, under that id.

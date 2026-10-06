@@ -1,0 +1,77 @@
+---
+title: OIM, a tour
+description: Order & Inventory Management — a multi-tenant application built on the SDK, with three interchangeable backends and two frontends, and no sign-in code of its own.
+---
+
+OIM is a real application of the kind teams build on the SDK: products, warehouses, stock, customers and orders, for many organizations at once. It exists to show what building on the SDK looks like, and every guide ends with how OIM does it.
+
+## The parts
+
+<Mermaid chart={`flowchart LR
+  subgraph Frontends
+    V[Vite + React<br/>tokens in the browser]
+    N[Next.js<br/>backend-for-frontend]
+  end
+  subgraph Backends["Backends: any one, or several on one database"]
+    J[Java<br/>Spring Boot]
+    O[Node<br/>Express + Prisma]
+    P[Python<br/>FastAPI + SQLAlchemy]
+  end
+  V --> J & O & P
+  N --> J & O & P
+  J & O & P --> D[(PostgreSQL)]
+  J & O & P --> M[Mailpit]
+  J & O & P --> T[Jaeger, Prometheus]`} />
+
+| Part | Built on | Notes |
+|---|---|---|
+| `backend/` | Java: Spring Boot and the Java SDK | the reference |
+| `backend-node/` | Node: Express, Prisma and the Node SDK | the same endpoints and answers |
+| `backend-python/` | Python: FastAPI, SQLAlchemy and the Python SDK | the same endpoints and answers |
+| `frontend/` | Vite, React Router and `@babulvaibhav/egradx-react` | its own screens, on the hooks |
+| `frontend-next/` | Next.js and `@babulvaibhav/egradx-next` | the copy-in screens, tokens in HttpOnly cookies |
+
+The backends are interchangeable down to the database. Any of them can migrate and run on a database another one created, and two can serve one database at once. A token, a session or an audit record from one is valid on the others.
+
+## What is the SDK's, and what is OIM's
+
+| The SDK's (OIM has no code for it) | OIM's |
+|---|---|
+| sign-in, sessions, users, roles, organizations, invitations, password reset, profiles | products, warehouses, inventory, customers, orders, the dashboard |
+| the audit trail, its search and export | the audit records of its own changes, and their words on screen |
+| the bell, email, Slack, SMS, WhatsApp, templates, preferences, delivery log | what to send, and when (the low-stock alert) |
+| request ids, traces, metrics, the error envelope | its own error codes, such as `INSUFFICIENT_INVENTORY` |
+| the signing keys, migrations of the SDK's tables | its own tables and migrations |
+
+**OIM has no authentication, user, role or organization code**: no controller, service or DTO. Its screens for all of it call the SDK's endpoints directly. What OIM adds is one listener that gives every new organization a Manager and a Staff role beside the SDK's Admin, and its permission catalog.
+
+<Screenshot name="oim-sign-in" alt="OIM's sign-in page" caption="Sign-in: the SDK's endpoint, OIM's screen." />
+
+## How OIM does it, guide by guide
+
+| Guide | In OIM |
+|---|---|
+| [Identity](/docs/guides/identity#in-oim) | its security chain adds the SDK's filter |
+| [Authorization](/docs/guides/authorization#in-oim) | eleven permissions; Manager and Staff roles on every new organization |
+| [Multi-tenancy](/docs/guides/multi-tenancy#in-oim) | one wrapper over the caller's organization, used by every query |
+| [Audit](/docs/guides/audit#in-oim) | every change with its state before and after |
+| [Notifications](/docs/guides/notifications#messages-that-must-not-break-the-change) | the bell for every change; the low-stock alert on every channel |
+| [Errors](/docs/guides/errors#in-oim) | its own codes, extending the core exceptions |
+| [Observability](/docs/guides/observability#in-oim) | Jaeger and Prometheus in its compose file |
+
+## What OIM shows that the guides don't
+
+<Cards>
+  <Card title="The low-stock alert" href="/docs/showcase/low-stock-alert">A notice in the change's transaction, and an alert on every channel after it — once per drop.</Card>
+  <Card title="Inventory under concurrency" href="/docs/showcase/inventory-concurrency">100 threads reserving 10 units leave exactly 0 available.</Card>
+  <Card title="The dashboard cache" href="/docs/showcase/dashboard-cache">Cached per organization, evicted after commit, never mid-transaction.</Card>
+  <Card title="Running OIM" href="/docs/showcase/running-oim">Any backend with any frontend, in one command.</Card>
+</Cards>
+
+## How it is tested
+
+- **Browser tests** (Playwright): twelve tests run against each of the six backend and frontend combinations. They cover sign-in kept across a reload, a notice arriving live in the bell, a refused token renewed unnoticed, sign-out followed in another tab, password reset through Mailpit, the audit screen and its export, channel settings with a test send, verifying an address, organization choice and switch, and a session ended elsewhere.
+- **Parity:** a script calls the Java backend and the Node or Python one with the same requests, and compares the answers.
+- **Concurrency:** the Java backend's tests reserve stock from 100 threads at once.
+
+<Screenshot name="oim-audit-trail" alt="OIM's audit log: a table of who did what and when, with filters" caption="The audit log: the SDK's records and endpoints, OIM's screen." />

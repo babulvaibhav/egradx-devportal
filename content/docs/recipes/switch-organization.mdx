@@ -1,0 +1,34 @@
+---
+title: Switch organization in the UI
+description: Choose an organization at sign-in, and switch later from a menu — with nothing of the previous organization left on screen.
+---
+
+Someone can belong to several organizations. A session acts in one of them at a time, and switching issues new tokens.
+
+## At sign-in
+
+Signing in as someone with several organizations fails with `ORG_SELECTION_REQUIRED`. Its `details.organizations` lists them; sign in again naming the chosen `organizationId`:
+
+<RepoSnippet file="apps/egradx-devportal/examples/web-vite/src/LoginForm.tsx" region="web-sign-in" title="src/LoginForm.tsx" />
+
+## Later, from a menu
+
+<RepoSnippet file="apps/egradx-devportal/examples/web-vite/src/recipes/OrganizationSwitcher.tsx" region="switch-organization" title="src/recipes/OrganizationSwitcher.tsx" />
+
+`switchOrganization(id)` calls `POST /egradx/auth/my/organizations/{id}/switch`, replaces the tokens, and retires the old refresh token.
+
+## Leave nothing behind
+
+- **The SDK's hooks** (`useInbox`, `useAuditLog`, the stores) start over for the new organization on their own.
+- **Your own caches** don't. Key them by `sessionScope(session)` from `@babulvaibhav/egradx-client`, which changes when the person or the organization changes. With TanStack Query, put it in every query key, or clear the cache when it changes.
+- **The live stream** reopens for the new organization.
+
+OIM's browser tests switch organization and check that nothing of the previous one is still shown.
+
+## With Next.js
+
+The same component works: the backend-for-frontend switches, and keeps the new tokens in its cookies.
+
+## See also
+
+- [Web](/docs/guides/web#what-the-client-does-for-you) · [Multi-tenancy](/docs/guides/multi-tenancy)

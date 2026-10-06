@@ -1,0 +1,99 @@
+---
+title: Web
+description: The browser side — a client that signs in and renews tokens, React hooks, a Next.js backend-for-frontend that keeps tokens out of the browser, and ready screens you copy in.
+---
+
+<Parity id="web.client" />
+
+## What it is
+
+| Package | What it gives | Use it in |
+|---|---|---|
+| `@babulvaibhav/egradx-client` | the session (sign in, renew, sign out, switch organization), a fetch that adds the token and an `X-Request-ID` and renews once on a 401, typed calls for every SDK endpoint, the live notification stream, stores for the inbox, audit trail and settings | any browser code, any framework |
+| `@babulvaibhav/egradx-react` | `EgradxProvider`, `useAuth`, `useSession`, `<Can>`, `useInbox`, `useAuditLog`, and hooks for every store | React |
+| `@babulvaibhav/egradx-next` | a backend-for-frontend: route handlers that hold the tokens in HttpOnly cookies, a page guard, `getSession`, `serverFetch` | Next.js |
+| copy-in screens | the bell, the audit log, notification settings, channel settings — source you copy in with shadcn | React with shadcn/ui |
+
+The [Initializr](/start) generates either frontend wired to your backend. The code below is what it generates.
+
+## React with Vite
+
+### The client and the provider
+
+<RepoSnippet file="apps/egradx-devportal/examples/web-vite/src/egradx.ts" region="web-client" title="src/egradx.ts" />
+
+<RepoSnippet file="apps/egradx-devportal/examples/web-vite/src/main.tsx" title="src/main.tsx" />
+
+Tokens are kept in `localStorage` (key `egradx.session`), so every tab follows a sign-in or sign-out. Any script on the page can read them: keep the Content-Security-Policy strict — or use Next.js with the backend-for-frontend, which keeps them out of the browser.
+
+### Guarding pages
+
+<RepoSnippet file="apps/egradx-devportal/examples/web-vite/src/App.tsx" region="web-guard" title="src/App.tsx" />
+
+### Signing in
+
+<RepoSnippet file="apps/egradx-devportal/examples/web-vite/src/LoginForm.tsx" region="web-sign-in" title="src/LoginForm.tsx" />
+
+### Calling your own API
+
+<RepoSnippet file="apps/egradx-devportal/examples/web-vite/src/notes-api.ts" region="web-own-api" title="src/notes-api.ts" />
+
+With axios: `attachEgradx(axiosInstance, egradx)` from `@babulvaibhav/egradx-client/axios` does the same; `{ public: true }` for signed-out pages (forgotten password), so a wrong password's 401 reaches the form.
+
+### The bell
+
+<RepoSnippet file="apps/egradx-devportal/examples/web-vite/src/Bell.tsx" region="web-bell" title="src/Bell.tsx" />
+
+In development, Vite proxies `/api` and `/egradx` to the backend (`vite.config.ts`). In production, put a reverse proxy in front that does the same — and turns buffering off for `/egradx/notifications/stream`, the live stream.
+
+## Next.js with the backend-for-frontend
+
+The browser never holds a token. It talks to `/bff/**` on the Next.js server, which keeps the tokens in HttpOnly cookies, renews them before they expire, refuses cross-site writes, and forwards each call to the API with the right token.
+
+<RepoSnippet file="apps/egradx-devportal/examples/web-next/src/egradx-server.ts" region="web-bff" title="src/egradx-server.ts" />
+
+<RepoSnippet file="apps/egradx-devportal/examples/web-next/src/app/bff/[...path]/route.ts" title="src/app/bff/[...path]/route.ts" />
+
+<RepoSnippet file="apps/egradx-devportal/examples/web-next/src/proxy.ts" region="web-proxy" title="src/proxy.ts" />
+
+<RepoSnippet file="apps/egradx-devportal/examples/web-next/src/egradx.ts" region="web-client-next" title="src/egradx.ts" />
+
+Everything else — the sign-in form, the bell, your own API calls — is the same code as with Vite: the client sends to `/bff`, and the backend-for-frontend adds the token. On the server, `bff.getSession()` reads who is signed in (from the cookies, unverified: the API decides), and `bff.serverFetch('/api/notes')` calls the API as them.
+
+## What the client does for you
+
+- **Renewal:** a 401 (or a 403 without the error envelope) renews the token once — one renewal shared by every request waiting — and retries. A coded 403 is a decision and is returned as it is.
+- **Sessions ended elsewhere:** when a renewal is refused (password changed, signed out everywhere, organization suspended), the session ends and `onSessionEnded(reason)` tells you why: show it on the sign-in page.
+- **Organization choice:** signing in as someone in several organizations throws `ORG_SELECTION_REQUIRED` with the list; sign in again with the chosen `organizationId`. `useAuth().switchOrganization(id)` changes later; every hook starts over for the new organization. Clear your own caches when `sessionScope(session)` changes.
+- **The live stream:** `useInbox()` loads the inbox, opens the stream, reloads when it reopens, and lets go of the connection while the tab is hidden. Use it once, high in the tree: each use opens a stream.
+- **Request ids:** every call carries a fresh `X-Request-ID`; an `EgradxApiError` has the `requestId` to show.
+
+## Copy-in screens
+
+Ready screens, distributed as source the way shadcn/ui distributes components: you own them — restyle, reword, cut them down. They use your shadcn primitives (so they take your theme) and `@babulvaibhav/egradx-react`'s hooks.
+
+```sh
+npx shadcn@latest add https://<this portal>/r/notification-bell.json
+```
+
+| Item | What you get |
+|---|---|
+| [`/r/notification-bell.json`](/r/notification-bell.json) | `NotificationBell`: unread count, live arrivals, older pages, read state |
+| [`/r/audit-log.json`](/r/audit-log.json) | `AuditLog` with search and filters (kept in the address if you like), each record in full, the CSV export; `AuditTimeline` and `AuditHistoryButton` for detail pages |
+| [`/r/notification-settings.json`](/r/notification-settings.json) | `NotificationSettings`: a person's addresses, verified by code, and which messages they get where |
+| [`/r/notification-channels.json`](/r/notification-channels.json) | `NotificationChannels`: each channel's settings and write-only secret, a test message, the delivery log with retry |
+
+They need a shadcn-initialised project (`components.json`, Tailwind). Answer **no** when asked to overwrite primitives you already have. Messages reach you through an `onNotify` callback: wire it to your toasts once. Sign-in, the organization switcher and the account pages are not among them — copy those from OIM, or start from the generated frontend.
+
+## In OIM
+
+OIM's two frontends are built on these packages: the Vite one with hand-written screens on the hooks, the Next.js one with the copy-in screens. The same 12 browser tests pass on both, against all three backends.
+
+<Screenshot name="oim-notification-bell" alt="OIM's dashboard with the notification bell open" caption="OIM's bell: a notice published by the API arrives while the page is open." />
+
+<Screenshot name="oim-audit-trail" alt="OIM's audit log" caption="OIM's audit log, on useAuditLog and useAuditExport." />
+
+## See also
+
+- [Recipe: show the bell](/docs/recipes/show-the-bell) · [switch organization](/docs/recipes/switch-organization) · [handle SESSION_REVOKED](/docs/recipes/handle-session-revoked)
+- [Web API reference](/docs/reference/web)

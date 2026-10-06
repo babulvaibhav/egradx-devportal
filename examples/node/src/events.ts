@@ -1,0 +1,22 @@
+import type { EgradxEventHandler } from '@babulvaibhav/egradx-events';
+
+// docs:region event-handler
+/**
+ * Counts each organization's notes from the events the notes routes publish. The SDK calls it once per event, after
+ * the note committed, in a transaction of its own (`tx`): a second delivery of the same event is dropped, and a
+ * failure is tried again later. Another service could handle the same event the same way, over RabbitMQ or Kafka.
+ */
+export function noteStats(): EgradxEventHandler {
+  return {
+    type: 'notes.note.created.v1',
+    name: 'note-stats', // stable: it is how the SDK remembers what this handler has seen
+    async handle(event, tx) {
+      await tx.$executeRawUnsafe(
+        `INSERT INTO notes_note_stats (organization_id, notes_created) VALUES ($1::uuid, 1)
+         ON CONFLICT (organization_id) DO UPDATE SET notes_created = notes_note_stats.notes_created + 1`,
+        event.organizationId,
+      );
+    },
+  };
+}
+// docs:end

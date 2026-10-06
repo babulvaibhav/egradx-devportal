@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://egradx.com/contracts/schemas/jwt-claims.json",
+  "title": "EgradxAccessTokenClaims",
+  "description": "Payload of an EGRADX access token. Signed RS256 by the issuer; verifiers check signature, iss and exp. Issued by egradx-auth (Java: com.egradx.auth.token.EgradxTokenIssuer); read by egradx-web-security (com.egradx.webservice.security.EgradxJwtTokenUtil). Guest tokens (userType Guest) use a separate mapping and are not described here.",
+  "type": "object",
+  "required": ["iss", "sub", "iat", "exp", "typ", "sid", "userType", "primaryAccountId", "activeAccountId"],
+  "properties": {
+    "iss": { "type": "string", "description": "egradx.auth.issuer-uri of the issuing application." },
+    "sub": { "type": "string", "format": "uuid", "description": "The user's id. Exposed to application code as userId." },
+    "iat": { "type": "integer", "description": "Issued at, seconds since the epoch." },
+    "exp": { "type": "integer", "description": "Expires at, seconds since the epoch." },
+    "typ": { "const": "access" },
+    "sid": { "type": "string", "format": "uuid", "description": "Session id, new for every issued token." },
+    "userType": { "$ref": "enums.json#/$defs/UserType" },
+    "primaryAccountId": { "type": "string", "format": "uuid" },
+    "activeAccountId": { "type": "string", "format": "uuid" },
+    "organizationId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "The organization the session acts in. Omitted, not null, when there is none."
+    },
+    "roleId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "The caller's role in organizationId. Omitted when there is none."
+    },
+    "platformAccess": {
+      "type": "object",
+      "description": "Accepted by verifiers (roles become ROLE_<role> authorities); not issued by egradx-auth 1.0.0, which carries no roles in tokens and resolves permissions from its database on each request.",
+      "properties": {
+        "roles": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "scope": {
+      "type": "string",
+      "description": "Comma-delimited scopes, SCOPE_<scope> authorities. Accepted by verifiers; not issued by egradx-auth 1.0.0."
+    },
+    "claims": {
+      "type": "object",
+      "description": "Free-form extra claims. Accepted by verifiers; not issued by egradx-auth 1.0.0."
+    }
+  }
+}

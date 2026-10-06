@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://egradx.com/contracts/schemas/error.json",
+  "title": "EgradxErrorResponse",
+  "description": "Body of every non-2xx response from the egradx auth, audit and notification endpoints (/egradx/**). Java: com.egradx.auth.web.EgradxErrorResponse, com.egradx.notification.web.EgradxNotificationErrorResponse, com.egradx.audit.web.EgradxAuditExceptionHandler.ErrorResponse. Clients switch on error.code, never on message text; a non-2xx body without error.code is not an EGRADX error (a proxy page, a framework default).",
+  "type": "object",
+  "required": [
+    "success",
+    "error"
+  ],
+  "properties": {
+    "success": {
+      "const": false
+    },
+    "error": {
+      "type": "object",
+      "required": [
+        "code",
+        "message",
+        "timestamp"
+      ],
+      "properties": {
+        "code": {
+          "type": "string",
+          "description": "Stable machine-readable code, e.g. AUTH_INVALID_CREDENTIALS, ORG_SELECTION_REQUIRED, NOT_FOUND. Known codes: error-codes.json."
+        },
+        "message": {
+          "type": "string",
+          "description": "Human-readable; may change between versions."
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the error was produced, UTC with offset (RFC 3339), e.g. 2026-10-01T08:31:42.740Z."
+        },
+        "requestId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The request's X-Request-ID, also returned as a response header."
+        },
+        "traceId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The request's trace (W3C trace id), when the server traces requests: what to look up in the tracing system."
+        },
+        "details": {
+          "description": "Present only for codes that carry data a client must act on, e.g. ORG_SELECTION_REQUIRED lists the organizations, AUTH_TOO_MANY_ATTEMPTS gives retryAfterSeconds."
+        }
+      }
+    }
+  }
+}

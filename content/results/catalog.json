@@ -1,0 +1,494 @@
+{
+  "capturedAt": "2026-10-05T14:15:41.724Z",
+  "sdkVersion": "1.0.0",
+  "languages": [
+    "java",
+    "node",
+    "python"
+  ],
+  "catalog": {
+    "permissions": [
+      {
+        "name": "egradx.audit.platform.read",
+        "description": "View and export every organization's audit trail, and the platform's own",
+        "category": "audit"
+      },
+      {
+        "name": "egradx.audit.read",
+        "description": "View your organization's audit trail, and export it",
+        "category": "audit"
+      },
+      {
+        "name": "egradx.notification.broadcast",
+        "description": "Send to every user of every organization, and manage settings that apply to all of them",
+        "category": "notification"
+      },
+      {
+        "name": "egradx.notification.manage",
+        "description": "Edit templates and channel settings, requeue deliveries, and send to the whole organization",
+        "category": "notification"
+      },
+      {
+        "name": "egradx.notification.read",
+        "description": "View notification templates, channel settings and the delivery log",
+        "category": "notification"
+      },
+      {
+        "name": "egradx.organization.manage",
+        "description": "Create, rename, suspend and reactivate organizations",
+        "category": "organization"
+      },
+      {
+        "name": "egradx.organization.read",
+        "description": "View organizations across the platform",
+        "category": "organization"
+      },
+      {
+        "name": "egradx.role.manage",
+        "description": "Create, edit and delete roles",
+        "category": "role"
+      },
+      {
+        "name": "egradx.role.read",
+        "description": "View roles and their permissions",
+        "category": "role"
+      },
+      {
+        "name": "egradx.user.manage",
+        "description": "Create, edit and deactivate users in the organization",
+        "category": "user"
+      },
+      {
+        "name": "egradx.user.read",
+        "description": "View users in the organization",
+        "category": "user"
+      },
+      {
+        "name": "note.read",
+        "description": "See the organization's notes",
+        "category": "note"
+      },
+      {
+        "name": "note.write",
+        "description": "Create, change and delete notes",
+        "category": "note"
+      }
+    ],
+    "adminRole": {
+      "name": "Admin",
+      "permissions": [
+        {
+          "name": "egradx.audit.read"
+        },
+        {
+          "name": "egradx.notification.manage"
+        },
+        {
+          "name": "egradx.notification.read"
+        },
+        {
+          "name": "egradx.role.manage"
+        },
+        {
+          "name": "egradx.role.read"
+        },
+        {
+          "name": "egradx.user.manage"
+        },
+        {
+          "name": "egradx.user.read"
+        },
+        {
+          "name": "note.read"
+        },
+        {
+          "name": "note.write"
+        }
+      ]
+    },
+    "actions": [
+      {
+        "action": "audit.events.exported",
+        "category": "audit",
+        "description": "Audit records exported",
+        "entityType": null
+      },
+      {
+        "action": "audit.events.purged",
+        "category": "audit",
+        "description": "Old audit records deleted by retention",
+        "entityType": null
+      },
+      {
+        "action": "auth.authority.created",
+        "category": "auth",
+        "description": "Added a permission to the catalog",
+        "entityType": "authority"
+      },
+      {
+        "action": "auth.contact.verified",
+        "category": "auth",
+        "description": "Marked a contact address verified",
+        "entityType": "user"
+      },
+      {
+        "action": "auth.email_change.confirmed",
+        "category": "auth",
+        "description": "Changed their sign-in email",
+        "entityType": "user"
+      },
+      {
+        "action": "auth.email_change.started",
+        "category": "auth",
+        "description": "Started changing their sign-in email",
+        "entityType": "user"
+      },
+      {
+        "action": "auth.invitation.accepted",
+        "category": "auth",
+        "description": "Accepted an invitation",
+        "entityType": "invitation"
+      },
+      {
+        "action": "auth.invitation.created",
+        "category": "auth",
+        "description": "Invited someone",
+        "entityType": "invitation"
+      },
+      {
+        "action": "auth.invitation.resent",
+        "category": "auth",
+        "description": "Sent an invitation again",
+        "entityType": "invitation"
+      },
+      {
+        "action": "auth.invitation.revoked",
+        "category": "auth",
+        "description": "Withdrew an invitation",
+        "entityType": "invitation"
+      },
+      {
+        "action": "auth.login",
+        "category": "auth",
+        "description": "Signed in, or tried to",
+        "entityType": "user"
+      },
+      {
+        "action": "auth.logout",
+        "category": "auth",
+        "description": "Signed out",
+        "entityType": "user"
+      },
+      {
+        "action": "auth.membership.removed",
+        "category": "auth",
+        "description": "Removed someone from the organization",
+        "entityType": "user"
+      },
+      {
+        "action": "auth.membership.role_assigned",
+        "category": "auth",
+        "description": "Gave someone a role",
+        "entityType": "user"
+      },
+      {
+        "action": "auth.organization.activated",
+        "category": "auth",
+        "description": "Reactivated an organization",
+        "entityType": "organization"
+      },
+      {
+        "action": "auth.organization.created",
+        "category": "auth",
+        "description": "Created an organization",
+        "entityType": "organization"
+      },
+      {
+        "action": "auth.organization.renamed",
+        "category": "auth",
+        "description": "Renamed an organization",
+        "entityType": "organization"
+      },
+      {
+        "action": "auth.organization.suspended",
+        "category": "auth",
+        "description": "Suspended an organization",
+        "entityType": "organization"
+      },
+      {
+        "action": "auth.organization.switched",
+        "category": "auth",
+        "description": "Switched organization",
+        "entityType": "user"
+      },
+      {
+        "action": "auth.password.changed",
+        "category": "auth",
+        "description": "Changed their own password",
+        "entityType": "user"
+      },
+      {
+        "action": "auth.password.reset",
+        "category": "auth",
+        "description": "Reset a password with a link",
+        "entityType": "user"
+      },
+      {
+        "action": "auth.password.reset_requested",
+        "category": "auth",
+        "description": "Asked for a password-reset link",
+        "entityType": "user"
+      },
+      {
+        "action": "auth.profile.erased",
+        "category": "auth",
+        "description": "Erased a person's profile",
+        "entityType": "user"
+      },
+      {
+        "action": "auth.profile.exported",
+        "category": "auth",
+        "description": "Exported a person's data",
+        "entityType": "user"
+      },
+      {
+        "action": "auth.role.created",
+        "category": "auth",
+        "description": "Created a role",
+        "entityType": "role"
+      },
+      {
+        "action": "auth.role.deleted",
+        "category": "auth",
+        "description": "Deleted a role",
+        "entityType": "role"
+      },
+      {
+        "action": "auth.role.permissions_changed",
+        "category": "auth",
+        "description": "Changed what a role may do",
+        "entityType": "role"
+      },
+      {
+        "action": "auth.role.renamed",
+        "category": "auth",
+        "description": "Renamed a role",
+        "entityType": "role"
+      },
+      {
+        "action": "auth.session.refresh",
+        "category": "auth",
+        "description": "A session could not be continued",
+        "entityType": "user"
+      },
+      {
+        "action": "auth.sessions.revoked",
+        "category": "auth",
+        "description": "Signed out everywhere",
+        "entityType": "user"
+      },
+      {
+        "action": "auth.user.activated",
+        "category": "auth",
+        "description": "Reactivated a user",
+        "entityType": "user"
+      },
+      {
+        "action": "auth.user.created",
+        "category": "auth",
+        "description": "Created a user",
+        "entityType": "user"
+      },
+      {
+        "action": "auth.user.deactivated",
+        "category": "auth",
+        "description": "Deactivated a user",
+        "entityType": "user"
+      },
+      {
+        "action": "auth.user.password_set",
+        "category": "auth",
+        "description": "Set someone's password",
+        "entityType": "user"
+      },
+      {
+        "action": "auth.user.registered",
+        "category": "auth",
+        "description": "Registered",
+        "entityType": "user"
+      },
+      {
+        "action": "auth.user.updated",
+        "category": "auth",
+        "description": "Changed a user's details",
+        "entityType": "user"
+      },
+      {
+        "action": "notes.note.created",
+        "category": "notes",
+        "description": "Created a note",
+        "entityType": "note"
+      },
+      {
+        "action": "notes.note.deleted",
+        "category": "notes",
+        "description": "Deleted a note",
+        "entityType": "note"
+      },
+      {
+        "action": "notes.note.updated",
+        "category": "notes",
+        "description": "Changed a note",
+        "entityType": "note"
+      },
+      {
+        "action": "notification.bulk_send.submitted",
+        "category": "notification",
+        "description": "Sent a message to everyone",
+        "entityType": "bulk_send"
+      },
+      {
+        "action": "notification.channel.deleted",
+        "category": "notification",
+        "description": "Removed a channel's settings",
+        "entityType": "channel"
+      },
+      {
+        "action": "notification.channel.saved",
+        "category": "notification",
+        "description": "Changed a channel's settings",
+        "entityType": "channel"
+      },
+      {
+        "action": "notification.channel.secret_cleared",
+        "category": "notification",
+        "description": "Removed a channel's password or token",
+        "entityType": "channel"
+      },
+      {
+        "action": "notification.channel.tested",
+        "category": "notification",
+        "description": "Sent a test message",
+        "entityType": "channel"
+      },
+      {
+        "action": "notification.delivery.requeued",
+        "category": "notification",
+        "description": "Retried a failed delivery",
+        "entityType": "delivery"
+      },
+      {
+        "action": "notification.in_app.published",
+        "category": "notification",
+        "description": "Published an in-app notice",
+        "entityType": "notification"
+      },
+      {
+        "action": "notification.template.deleted",
+        "category": "notification",
+        "description": "Deleted a message template",
+        "entityType": "template"
+      },
+      {
+        "action": "notification.template.saved",
+        "category": "notification",
+        "description": "Saved a message template",
+        "entityType": "template"
+      }
+    ],
+    "types": [
+      {
+        "key": "egradx.auth.contact-verification",
+        "description": "A code confirming that a contact address belongs to the person who added it",
+        "required": [
+          "code",
+          "expiresInMinutes"
+        ],
+        "optional": [
+          "recipientName"
+        ],
+        "userCanOptOut": false
+      },
+      {
+        "key": "egradx.auth.email-change-code",
+        "description": "A code confirming a new sign-in email address, sent to that address",
+        "required": [
+          "code",
+          "expiresInMinutes",
+          "newEmail"
+        ],
+        "optional": [
+          "recipientName"
+        ],
+        "userCanOptOut": false
+      },
+      {
+        "key": "egradx.auth.email-changed",
+        "description": "A notice to the old address that the sign-in email was changed",
+        "required": [
+          "newEmailMasked"
+        ],
+        "optional": [
+          "recipientName"
+        ],
+        "userCanOptOut": false
+      },
+      {
+        "key": "egradx.auth.invitation",
+        "description": "An invitation to join an organization",
+        "required": [
+          "expiresInDays",
+          "link",
+          "organizationName",
+          "roleName"
+        ],
+        "optional": [
+          "inviterName"
+        ],
+        "userCanOptOut": false
+      },
+      {
+        "key": "egradx.auth.password-changed",
+        "description": "A notice that the account's password was changed, and every session ended",
+        "required": [
+          "changedAt"
+        ],
+        "optional": [
+          "recipientName"
+        ],
+        "userCanOptOut": false
+      },
+      {
+        "key": "egradx.auth.password-reset",
+        "description": "A link to choose a new password, for someone who forgot theirs",
+        "required": [
+          "expiresInMinutes",
+          "link"
+        ],
+        "optional": [
+          "recipientName"
+        ],
+        "userCanOptOut": false
+      },
+      {
+        "key": "egradx.notification.channel-test",
+        "description": "Confirms that a notification channel is configured correctly",
+        "required": [],
+        "optional": [
+          "organizationName",
+          "requestedBy"
+        ],
+        "userCanOptOut": false
+      },
+      {
+        "key": "notes.note.created",
+        "description": "Sent to the author of a new note",
+        "required": [
+          "title"
+        ],
+        "optional": [],
+        "userCanOptOut": true
+      }
+    ]
+  }
+}

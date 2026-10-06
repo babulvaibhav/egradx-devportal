@@ -1,0 +1,7 @@
+# Never sent to the image build: secrets and local state.
+keys/
+.env
+*.log
+.git/
+target/
+.idea/

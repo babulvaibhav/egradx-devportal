@@ -1,0 +1,1 @@
+:white_check_mark: *Test message.* {{#if organizationName}}{{organizationName}}{{else}}This channel{{/if}} is configured correctly.{{#if requestedBy}} Sent at the request of {{requestedBy}}.{{/if}}

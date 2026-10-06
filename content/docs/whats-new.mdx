@@ -1,0 +1,32 @@
+---
+title: What's new
+description: What changed in the SDK and the portal, by date — while every package stays at version 1.0.0.
+---
+
+Every package is published as **1.0.0** until the SDK is complete, so changes are listed here by date. To pick up a republished package, see [upgrading](/docs/operate/upgrading).
+
+## 2026-10-05
+
+**SDK, republished (Java)**
+
+- **Configuration metadata in every module** (egradx-auth, -audit, -notification, -platform-events, -sdk, -web-security republished). Your IDE completes and explains `egradx.*` keys in `application.yml`. The [configuration reference](/docs/reference/configuration) is built from the same metadata.
+- **Descriptions on every HTTP endpoint.** All 117 operations in the OpenAPI contracts now have a summary, a description, who may call them, and their refusals. The [HTTP reference](/docs/reference/http) shows them.
+- **A first start no longer fails when the keys folder doesn't exist.** `egradx-tls-provider` now creates it, as Node and Python already did.
+- **Refusals from your own Java endpoints are in the error envelope.** An endpoint guarded with `@PreAuthorize` answers 401 `NOT_AUTHENTICATED` and 403 `ACCESS_DENIED` in the envelope, as Node and Python do, instead of Spring's bare 401 and 403.
+
+**Portal and Initializr**
+
+- The developer portal, with guides, recipes, references, the OIM showcase and [the Initializr](/start).
+- Generated projects with **Dockerfile** chosen now get a `.dockerignore` that keeps `keys/`, `.env` and local build output out of the image. A Python project's image listens on every interface (`HOST=0.0.0.0`); before, it was unreachable from outside the container.
+
+## 2026-10-04
+
+**1.0.0, after these fixes, in all three languages**
+
+- **Event relay leases.** A send that outlasted its lease could record its late outcome over a newer one. Each update now names the attempt it claimed.
+- **Refresh tokens are stored as their SHA-256.** The auth migration V5 converts the tokens already stored, so sessions survive the upgrade. A copy of the database no longer yields sessions.
+- **Kafka dead letters.** A record whose handler keeps failing now goes to `<topic>.DLT` with Spring Kafka's `kafka_dlt-*` headers, instead of being logged and skipped.
+
+## See also
+
+- [Known limitations](/docs/operate/known-limitations) · [Parity](/docs/reference/parity)

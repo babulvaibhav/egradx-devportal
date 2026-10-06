@@ -1,0 +1,158 @@
+---
+title: Events between services
+description: Tell other services what happened — CloudEvents written with your change through an outbox, handled once per handler, in-process, over RabbitMQ or over Kafka by configuration.
+---
+
+<Parity id="events.outbox" />
+
+## What it is
+
+When a note is created, another service may need to know: to bill, to index, to count. An **event** is a fact — `notes.note.created.v1` — that your service publishes and others handle. The SDK makes it safe:
+
+- **Written with your change.** Publishing writes the event to an outbox table in your transaction. If the transaction rolls back, the event never existed; if it commits, it will be sent.
+- **Handled once per handler.** Each handler runs in a transaction of its own; an inbox remembers which events it has handled and drops a second delivery.
+- **Retried, then set aside.** A handler that fails is tried again later; one that keeps failing ends in a dead-letter queue or topic — never silently skipped.
+- **Same bytes everywhere.** CloudEvents 1.0 in JSON, the same from Java, Node and Python, on every transport.
+
+Events are a separate package from `egradx-sdk`: `egradx-platform-events` (Java), `@babulvaibhav/egradx-events`, `egradx-events`.
+
+## How it works
+
+<Mermaid chart={`sequenceDiagram
+  participant S as Your service
+  participant D as PostgreSQL
+  participant R as Relay (in your service)
+  participant T as Transport
+  participant H as A handler (any service)
+  S->>D: your change + event in the outbox (one transaction)
+  D-->>S: commit, then the relay is woken
+  R->>D: claim due events (lease, SKIP LOCKED)
+  R->>T: send (in-process, RabbitMQ or Kafka)
+  T->>H: deliver
+  H->>D: inbox row + the handler's work (its own transaction)
+  Note over H: a second delivery finds the inbox row: dropped`} />
+
+## Publishing
+
+<Languages>
+<Tab value="Java">
+
+<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/java/com/acme/notes/NoteService.java" region="note-service" title="NoteService.java" />
+
+`publish(type, subject, organizationId, data)` — `data` must serialise to a JSON object. It joins whatever Spring transaction is open.
+
+</Tab>
+<Tab value="Node">
+
+<RepoSnippet file="apps/egradx-devportal/examples/node/src/notes.ts" region="note-routes" title="src/notes.ts" />
+
+`events.publish(type, data, { subject, organizationId })` joins the surrounding `egradxTransaction`. Inside a plain `prisma.$transaction` pass `{ tx }`: the event is written there, and leaves at the next poll (2 s).
+
+</Tab>
+<Tab value="Python">
+
+<RepoSnippet file="apps/egradx-devportal/examples/python/notes.py" region="note-routes" title="notes.py" />
+
+`await events.publish(type, data, subject=…, organization_id=…)` joins the surrounding `egradx_transaction`. Put dates in `data` as ISO strings yourself: Python writes a `datetime` with `str()`.
+
+</Tab>
+</Languages>
+
+**Types** are `<area>.<entity>.<what-happened>.v<N>`, lower case: `notes.note.created.v1`. An incompatible change to `data` is a new version, published beside the old one until nothing handles the old. Publish facts ("created"), not commands ("create").
+
+## Handling
+
+<Languages>
+<Tab value="Java">
+
+<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/java/com/acme/notes/NoteStatsHandler.java" region="event-handler" title="NoteStatsHandler.java" />
+
+Any bean implementing `EgradxEventHandler`. `event.data()` is a `JsonNode`; `event.data(objectMapper, MyRecord.class)` converts it. Give `name()` a fixed value: it is the inbox's key, and the class name changes when the class is moved.
+
+</Tab>
+<Tab value="Node">
+
+<RepoSnippet file="apps/egradx-devportal/examples/node/src/events.ts" region="event-handler" title="src/events.ts" />
+
+Handlers are given to `createEvents({ prisma, source, handlers })`; `tx` is the handler's transaction, which the SDK's other libraries join.
+
+</Tab>
+<Tab value="Python">
+
+<RepoSnippet file="apps/egradx-devportal/examples/python/events.py" region="event-handler" title="events.py" />
+
+Handlers are given to `EgradxEvents(engine, source=…, handlers=[…])`; `connection` is the handler's transaction.
+
+</Tab>
+</Languages>
+
+<RecordedRun name="events" />
+
+The count follows the note a moment later: the handler runs after the commit, not inside the request.
+
+## Choosing a transport
+
+| | In-process (default) | RabbitMQ | Kafka |
+|---|---|---|---|
+| Needs | nothing | a broker | a broker |
+| Who handles | this service's handlers | every service bound to the type, each with its own queue | every consumer group subscribed to the type's topic |
+| Retry | the outbox retries (1 s doubling to 10 min) | `<queue>.retry`, 5 s apart | in the consumer, doubling from 1 s |
+| Gives up after | 12 attempts → the outbox row is marked dead | 10 deliveries → `<queue>.dead` | 10 deliveries → `<topic>.DLT` |
+| Keeps history | no | no | yes, the topic's retention |
+| Choose when | one service, or until services are split | services split: the first choice | events must be kept and replayed, or volumes outgrow RabbitMQ |
+
+Code doesn't change between them: set the transport.
+
+| | Java | Node | Python |
+|---|---|---|---|
+| Transport | `egradx.events.transport: rabbitmq` | `createEvents({ transport: 'rabbitmq' })` or `EGRADX_EVENTS_TRANSPORT` | `EgradxEvents(transport="rabbitmq")` or `EGRADX_EVENTS_TRANSPORT` |
+| RabbitMQ | `spring-boot-starter-amqp` + `spring.rabbitmq.*` | `amqplib` 2 + `EGRADX_EVENTS_RABBITMQ_URL` | `egradx-events[rabbitmq]` + `EGRADX_EVENTS_RABBITMQ_URL` |
+| Kafka | `spring-kafka` + `egradx.events.kafka.bootstrap-servers` | `@confluentinc/kafka-javascript` + `EGRADX_EVENTS_KAFKA_BROKERS` | `egradx-events[kafka]` + `EGRADX_EVENTS_KAFKA_BROKERS` |
+| Source (who publishes) | `spring.application.name` | `source` (required) | `source` (required) |
+
+RabbitMQ: a topic exchange `egradx.events`, routed by type; a quorum queue `egradx.events.<source>` per service, shared by its instances. Kafka: one topic per type, keyed by the subject; the consumer group is the source. In-process with two **different** services on one database loses events: a service without the handler can relay and mark them sent. Use a broker once services differ.
+
+## Starting it (Node and Python)
+
+Java starts everything when the package is on the classpath. Node and Python start it themselves: migrate its tables (`migrateEvents` / `migrate_events` — `migrateEgradx` doesn't include them), then `await events.start()`, and `await events.close()` at shutdown. The example's `app.ts` and `application.py` show the order.
+
+## Ordering
+
+**No order is promised.** Relays retry later and several run at once; Kafka keeps one subject's events of one type in order, no more. Where order matters, put a sequence number in `data` and let the handler ignore or reconcile an older event.
+
+## Dead letters
+
+There is no replay tool yet. By hand:
+
+- **Outbox (in-process):** `UPDATE egradx_event_outbox SET dead_at = NULL, attempts = 0, last_error = NULL, next_attempt_at = clock_timestamp() WHERE id = '…'` — find them with `WHERE dead_at IS NOT NULL`; `last_error` says why.
+- **RabbitMQ:** move messages from `<queue>.dead` back to exchange `egradx.events` with the routing key = the event's type, dropping the `x-egradx-deliveries` header.
+- **Kafka:** republish the record from `<topic>.DLT` to the topic in `kafka_dlt-original-topic`, with the same key.
+
+The inbox makes handling a replayed event safe.
+
+## Configuration
+
+| | Java (`egradx.events.*`) | Node / Python | Default |
+|---|---|---|---|
+| Relay polling, batch | `relay.poll-interval`, `relay.batch-size` | `relay: { pollIntervalMs, batchSize }` / `RelaySettings(poll_interval, batch_size)` | 2 s, 100 |
+| Attempts (in-process) | `relay.max-attempts` | `maxAttempts` / `max_attempts` | 12 |
+| Keep sent, keep handled | `relay.keep-sent`, `relay.keep-handled` | `keepSentMs`, `keepHandledMs` / `keep_sent`, `keep_handled` | 7 days, 30 days |
+| RabbitMQ deliveries, delay | `rabbitmq.delivery-limit`, `rabbitmq.retry-delay` | `rabbitmq: {…}` | 10, 5 s |
+| Kafka deliveries | `kafka.max-deliveries` | `kafka: {…}` | 10 |
+| Turn off | `enabled: false` | — | on |
+
+## Guarantees and limits
+
+- **At least once, handled once per handler and database.** A handler must cope with seeing an event late.
+- **Trace and request continue:** a handler's log lines carry the publishing request's id, and with tracing on its span is a child of the publish.
+- **Multiple instances:** every instance runs a relay; leases keep them from sending the same event at once; Java, Node and Python can share one outbox.
+- **Not yet:** TLS and SASL settings for Kafka; a replay tool; metrics for dead events (watch `dead_at`, `<queue>.dead`, `.DLT`).
+
+## In OIM
+
+OIM doesn't publish events: it is one service. Its low-stock alert uses the same idea — work done after the commit — inside one process ([notifications](/docs/guides/notifications#messages-that-must-not-break-the-change)).
+
+## See also
+
+- [Recipe: publish and handle an event](/docs/recipes/publish-an-event) · [move from in-process to RabbitMQ](/docs/recipes/move-to-rabbitmq)
+- [Events reference](/docs/reference/events): the envelope and every type.

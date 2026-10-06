@@ -1,0 +1,79 @@
+---
+title: Running OIM
+description: Start OIM with any backend and either frontend — the whole stack in Docker, or one part at a time on your machine.
+---
+
+OIM lives in the SDK's repository, in `apps/egradx-oim`, and builds against the SDK there.
+
+## The whole stack in Docker
+
+Build the Java backend's jar first: its image copies it.
+
+```sh
+cd apps/egradx-oim/backend
+mvn clean package -DskipTests
+cd ..
+docker compose up --build
+```
+
+| What | Where |
+|---|---|
+| The frontend | `http://localhost:3000` |
+| The backend | `http://localhost:8080` |
+| Every email OIM sends | `http://localhost:8025` (Mailpit) |
+| Traces | `http://localhost:16686` (Jaeger) |
+| Metrics | `http://localhost:9090` (Prometheus) |
+
+## Any backend, either frontend
+
+Add the override files: the database, mail, tracing and frontend stay the same.
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.node.yml up --build      # the Node backend
+docker compose -f docker-compose.yml -f docker-compose.python.yml up --build    # the Python backend
+docker compose -f docker-compose.yml -f docker-compose.next.yml up --build      # the Next.js frontend
+```
+
+Combine a backend file with the Next.js one for the other pairs.
+
+## Sign in
+
+| Who | Username | Password |
+|---|---|---|
+| The demo organization's administrator | `admin@egradx.com` | `adminPassword` |
+| The platform's administrator | `platform-admin` | `change-me-platform-admin` |
+
+Both are demo credentials. The platform administrator gets 403 on OIM's own screens: it holds every SDK authority and none of OIM's.
+
+## Things to try
+
+1. **Grant a permission live.** As the admin, add `product.write` to the Staff role. A Staff user's next request is allowed, with no new sign-in.
+2. **Watch the bell.** Open two browsers in the same organization. Adjust stock in one; the notice arrives in the other.
+3. **Trigger the low-stock alert.** Take a product's stock below 10. The bell shows it, and the alert email is in Mailpit.
+4. **Follow one request.** Copy a response's `X-Request-ID` and find its log lines, its trace in Jaeger, and its audit record.
+5. **Reset a password.** Use "Forgot password" on the sign-in page, then open the link in Mailpit.
+6. **Suspend an organization** as the platform administrator. Its people's next request is refused.
+
+## One part at a time
+
+Run the backend on your machine with the `local` profile, which needs no Redis, exports no traces, and sends email to `localhost:1025`:
+
+```sh
+cd apps/egradx-oim/backend && mvn spring-boot:run -Dspring-boot.run.profiles=local
+cd apps/egradx-oim/frontend && npm install && npm run dev
+```
+
+The Node and Python backends take the same environment variables, with `APP_PROFILE=local`. Their READMEs (`backend-node/README.md`, `backend-python/README.md`) have the commands.
+
+## The browser tests
+
+```sh
+cd apps/egradx-oim/e2e
+./run-e2e.sh java vite      # or node, python; vite or next
+```
+
+They start the whole stack in Docker and run twelve tests in Chromium.
+
+## See also
+
+- [The tour](/docs/showcase/oim)

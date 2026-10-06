@@ -1,0 +1,67 @@
+---
+title: Add a column to your table
+description: Change your own table with a new migration, and map the column — without touching the SDK's tables.
+---
+
+The example's notes table, from its first migration:
+
+<RepoSnippet file="apps/egradx-devportal/examples/node/migrations/V1__notes.sql" region="migration" title="V1__notes.sql" />
+
+## 1. A new migration, never an edited one
+
+Add a file next to `V1__notes.sql`. Don't change `V1`: an applied migration that changed stops the next start.
+
+```sql title="V2__note_pinned.sql"
+ALTER TABLE notes_note ADD COLUMN pinned BOOLEAN NOT NULL DEFAULT false;
+```
+
+| Java | Node | Python |
+|---|---|---|
+| `src/main/resources/db/migration/` | `migrations/` | `migrations/` |
+
+It runs on the next start, after the SDK's sign-in tables and before the rest, as `V1` did.
+
+## 2. Map it
+
+<Languages>
+<Tab value="Java">
+
+```java title="Note.java"
+@Column(nullable = false)
+private boolean pinned;
+```
+
+Add it to the DTOs the controller returns, if clients should see it.
+
+</Tab>
+<Tab value="Node">
+
+```prisma title="prisma/schema.prisma"
+model Note {
+  // …
+  pinned Boolean @default(false)
+}
+```
+
+Then `npx prisma generate`. Not `prisma migrate`: your SQL file is the migration.
+
+</Tab>
+<Tab value="Python">
+
+The example writes SQL directly, so add `pinned` to the `SELECT` and `INSERT` statements in `notes.py`. With an ORM model, add the column to it.
+
+</Tab>
+</Languages>
+
+## 3. Audit and events
+
+- **Audit records** state whatever you pass as `before` and `after`. If your states include the new field, a change to it shows in `changedFields` with nothing else to do.
+- **Events:** adding a field to `data` is compatible, because old handlers ignore it. Removing or renaming one is not: publish a new version (`.v2`).
+
+## Never alter the SDK's tables
+
+The `egradx_*` tables belong to the SDK's migrations. A column you add there can break the next SDK upgrade. Keep data about users or organizations in your own table, keyed by `user_id` or `organization_id`.
+
+## See also
+
+- [Database & migrations](/docs/guides/database#rules-for-your-migrations) · [Migration order](/docs/recipes/migrations-order)

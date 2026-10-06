@@ -1,0 +1,42 @@
+---
+title: Read the audit trail in code
+description: Search the trail from your own code — a thing's history, an action, a person — without going through HTTP.
+---
+
+The audit screens use the SDK's endpoints. Your own code can search the same records directly through the auditor:
+
+<Languages>
+<Tab value="Java">
+
+<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/java/com/acme/notes/recipes/AuditExtras.java" region="read-the-trail" title="AuditExtras.java" />
+
+</Tab>
+<Tab value="Node">
+
+<RepoSnippet file="apps/egradx-devportal/examples/node/src/recipes/audit-extras.ts" region="read-the-trail" title="src/recipes/audit-extras.ts" />
+
+</Tab>
+<Tab value="Python">
+
+<RepoSnippet file="apps/egradx-devportal/examples/python/recipes/audit_extras.py" region="read-the-trail" title="recipes/audit_extras.py" />
+
+</Tab>
+</Languages>
+
+- **Always name the organization.** The search doesn't check who is asking: that is your code's job.
+- **A page at a time,** newest first. Pass the page's cursor to get the next one.
+- **Filters:** the same as the HTTP API. You can filter on the action or an action prefix, the category, the outcome, the actor, the entity, a changed field, a request or trace id, a time range, and text.
+
+## Over HTTP
+
+| Endpoint | Gives |
+|---|---|
+| `GET /egradx/audit/events` | a page of the caller's organization's records, with every filter |
+| `GET /egradx/audit/timeline?entityType=&entityId=` | one thing's history |
+| `GET /egradx/audit/events/{id}` | one record |
+
+All need `egradx.audit.read`. In React, `useAuditLog`, `useAuditTimeline` and `useAuditRecord` wrap them, and the copy-in `audit-log` screen uses those.
+
+## See also
+
+- [Audit trail](/docs/guides/audit#reading-it) · [Export the trail as CSV](/docs/recipes/export-the-audit-trail)

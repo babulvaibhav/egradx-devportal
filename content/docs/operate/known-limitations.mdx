@@ -1,0 +1,44 @@
+---
+title: Known limitations
+description: What the SDK doesn't do yet, or does differently in one language — collected in one place, so nothing surprises you in production.
+---
+
+The guides list each capability's limits where they apply. This page collects them all. [Parity](/docs/reference/parity) shows how far each language has each capability.
+
+## Everywhere
+
+| Area | Limitation |
+|---|---|
+| Database | PostgreSQL only. |
+| Versions | Every package is 1.0.0 until the SDK is complete; fixes are republished under the same number ([upgrading](/docs/operate/upgrading)). |
+| Sign-in | No refresh-token rotation, no list of one's sessions to end one at a time, no sign-in by one-time code, no single sign-on. |
+| Keys | No JWKS endpoint, tokens carry no `kid`, and keys don't rotate on their own. Instances starting together on an empty keys folder can each make keys: start one first. |
+| Service tokens | The SDK's sign-in doesn't issue client-credentials tokens, and treats non-person tokens as anonymous ([call another service](/docs/recipes/service-token)). |
+| Several instances | The role cache (60 s), live notification streams and the sign-in attempt limit are per instance ([several instances](/docs/operate/multiple-instances)). |
+| Tenancy | No row-level security: your queries must filter by organization. |
+| Audit | Append-only against the application, not tamper-evident against the database's owner. |
+| Notifications | At least once: a delivery can be sent twice. Slack, Twilio and Meta are tested against local stand-ins of their APIs. |
+| Events | No order promised. No replay tool. No metrics for dead events. Kafka has no TLS or SASL settings. In-process with two different services on one database loses events. |
+| Health | No health endpoint of the SDK's own (Java uses Actuator's). |
+| Testing | No test kit yet ([testing](/docs/guides/testing)). |
+
+## Java
+
+- An application on `egradx-sdk` alone doesn't put its own endpoints' errors in the envelope; the generated projects add an advice that does ([errors](/docs/guides/errors#wiring-the-envelope-in)).
+- The private key files are written with the system's default permissions.
+- The keys folder key must be written `keystorePath`; `keystore-path` isn't read.
+- A non-UUID audit record id answers 400, where Node and Python answer 404.
+- `egradx.default-locale` and `egradx.platform.*` are declared but read by nothing.
+- gRPC and WebFlux support is partial ([Java-only modules](/docs/guides/java-only)).
+
+## Node and Python
+
+- Audit retention periods take a single unit (`7y`, `90d`); a wrong one is reported when the purge runs, not at start-up.
+- The notification secrets passphrase falls back to environment variables only, not to the keys passphrase passed in code.
+- Events are a separate package with their own migration and start (`migrateEvents`, `events.start()`).
+- Kafka retry backoff isn't capped.
+- Python: dates in event `data` must be ISO strings you write yourself.
+
+## See also
+
+- [Security checklist](/docs/operate/security) · [Parity](/docs/reference/parity)

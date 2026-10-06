@@ -1,0 +1,35 @@
+---
+title: Send to someone who isn't a user
+description: Email a customer, a supplier or a webhook — a raw address, with an attachment, through the same outbox.
+---
+
+<Languages>
+<Tab value="Java">
+
+<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/java/com/acme/notes/recipes/Messages.java" region="send-to-address" title="Messages.java" />
+
+</Tab>
+<Tab value="Node">
+
+<RepoSnippet file="apps/egradx-devportal/examples/node/src/recipes/messages.ts" region="send-to-address" title="src/recipes/messages.ts" />
+
+</Tab>
+<Tab value="Python">
+
+<RepoSnippet file="apps/egradx-devportal/examples/python/recipes/messages.py" region="send-to-address" title="recipes/messages.py" />
+
+</Tab>
+</Languages>
+
+- **`toAddresses(...)`** sends to addresses as they are. No user is looked up and no preferences apply; the address is checked for the channel (an email address, an E.164 number, an `https://` URL).
+- **`organization(...)`** still matters: it chooses the organization's own mail settings, and the delivery appears in that organization's log.
+- **Attachments** are stored with the message and sent with each delivery. Keep them small: they live in the database until the message is purged (30 days after it is sent, by default).
+- **Content** is ready-made here. A notification type with templates works too; give it the variables.
+
+## A webhook
+
+The `webhook` channel posts JSON to an `https://` URL. When the organization stores a secret for it, each request carries an HMAC signature, plus an `Idempotency-Key` so the receiver can drop a repeat.
+
+## See also
+
+- [Send an email when something happens](/docs/recipes/send-an-email) · [Bulk-send](/docs/recipes/bulk-send)

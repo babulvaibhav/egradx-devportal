@@ -1,0 +1,43 @@
+---
+title: Let users choose their notification channels
+description: People add and verify their addresses (phone, Slack, WhatsApp), and choose which messages they get where.
+---
+
+## 1. Make the message optional
+
+Only types declared `userCanOptOut()` appear on people's settings: see [add a notification type](/docs/recipes/add-a-notification-type). Account messages, such as password reset, can never be turned off.
+
+## 2. Add the settings screen
+
+The ready screen does both halves: addresses verified by code, and on/off per message and channel.
+
+```sh
+npx shadcn@latest add https://<this portal>/r/notification-settings.json
+```
+
+Or build your own on the hooks from `@babulvaibhav/egradx-react`:
+
+| Hook | Gives |
+|---|---|
+| `useContacts()` | `data.contacts` and `data.options`; `add`, `remove`, `makePrimary`, `startVerification`, `confirmVerification` |
+| `useNotificationPreferences()` | `data.options` (the types and channels people may choose from), `data.preferences`; `save(preferences)` |
+
+`save` replaces every stored preference. Send back the ones your form doesn't show, or they are lost.
+
+## How the SDK uses them
+
+- A user receives on a channel only at an address they have **verified** with a code. Email is the exception: it falls back to the address they sign in with.
+- A preference turned off is honoured on every send to that user. Sends to raw addresses (`toAddresses`) have no preferences.
+- Which channels people can add is set by `profile.channels` (Java `egradx.auth.profile.channels`; default email, sms, whatsapp, slack).
+
+## Over HTTP
+
+| Endpoint | |
+|---|---|
+| `/egradx/auth/my/profile/contacts/**` | a person's addresses, and verifying them |
+| `GET /egradx/notifications/preference-options` | what can be chosen |
+| `GET`, `PUT /egradx/auth/my/profile/preferences` | the choices |
+
+## See also
+
+- [Notifications](/docs/guides/notifications#people-and-their-preferences)

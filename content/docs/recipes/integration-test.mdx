@@ -1,0 +1,55 @@
+---
+title: Write an integration test with a signed-in user
+description: Start the whole application against PostgreSQL, sign in as a seeded person, and call your endpoint as a client would.
+---
+
+Every project [the Initializr](/start) generates with **Tests** has this test, and it passes as generated.
+
+## 1. A database for tests
+
+The generated compose file creates `<app>_test` beside `<app>`. The application migrates it on start, the SDK's tables and yours, as in production. Point elsewhere with `TEST_DB_URL` (Java) or `TEST_DATABASE_URL` (Node, Python).
+
+## 2. The test
+
+<Languages>
+<Tab value="Java">
+
+<RepoSnippet file="apps/egradx-devportal/examples/java/src/test/java/com/acme/notes/NotesTests.java" region="test" title="NotesTests.java" />
+
+`@SpringBootTest(webEnvironment = RANDOM_PORT)` starts everything, the dispatcher and the event relay included.
+
+</Tab>
+<Tab value="Node">
+
+<RepoSnippet file="apps/egradx-devportal/examples/node/test/notes.test.ts" region="test" title="test/notes.test.ts" />
+
+`startApplication(config)`, the same function `main.ts` calls, gives the Express app and a `close()`.
+
+</Tab>
+<Tab value="Python">
+
+<RepoSnippet file="apps/egradx-devportal/examples/python/tests/test_notes.py" region="test" title="tests/test_notes.py" />
+
+The application runs in the test's event loop, called through `httpx.ASGITransport`. On Windows, `tests/conftest.py` gives psycopg the selector event loop it needs.
+
+</Tab>
+</Languages>
+
+## What makes it work
+
+- **Signing in for real:** `POST /egradx/auth/login` as the demo administrator the application seeds at start-up, then `Authorization: Bearer …` on every call. Use real tokens, not mocks: the SDK checks each request against the database.
+- **A keys folder per run:** a temporary directory, so tests never touch the development keys.
+- **Its own SMTP server,** so email can be checked (see [check an email](/docs/recipes/assert-audit-and-email)).
+- **A refusal is a result too:** without a token it's 401 `NOT_AUTHENTICATED`; without the authority, 403 `ACCESS_DENIED`. Test both.
+
+## A second person
+
+To test the 403, create someone with a role that lacks the authority. Provision an organization in the test with its own administrator, or invite and accept through the API. Different organizations also prove that one can't see the other's data (404).
+
+## Not yet: a test kit
+
+A kit with a signed-in client, captured mail and events, and audit assertions is planned. Until then, copy this pattern.
+
+## See also
+
+- [Testing](/docs/guides/testing) · [Check an audit record or an email](/docs/recipes/assert-audit-and-email)

@@ -1,0 +1,429 @@
+{
+  "capturedAt": "2026-10-05T14:15:41.719Z",
+  "sdkVersion": "1.0.0",
+  "languages": {
+    "java": [
+      {
+        "name": "update",
+        "title": "A change",
+        "request": {
+          "method": "PUT",
+          "path": "/api/notes/{id}",
+          "body": {
+            "title": "Call the supplier today",
+            "body": "About the late delivery"
+          }
+        },
+        "response": {
+          "status": 200,
+          "body": {
+            "id": "d7c0b18c-8854-443f-b969-83d84de850ca",
+            "organizationId": "05817b4a-7d07-4442-930e-57fdd09d4c7d",
+            "title": "Call the supplier today",
+            "body": "About the late delivery"
+          }
+        }
+      },
+      {
+        "name": "update-record",
+        "title": "Its audit record: before, after, and what changed",
+        "request": {
+          "method": "GET",
+          "path": "/egradx/audit/events?action=notes.note.updated&entityId={id}"
+        },
+        "response": {
+          "status": 200,
+          "body": {
+            "id": "01a10c6b-5ce5-76e4-a99d-9a8181c73098",
+            "seq": 27,
+            "occurredAt": "2026-10-05T14:15:25.157053Z",
+            "recordedAt": "2026-10-05T14:15:25.159895Z",
+            "organizationId": "05817b4a-7d07-4442-930e-57fdd09d4c7d",
+            "organizationName": "Demo",
+            "category": "notes",
+            "action": "notes.note.updated",
+            "outcome": "SUCCESS",
+            "reason": null,
+            "actor": {
+              "type": "USER",
+              "id": "b9e21442-f9ec-4f92-abb6-d69aecab3419",
+              "organizationId": "05817b4a-7d07-4442-930e-57fdd09d4c7d",
+              "label": null,
+              "name": "Ada Admin"
+            },
+            "entity": {
+              "type": "note",
+              "id": "d7c0b18c-8854-443f-b969-83d84de850ca",
+              "label": "Call the supplier today"
+            },
+            "before": {
+              "id": "d7c0b18c-8854-443f-b969-83d84de850ca",
+              "body": null,
+              "title": "Call the supplier",
+              "organizationId": "05817b4a-7d07-4442-930e-57fdd09d4c7d"
+            },
+            "after": {
+              "id": "d7c0b18c-8854-443f-b969-83d84de850ca",
+              "body": "About the late delivery",
+              "title": "Call the supplier today",
+              "organizationId": "05817b4a-7d07-4442-930e-57fdd09d4c7d"
+            },
+            "changedFields": [
+              "body",
+              "title"
+            ],
+            "details": null,
+            "clientAddress": "0:0:0:0:0:0:0:1",
+            "userAgent": "node",
+            "requestId": "2e62902b-2fb3-49b6-8442-c1af0b9d0f02",
+            "traceId": "4463220e79a87022050c3f06664e1dd6"
+          }
+        }
+      },
+      {
+        "name": "timeline",
+        "title": "The note's history, newest first",
+        "request": {
+          "method": "GET",
+          "path": "/egradx/audit/timeline?entityType=note&entityId={id}"
+        },
+        "response": {
+          "status": 200,
+          "body": {
+            "items": [
+              {
+                "action": "notes.note.updated",
+                "occurredAt": "2026-10-05T14:15:25.157053Z",
+                "actor": "Ada Admin",
+                "changedFields": [
+                  "body",
+                  "title"
+                ]
+              },
+              {
+                "action": "notes.note.created",
+                "occurredAt": "2026-10-05T14:15:24.722353Z",
+                "actor": "Ada Admin",
+                "changedFields": null
+              }
+            ],
+            "nextCursor": null
+          }
+        }
+      },
+      {
+        "name": "actions",
+        "title": "The application's actions in the catalog",
+        "request": {
+          "method": "GET",
+          "path": "/egradx/audit/actions"
+        },
+        "response": {
+          "status": 200,
+          "body": [
+            {
+              "action": "notes.note.created",
+              "category": "notes",
+              "description": "Created a note",
+              "entityType": "note"
+            },
+            {
+              "action": "notes.note.deleted",
+              "category": "notes",
+              "description": "Deleted a note",
+              "entityType": "note"
+            },
+            {
+              "action": "notes.note.updated",
+              "category": "notes",
+              "description": "Changed a note",
+              "entityType": "note"
+            }
+          ]
+        }
+      }
+    ],
+    "node": [
+      {
+        "name": "update",
+        "title": "A change",
+        "request": {
+          "method": "PUT",
+          "path": "/api/notes/{id}",
+          "body": {
+            "title": "Call the supplier today",
+            "body": "About the late delivery"
+          }
+        },
+        "response": {
+          "status": 200,
+          "body": {
+            "id": "a074d4ff-0b05-49a1-8a94-0973b811bb09",
+            "organizationId": "8d41721e-4d59-494c-8f8c-8487d9adc1b2",
+            "title": "Call the supplier today",
+            "body": "About the late delivery"
+          }
+        }
+      },
+      {
+        "name": "update-record",
+        "title": "Its audit record: before, after, and what changed",
+        "request": {
+          "method": "GET",
+          "path": "/egradx/audit/events?action=notes.note.updated&entityId={id}"
+        },
+        "response": {
+          "status": 200,
+          "body": {
+            "id": "01a10c6b-7be9-73ae-aef3-6b142f5d203a",
+            "seq": 27,
+            "occurredAt": "2026-10-05T14:15:33.097Z",
+            "recordedAt": "2026-10-05T14:15:33.099169Z",
+            "organizationId": "8d41721e-4d59-494c-8f8c-8487d9adc1b2",
+            "organizationName": "Demo",
+            "category": "notes",
+            "action": "notes.note.updated",
+            "outcome": "SUCCESS",
+            "reason": null,
+            "actor": {
+              "type": "USER",
+              "id": "ee2cb897-0694-440d-b000-e3aedd2f7e20",
+              "organizationId": "8d41721e-4d59-494c-8f8c-8487d9adc1b2",
+              "label": null,
+              "name": "Ada Admin"
+            },
+            "entity": {
+              "type": "note",
+              "id": "a074d4ff-0b05-49a1-8a94-0973b811bb09",
+              "label": "Call the supplier today"
+            },
+            "before": {
+              "id": "a074d4ff-0b05-49a1-8a94-0973b811bb09",
+              "body": null,
+              "title": "Call the supplier",
+              "organizationId": "8d41721e-4d59-494c-8f8c-8487d9adc1b2"
+            },
+            "after": {
+              "id": "a074d4ff-0b05-49a1-8a94-0973b811bb09",
+              "body": "About the late delivery",
+              "title": "Call the supplier today",
+              "organizationId": "8d41721e-4d59-494c-8f8c-8487d9adc1b2"
+            },
+            "changedFields": [
+              "body",
+              "title"
+            ],
+            "details": null,
+            "clientAddress": "0:0:0:0:0:0:0:1",
+            "userAgent": "node",
+            "requestId": "811961c3-89e4-4431-9f59-800f26fd4743",
+            "traceId": "6523e112cb7e88dcdd5f5ce6b1157f4e"
+          }
+        }
+      },
+      {
+        "name": "timeline",
+        "title": "The note's history, newest first",
+        "request": {
+          "method": "GET",
+          "path": "/egradx/audit/timeline?entityType=note&entityId={id}"
+        },
+        "response": {
+          "status": 200,
+          "body": {
+            "items": [
+              {
+                "action": "notes.note.updated",
+                "occurredAt": "2026-10-05T14:15:33.097Z",
+                "actor": "Ada Admin",
+                "changedFields": [
+                  "body",
+                  "title"
+                ]
+              },
+              {
+                "action": "notes.note.created",
+                "occurredAt": "2026-10-05T14:15:32.809Z",
+                "actor": "Ada Admin",
+                "changedFields": null
+              }
+            ],
+            "nextCursor": null
+          }
+        }
+      },
+      {
+        "name": "actions",
+        "title": "The application's actions in the catalog",
+        "request": {
+          "method": "GET",
+          "path": "/egradx/audit/actions"
+        },
+        "response": {
+          "status": 200,
+          "body": [
+            {
+              "action": "notes.note.created",
+              "category": "notes",
+              "description": "Created a note",
+              "entityType": "note"
+            },
+            {
+              "action": "notes.note.deleted",
+              "category": "notes",
+              "description": "Deleted a note",
+              "entityType": "note"
+            },
+            {
+              "action": "notes.note.updated",
+              "category": "notes",
+              "description": "Changed a note",
+              "entityType": "note"
+            }
+          ]
+        }
+      }
+    ],
+    "python": [
+      {
+        "name": "update",
+        "title": "A change",
+        "request": {
+          "method": "PUT",
+          "path": "/api/notes/{id}",
+          "body": {
+            "title": "Call the supplier today",
+            "body": "About the late delivery"
+          }
+        },
+        "response": {
+          "status": 200,
+          "body": {
+            "id": "1d484808-70a3-422e-b60d-8f610e78ff2f",
+            "organizationId": "95602ad6-dc6e-440e-a8a5-5f01592d2c5f",
+            "title": "Call the supplier today",
+            "body": "About the late delivery"
+          }
+        }
+      },
+      {
+        "name": "update-record",
+        "title": "Its audit record: before, after, and what changed",
+        "request": {
+          "method": "GET",
+          "path": "/egradx/audit/events?action=notes.note.updated&entityId={id}"
+        },
+        "response": {
+          "status": 200,
+          "body": {
+            "id": "01a10c6b-9b3e-7b25-938f-76cc13e8140b",
+            "seq": 27,
+            "occurredAt": "2026-10-05T14:15:41.118479Z",
+            "recordedAt": "2026-10-05T14:15:41.119491Z",
+            "organizationId": "95602ad6-dc6e-440e-a8a5-5f01592d2c5f",
+            "organizationName": "Demo",
+            "category": "notes",
+            "action": "notes.note.updated",
+            "outcome": "SUCCESS",
+            "reason": null,
+            "actor": {
+              "type": "USER",
+              "id": "a475acb7-6a2e-4fb1-a34b-e4228f34c92a",
+              "organizationId": "95602ad6-dc6e-440e-a8a5-5f01592d2c5f",
+              "label": null,
+              "name": "Ada Admin"
+            },
+            "entity": {
+              "type": "note",
+              "id": "1d484808-70a3-422e-b60d-8f610e78ff2f",
+              "label": "Call the supplier today"
+            },
+            "before": {
+              "id": "1d484808-70a3-422e-b60d-8f610e78ff2f",
+              "body": null,
+              "title": "Call the supplier",
+              "organizationId": "95602ad6-dc6e-440e-a8a5-5f01592d2c5f"
+            },
+            "after": {
+              "id": "1d484808-70a3-422e-b60d-8f610e78ff2f",
+              "body": "About the late delivery",
+              "title": "Call the supplier today",
+              "organizationId": "95602ad6-dc6e-440e-a8a5-5f01592d2c5f"
+            },
+            "changedFields": [
+              "body",
+              "title"
+            ],
+            "details": null,
+            "clientAddress": "127.0.0.1",
+            "userAgent": "node",
+            "requestId": "f5dba7a0-e651-4b17-ace5-6aa04960a28a",
+            "traceId": "5cf6d1841c353f600dc4e6231596444a"
+          }
+        }
+      },
+      {
+        "name": "timeline",
+        "title": "The note's history, newest first",
+        "request": {
+          "method": "GET",
+          "path": "/egradx/audit/timeline?entityType=note&entityId={id}"
+        },
+        "response": {
+          "status": 200,
+          "body": {
+            "items": [
+              {
+                "action": "notes.note.updated",
+                "occurredAt": "2026-10-05T14:15:41.118479Z",
+                "actor": "Ada Admin",
+                "changedFields": [
+                  "body",
+                  "title"
+                ]
+              },
+              {
+                "action": "notes.note.created",
+                "occurredAt": "2026-10-05T14:15:40.850885Z",
+                "actor": "Ada Admin",
+                "changedFields": null
+              }
+            ],
+            "nextCursor": null
+          }
+        }
+      },
+      {
+        "name": "actions",
+        "title": "The application's actions in the catalog",
+        "request": {
+          "method": "GET",
+          "path": "/egradx/audit/actions"
+        },
+        "response": {
+          "status": 200,
+          "body": [
+            {
+              "action": "notes.note.created",
+              "category": "notes",
+              "description": "Created a note",
+              "entityType": "note"
+            },
+            {
+              "action": "notes.note.deleted",
+              "category": "notes",
+              "description": "Deleted a note",
+              "entityType": "note"
+            },
+            {
+              "action": "notes.note.updated",
+              "category": "notes",
+              "description": "Changed a note",
+              "entityType": "note"
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

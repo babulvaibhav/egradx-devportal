@@ -1,0 +1,34 @@
+---
+title: Record audit events from a library
+description: A library of your own records audit events without depending on the audit package — the application that uses it records them.
+---
+
+A shared library (billing, reporting) should not pull in the SDK's audit package and its database. It depends only on the core package, and publishes an audit event. The application's auditor records it, with the same transaction, redaction and rules as its own records.
+
+<Languages>
+<Tab value="Java">
+
+<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/java/com/acme/notes/recipes/AuditExtras.java" region="publish-from-a-library" title="AuditExtras.java" />
+
+Through Spring's `ApplicationEventPublisher`: the auditor listens for `EgradxAuditEvent`.
+
+</Tab>
+<Tab value="Node">
+
+<RepoSnippet file="apps/egradx-devportal/examples/node/src/recipes/audit-extras.ts" region="publish-from-a-library" title="src/recipes/audit-extras.ts" />
+
+</Tab>
+<Tab value="Python">
+
+<RepoSnippet file="apps/egradx-devportal/examples/python/recipes/audit_extras.py" region="publish-from-a-library" title="recipes/audit_extras.py" />
+
+</Tab>
+</Languages>
+
+- `EgradxAuditEvent` and its builder are in the **core** package (`com.egradx.core.audit`, `@babulvaibhav/egradx-core`, `egradx.core`). A library needs nothing more.
+- In an application without the audit package, publishing does nothing.
+- Name the actions under the library's own category (`reports.report.generated`), and describe them in the application's catalog so the audit screen shows them.
+
+## See also
+
+- [Audit trail](/docs/guides/audit#a-library-of-your-own)

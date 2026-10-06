@@ -1,0 +1,818 @@
+{
+  "sdkVersion": "1.0.0",
+  "languages": [
+    {
+      "id": "java",
+      "name": "Java",
+      "detail": "Java 21 · Spring Boot 3.4 · Maven"
+    },
+    {
+      "id": "node",
+      "name": "Node",
+      "detail": "Node 24 · Express 5 · TypeScript · Prisma"
+    },
+    {
+      "id": "python",
+      "name": "Python",
+      "detail": "Python 3.13 · FastAPI · SQLAlchemy · uv"
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "identity",
+      "name": "Sign-in & identity",
+      "group": "SDK core",
+      "always": true,
+      "description": "Users, organizations, roles and permissions, invitations, password reset, profiles and sessions, with their endpoints and tables.",
+      "keywords": [
+        "login",
+        "auth",
+        "authentication",
+        "authorization",
+        "users",
+        "roles",
+        "permissions",
+        "tenant",
+        "organization",
+        "jwt",
+        "token"
+      ],
+      "docs": "/docs/guides/identity"
+    },
+    {
+      "id": "audit",
+      "name": "Audit trail",
+      "group": "SDK core",
+      "always": true,
+      "description": "An append-only record of who changed what, written in the same transaction as the change, with filters and export.",
+      "keywords": [
+        "audit",
+        "history",
+        "log",
+        "compliance",
+        "trail",
+        "changes"
+      ],
+      "docs": "/docs/guides/audit"
+    },
+    {
+      "id": "inapp",
+      "name": "In-app notifications",
+      "group": "SDK core",
+      "always": true,
+      "description": "An inbox per person with a live stream for the bell, read state, and announcements to an organization.",
+      "keywords": [
+        "notification",
+        "bell",
+        "inbox",
+        "sse",
+        "realtime",
+        "push"
+      ],
+      "docs": "/docs/guides/notifications"
+    },
+    {
+      "id": "correlation",
+      "name": "Request ids & log correlation",
+      "group": "SDK core",
+      "always": true,
+      "description": "An X-Request-ID on every request, in every log line, error body and audit record.",
+      "keywords": [
+        "request id",
+        "correlation",
+        "logging",
+        "trace id",
+        "observability"
+      ],
+      "docs": "/docs/guides/observability"
+    },
+    {
+      "id": "email",
+      "name": "Email",
+      "group": "Notifications",
+      "description": "Templated email through the application's SMTP server (Mailpit locally), queued with the change and retried. The sample emails a note's author.",
+      "keywords": [
+        "email",
+        "mail",
+        "smtp",
+        "mailpit",
+        "message",
+        "template",
+        "send"
+      ],
+      "docs": "/docs/guides/notifications"
+    },
+    {
+      "id": "events",
+      "name": "Events between services",
+      "group": "Integration",
+      "description": "CloudEvents published in the same transaction as the change, through an outbox, handled once per handler. The sample publishes note.created and counts it in a handler.",
+      "keywords": [
+        "events",
+        "messaging",
+        "outbox",
+        "rabbitmq",
+        "kafka",
+        "queue",
+        "cloudevents",
+        "pubsub",
+        "async",
+        "broker"
+      ],
+      "options": [
+        {
+          "id": "transport",
+          "name": "Transport",
+          "default": "in-process",
+          "values": [
+            {
+              "id": "in-process",
+              "name": "In-process",
+              "description": "No broker: handlers in this application. Moving to a broker later is configuration only."
+            },
+            {
+              "id": "rabbitmq",
+              "name": "RabbitMQ",
+              "description": "A queue per service, retries and a dead-letter queue."
+            },
+            {
+              "id": "kafka",
+              "name": "Kafka",
+              "description": "A topic per event type, kept and replayable; a .DLT topic for failures."
+            }
+          ]
+        }
+      ],
+      "docs": "/docs/guides/events"
+    },
+    {
+      "id": "log-shipping",
+      "name": "Log shipping",
+      "group": "Observability",
+      "description": "Every log line also leaves the service as an egradx.log.record.v1 event, with its request, person and organization.",
+      "keywords": [
+        "logs",
+        "logging",
+        "shipping",
+        "elk",
+        "centralized",
+        "log aggregation"
+      ],
+      "requires": [
+        {
+          "id": "events",
+          "reason": "log lines travel over the events transport."
+        }
+      ],
+      "docs": "/docs/guides/observability"
+    },
+    {
+      "id": "tracing",
+      "name": "Traces & metrics",
+      "group": "Observability",
+      "description": "OpenTelemetry traces to Jaeger and Prometheus metrics for every SDK operation; Jaeger and Prometheus in the compose file.",
+      "keywords": [
+        "tracing",
+        "opentelemetry",
+        "otel",
+        "jaeger",
+        "metrics",
+        "prometheus",
+        "monitoring",
+        "actuator"
+      ],
+      "docs": "/docs/guides/observability"
+    }
+  ],
+  "frontends": [
+    {
+      "id": "none",
+      "name": "None",
+      "description": "An API only"
+    },
+    {
+      "id": "vite",
+      "name": "React + Vite",
+      "description": "Tokens in the browser, @babulvaibhav/egradx-react"
+    },
+    {
+      "id": "next",
+      "name": "Next.js",
+      "description": "Tokens in HttpOnly cookies, @babulvaibhav/egradx-next"
+    }
+  ],
+  "extras": [
+    {
+      "id": "tests",
+      "name": "Tests",
+      "description": "An integration test over HTTP: sign in, create a note, check its audit record, notice, email and event.",
+      "default": true
+    },
+    {
+      "id": "compose",
+      "name": "Docker Compose",
+      "description": "PostgreSQL, and Mailpit, the broker, Jaeger and Prometheus when chosen.",
+      "default": true
+    },
+    {
+      "id": "dockerfile",
+      "name": "Dockerfile",
+      "description": "An image for the application.",
+      "default": false
+    },
+    {
+      "id": "ci",
+      "name": "GitHub Actions",
+      "description": "Build and test on every push, against PostgreSQL.",
+      "default": false
+    },
+    {
+      "id": "ai-pack",
+      "name": "AI context pack",
+      "description": "egradx-sdk-docs/ and AGENTS.md/CLAUDE.md, so coding assistants build on the SDK instead of re-writing it.",
+      "default": true
+    }
+  ],
+  "files": {
+    "common": [
+      {
+        "from": "common/README.md.hbs",
+        "to": "README.md"
+      },
+      {
+        "from": "common/env.example.hbs",
+        "to": ".env.example"
+      },
+      {
+        "from": "common/docker-compose.yml.hbs",
+        "to": "docker-compose.yml",
+        "when": [
+          "extra:compose"
+        ]
+      },
+      {
+        "from": "common/postgres-init.sql.hbs",
+        "to": "docker/postgres-init.sql",
+        "when": [
+          "extra:compose"
+        ]
+      },
+      {
+        "from": "common/prometheus.yml.hbs",
+        "to": "docker/prometheus.yml",
+        "when": [
+          "extra:compose",
+          "cap:tracing"
+        ]
+      },
+      {
+        "from": "common/AGENTS.md.hbs",
+        "to": "AGENTS.md",
+        "when": [
+          "extra:ai-pack"
+        ]
+      },
+      {
+        "from": "common/CLAUDE.md",
+        "to": "CLAUDE.md",
+        "when": [
+          "extra:ai-pack"
+        ],
+        "raw": true
+      }
+    ],
+    "java": [
+      {
+        "from": "java/pom.xml.hbs",
+        "to": "pom.xml"
+      },
+      {
+        "from": "java/mvnw",
+        "to": "mvnw",
+        "raw": true,
+        "executable": true
+      },
+      {
+        "from": "java/mvnw.cmd",
+        "to": "mvnw.cmd",
+        "raw": true
+      },
+      {
+        "from": "java/.mvn/wrapper/maven-wrapper.properties",
+        "to": ".mvn/wrapper/maven-wrapper.properties",
+        "raw": true
+      },
+      {
+        "from": "java/gitignore",
+        "to": ".gitignore",
+        "raw": true
+      },
+      {
+        "from": "java/application.yml.hbs",
+        "to": "src/main/resources/application.yml"
+      },
+      {
+        "from": "common/sql/V1__notes.sql.hbs",
+        "to": "src/main/resources/db/migration/V1__notes.sql"
+      },
+      {
+        "from": "common/sql/V2__note_stats.sql.hbs",
+        "to": "src/main/resources/db/migration/V2__note_stats.sql",
+        "when": [
+          "cap:events"
+        ]
+      },
+      {
+        "from": "common/email/email.subject.txt.hbs",
+        "to": "src/main/resources/notification-templates/{{project.area}}.note.created/email.subject.txt",
+        "when": [
+          "cap:email"
+        ]
+      },
+      {
+        "from": "common/email/email.body.html.hbs",
+        "to": "src/main/resources/notification-templates/{{project.area}}.note.created/email.body.html",
+        "when": [
+          "cap:email"
+        ]
+      },
+      {
+        "from": "java/src/Application.java.hbs",
+        "to": "src/main/java/{{project.packagePath}}/{{project.className}}.java"
+      },
+      {
+        "from": "java/src/Note.java.hbs",
+        "to": "src/main/java/{{project.packagePath}}/Note.java"
+      },
+      {
+        "from": "java/src/NoteRepository.java.hbs",
+        "to": "src/main/java/{{project.packagePath}}/NoteRepository.java"
+      },
+      {
+        "from": "java/src/NoteDtos.java.hbs",
+        "to": "src/main/java/{{project.packagePath}}/NoteDtos.java"
+      },
+      {
+        "from": "java/src/NoteService.java.hbs",
+        "to": "src/main/java/{{project.packagePath}}/NoteService.java"
+      },
+      {
+        "from": "java/src/NoteController.java.hbs",
+        "to": "src/main/java/{{project.packagePath}}/NoteController.java"
+      },
+      {
+        "from": "java/src/NoteAuditActions.java.hbs",
+        "to": "src/main/java/{{project.packagePath}}/NoteAuditActions.java"
+      },
+      {
+        "from": "java/src/Setup.java.hbs",
+        "to": "src/main/java/{{project.packagePath}}/Setup.java"
+      },
+      {
+        "from": "java/src/ApiExceptionHandler.java.hbs",
+        "to": "src/main/java/{{project.packagePath}}/ApiExceptionHandler.java"
+      },
+      {
+        "from": "java/src/NoteNotifications.java.hbs",
+        "to": "src/main/java/{{project.packagePath}}/NoteNotifications.java",
+        "when": [
+          "cap:email"
+        ]
+      },
+      {
+        "from": "java/src/NoteStatsHandler.java.hbs",
+        "to": "src/main/java/{{project.packagePath}}/NoteStatsHandler.java",
+        "when": [
+          "cap:events"
+        ]
+      },
+      {
+        "from": "java/test/NotesTests.java.hbs",
+        "to": "src/test/java/{{project.packagePath}}/NotesTests.java",
+        "when": [
+          "extra:tests"
+        ]
+      },
+      {
+        "from": "java/Dockerfile.hbs",
+        "to": "Dockerfile",
+        "when": [
+          "extra:dockerfile"
+        ]
+      },
+      {
+        "from": "java/dockerignore",
+        "to": ".dockerignore",
+        "when": [
+          "extra:dockerfile"
+        ]
+      },
+      {
+        "from": "java/ci.yml.hbs",
+        "to": ".github/workflows/ci.yml",
+        "when": [
+          "extra:ci"
+        ]
+      }
+    ],
+    "node": [
+      {
+        "from": "node/package.json.hbs",
+        "to": "package.json"
+      },
+      {
+        "from": "node/tsconfig.json",
+        "to": "tsconfig.json",
+        "raw": true
+      },
+      {
+        "from": "node/npmrc",
+        "to": ".npmrc",
+        "raw": true
+      },
+      {
+        "from": "node/gitignore",
+        "to": ".gitignore",
+        "raw": true
+      },
+      {
+        "from": "node/prisma/schema.prisma.hbs",
+        "to": "prisma/schema.prisma"
+      },
+      {
+        "from": "common/sql/V1__notes.sql.hbs",
+        "to": "migrations/V1__notes.sql"
+      },
+      {
+        "from": "common/sql/V2__note_stats.sql.hbs",
+        "to": "migrations/V2__note_stats.sql",
+        "when": [
+          "cap:events"
+        ]
+      },
+      {
+        "from": "common/email/email.subject.txt.hbs",
+        "to": "notification-templates/{{project.area}}.note.created/email.subject.txt",
+        "when": [
+          "cap:email"
+        ]
+      },
+      {
+        "from": "common/email/email.body.html.hbs",
+        "to": "notification-templates/{{project.area}}.note.created/email.body.html",
+        "when": [
+          "cap:email"
+        ]
+      },
+      {
+        "from": "node/src/config.ts.hbs",
+        "to": "src/config.ts"
+      },
+      {
+        "from": "node/src/main.ts.hbs",
+        "to": "src/main.ts"
+      },
+      {
+        "from": "node/src/app.ts.hbs",
+        "to": "src/app.ts"
+      },
+      {
+        "from": "node/src/notes.ts.hbs",
+        "to": "src/notes.ts"
+      },
+      {
+        "from": "node/src/setup.ts",
+        "to": "src/setup.ts",
+        "raw": false
+      },
+      {
+        "from": "node/src/notifications.ts.hbs",
+        "to": "src/notifications.ts",
+        "when": [
+          "cap:email"
+        ]
+      },
+      {
+        "from": "node/src/events.ts.hbs",
+        "to": "src/events.ts",
+        "when": [
+          "cap:events"
+        ]
+      },
+      {
+        "from": "node/src/logging.ts",
+        "to": "src/logging.ts",
+        "when": [
+          "cap:log-shipping"
+        ]
+      },
+      {
+        "from": "node/src/telemetry.ts",
+        "to": "src/telemetry.ts",
+        "when": [
+          "cap:tracing"
+        ]
+      },
+      {
+        "from": "node/test/notes.test.ts.hbs",
+        "to": "test/notes.test.ts",
+        "when": [
+          "extra:tests"
+        ]
+      },
+      {
+        "from": "node/Dockerfile.hbs",
+        "to": "Dockerfile",
+        "when": [
+          "extra:dockerfile"
+        ]
+      },
+      {
+        "from": "node/dockerignore",
+        "to": ".dockerignore",
+        "when": [
+          "extra:dockerfile"
+        ]
+      },
+      {
+        "from": "node/ci.yml.hbs",
+        "to": ".github/workflows/ci.yml",
+        "when": [
+          "extra:ci"
+        ]
+      }
+    ],
+    "python": [
+      {
+        "from": "python/pyproject.toml.hbs",
+        "to": "pyproject.toml"
+      },
+      {
+        "from": "python/gitignore",
+        "to": ".gitignore",
+        "raw": true
+      },
+      {
+        "from": "python/scripts/get_wheels.py.hbs",
+        "to": "scripts/get_wheels.py"
+      },
+      {
+        "from": "common/sql/V1__notes.sql.hbs",
+        "to": "migrations/V1__notes.sql"
+      },
+      {
+        "from": "common/sql/V2__note_stats.sql.hbs",
+        "to": "migrations/V2__note_stats.sql",
+        "when": [
+          "cap:events"
+        ]
+      },
+      {
+        "from": "common/email/email.subject.txt.hbs",
+        "to": "notification-templates/{{project.area}}.note.created/email.subject.txt",
+        "when": [
+          "cap:email"
+        ]
+      },
+      {
+        "from": "common/email/email.body.html.hbs",
+        "to": "notification-templates/{{project.area}}.note.created/email.body.html",
+        "when": [
+          "cap:email"
+        ]
+      },
+      {
+        "from": "python/main.py.hbs",
+        "to": "main.py"
+      },
+      {
+        "from": "python/application.py.hbs",
+        "to": "application.py"
+      },
+      {
+        "from": "python/notes.py.hbs",
+        "to": "notes.py"
+      },
+      {
+        "from": "python/seeding.py",
+        "to": "seeding.py"
+      },
+      {
+        "from": "python/notifications.py",
+        "to": "notifications.py",
+        "when": [
+          "cap:email"
+        ]
+      },
+      {
+        "from": "python/events.py.hbs",
+        "to": "events.py",
+        "when": [
+          "cap:events"
+        ]
+      },
+      {
+        "from": "python/telemetry.py",
+        "to": "telemetry.py",
+        "when": [
+          "cap:tracing"
+        ]
+      },
+      {
+        "from": "python/tests/conftest.py",
+        "to": "tests/conftest.py",
+        "when": [
+          "extra:tests"
+        ]
+      },
+      {
+        "from": "python/tests/test_notes.py.hbs",
+        "to": "tests/test_notes.py",
+        "when": [
+          "extra:tests"
+        ]
+      },
+      {
+        "from": "python/Dockerfile.hbs",
+        "to": "Dockerfile",
+        "when": [
+          "extra:dockerfile"
+        ]
+      },
+      {
+        "from": "python/dockerignore",
+        "to": ".dockerignore",
+        "when": [
+          "extra:dockerfile"
+        ]
+      },
+      {
+        "from": "python/ci.yml.hbs",
+        "to": ".github/workflows/ci.yml",
+        "when": [
+          "extra:ci"
+        ]
+      }
+    ],
+    "frontend-vite": [
+      {
+        "from": "frontend-vite/package.json.hbs",
+        "to": "package.json"
+      },
+      {
+        "from": "frontend-vite/tsconfig.json",
+        "to": "tsconfig.json",
+        "raw": true
+      },
+      {
+        "from": "frontend-vite/vite.config.ts",
+        "to": "vite.config.ts",
+        "raw": true
+      },
+      {
+        "from": "frontend-vite/index.html.hbs",
+        "to": "index.html"
+      },
+      {
+        "from": "frontend-vite/npmrc",
+        "to": ".npmrc",
+        "raw": true
+      },
+      {
+        "from": "frontend-vite/gitignore",
+        "to": ".gitignore",
+        "raw": true
+      },
+      {
+        "from": "frontend-vite/src/main.tsx",
+        "to": "src/main.tsx",
+        "raw": true
+      },
+      {
+        "from": "frontend-vite/src/App.tsx",
+        "to": "src/App.tsx",
+        "raw": true
+      },
+      {
+        "from": "frontend-vite/src/egradx.ts",
+        "to": "src/egradx.ts",
+        "raw": true
+      },
+      {
+        "from": "frontend-common/notes-api.ts",
+        "to": "src/notes-api.ts",
+        "raw": true
+      },
+      {
+        "from": "frontend-common/LoginForm.tsx",
+        "to": "src/LoginForm.tsx",
+        "raw": true
+      },
+      {
+        "from": "frontend-common/Bell.tsx",
+        "to": "src/Bell.tsx",
+        "raw": true
+      },
+      {
+        "from": "frontend-common/Notes.tsx",
+        "to": "src/Notes.tsx",
+        "raw": true
+      },
+      {
+        "from": "frontend-common/styles.css",
+        "to": "src/styles.css",
+        "raw": true
+      }
+    ],
+    "frontend-next": [
+      {
+        "from": "frontend-next/package.json.hbs",
+        "to": "package.json"
+      },
+      {
+        "from": "frontend-next/tsconfig.json",
+        "to": "tsconfig.json",
+        "raw": true
+      },
+      {
+        "from": "frontend-next/next.config.ts",
+        "to": "next.config.ts",
+        "raw": true
+      },
+      {
+        "from": "frontend-next/npmrc",
+        "to": ".npmrc",
+        "raw": true
+      },
+      {
+        "from": "frontend-next/gitignore",
+        "to": ".gitignore",
+        "raw": true
+      },
+      {
+        "from": "frontend-next/src/egradx-server.ts",
+        "to": "src/egradx-server.ts",
+        "raw": true
+      },
+      {
+        "from": "frontend-next/src/egradx.ts",
+        "to": "src/egradx.ts",
+        "raw": true
+      },
+      {
+        "from": "frontend-next/src/proxy.ts",
+        "to": "src/proxy.ts",
+        "raw": true
+      },
+      {
+        "from": "frontend-next/src/app/bff/[...path]/route.ts",
+        "to": "src/app/bff/[...path]/route.ts",
+        "raw": true
+      },
+      {
+        "from": "frontend-next/src/app/providers.tsx",
+        "to": "src/app/providers.tsx",
+        "raw": true
+      },
+      {
+        "from": "frontend-next/src/app/layout.tsx.hbs",
+        "to": "src/app/layout.tsx"
+      },
+      {
+        "from": "frontend-next/src/app/page.tsx",
+        "to": "src/app/page.tsx",
+        "raw": true
+      },
+      {
+        "from": "frontend-next/src/app/login/page.tsx",
+        "to": "src/app/login/page.tsx",
+        "raw": true
+      },
+      {
+        "from": "frontend-common/notes-api.ts",
+        "to": "src/notes-api.ts",
+        "raw": true
+      },
+      {
+        "from": "frontend-common/LoginForm.tsx",
+        "to": "src/LoginForm.tsx",
+        "raw": true
+      },
+      {
+        "from": "frontend-common/Bell.tsx",
+        "to": "src/Bell.tsx",
+        "raw": true
+      },
+      {
+        "from": "frontend-common/Notes.tsx",
+        "to": "src/Notes.tsx",
+        "raw": true
+      },
+      {
+        "from": "frontend-common/styles.css",
+        "to": "src/styles.css",
+        "raw": true
+      }
+    ]
+  }
+}

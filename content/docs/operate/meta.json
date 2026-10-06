@@ -1,0 +1,13 @@
+{
+  "title": "Operate",
+  "pages": [
+    "index",
+    "production",
+    "security",
+    "multiple-instances",
+    "upgrading",
+    "troubleshooting",
+    "known-limitations",
+    "faq"
+  ]
+}

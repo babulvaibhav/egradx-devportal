@@ -1,0 +1,58 @@
+---
+title: Add a notification type with a template
+description: Name a message, the variables its templates may use, whether people can turn it off — and write its templates per channel and language.
+---
+
+## 1. Declare the type
+
+<Languages>
+<Tab value="Java">
+
+<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/java/com/acme/notes/NoteNotifications.java" region="notification-type" title="NoteNotifications.java" />
+
+</Tab>
+<Tab value="Node">
+
+<RepoSnippet file="apps/egradx-devportal/examples/node/src/notifications.ts" region="notification-type" title="src/notifications.ts" />
+
+Passed as `createEgradx({ notifications: { types: notificationTypes, templates: { directories: [templateDirectory] } } })`.
+
+</Tab>
+<Tab value="Python">
+
+<RepoSnippet file="apps/egradx-devportal/examples/python/notifications.py" region="notification-type" title="notifications.py" />
+
+</Tab>
+</Languages>
+
+- **The key** is `area.entity.event`, like an audit action: `notes.note.created`.
+- **`requires(...)`** lists the variables every send must give; `optional(...)` the ones it may.
+- **`userCanOptOut()`** puts the type on people's notification settings. Leave it off for messages people must get.
+
+## 2. Write a template per channel
+
+One file per channel and part: `notification-templates/<key>/<channel>[.<locale>].(subject|body).(txt|html)`, in Handlebars.
+
+<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/resources/notification-templates/notes.note.created/email.subject.txt" title="email.subject.txt" />
+
+<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/resources/notification-templates/notes.note.created/email.body.html" title="email.body.html" />
+
+| File | For |
+|---|---|
+| `email.subject.txt`, `email.body.html` (or `.txt`) | email |
+| `slack.body.txt`, `sms.body.txt`, `whatsapp.body.txt`, `webhook.body.txt` | the other channels: text only |
+| `email.fr.body.html` | French; a person's language comes from their profile (`pt-BR`, then `pt`, then the default) |
+
+An `.html` body escapes values; a `.txt` one inserts them as they are. Java reads `classpath:notification-templates/`; Node and Python read the folders you give them.
+
+## 3. Start the application
+
+The templates are checked at start-up: a template that uses a variable its type doesn't declare stops the start, with the file and the variable named. A typo shows up then, not in a customer's inbox.
+
+## Organizations can rewrite it
+
+An organization's administrators can replace any template for their organization: on the admin screens, or `PUT /egradx/notifications/admin/templates`. `GET /egradx/notifications/admin/types` lists your types with their variables, for that screen.
+
+## See also
+
+- [Send an email](/docs/recipes/send-an-email) · [Notification types reference](/docs/reference/notification-types)

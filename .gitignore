@@ -1,0 +1,59 @@
+# deps
+/node_modules
+
+# generated content
+.source
+
+# test & build
+/coverage
+/.next/
+/out/
+/build
+*.tsbuildinfo
+
+# misc
+.DS_Store
+*.pem
+/.pnp
+.pnp.js
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# others
+.env*.local
+.vercel
+next-env.d.ts
+# The example applications' build output, dependencies and local state
+/examples/java/target/
+/examples/node/node_modules/
+/examples/web-vite/node_modules/
+/examples/web-next/node_modules/
+/examples/web-next/.next/
+# Lockfiles would pin the checksums of packages republished as 1.0.0
+/examples/*/package-lock.json
+*.tsbuildinfo
+/examples/node/src/generated/
+/examples/python/.venv/
+/examples/python/egradx-wheels/
+/examples/python/uv.lock
+__pycache__/
+keys/
+*.log
+.env
+
+# The Initializr test matrix's generated projects (scripts/test-initializr.mjs)
+/.matrix/
+
+# The reference pages scripts/build-reference.mjs writes on every build, from sources/ and content/results/
+/content/docs/reference/http/auth.mdx
+/content/docs/reference/http/audit.mdx
+/content/docs/reference/http/notification.mdx
+/content/docs/reference/errors.mdx
+/content/docs/reference/headers-and-tokens.mdx
+/content/docs/reference/events.mdx
+/content/docs/reference/database.mdx
+/content/docs/reference/notification-types.mdx
+/content/docs/reference/permissions.mdx
+/content/docs/reference/audit-actions.mdx
+/content/docs/reference/configuration.mdx

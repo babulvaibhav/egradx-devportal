@@ -1,0 +1,65 @@
+{
+  "name": "{{project.artifact}}",
+  "version": "0.0.1",
+  "private": true,
+  "description": "{{project.description}}",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "start": "tsx src/main.ts",
+    "generate": "prisma generate",
+    "typecheck": "tsc --noEmit"{{#if extra.tests}},
+    "test": "vitest run"{{/if}}
+  },
+  "dependencies": {
+    "@babulvaibhav/egradx-sdk": "{{sdkVersion}}",
+{{#if cap.events}}
+    "@babulvaibhav/egradx-events": "{{sdkVersion}}",
+{{#if (eq option.events.transport "rabbitmq")}}
+    "amqplib": "^2.2.0",
+{{/if}}
+{{#if (eq option.events.transport "kafka")}}
+    "@confluentinc/kafka-javascript": "^1.10.1",
+{{/if}}
+{{/if}}
+{{#if cap.log-shipping}}
+    "pino": "^10.4.0",
+{{/if}}
+{{#if cap.tracing}}
+    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/exporter-prometheus": "^0.222.0",
+    "@opentelemetry/exporter-trace-otlp-proto": "^0.222.0",
+    "@opentelemetry/instrumentation": "^0.222.0",
+    "@opentelemetry/instrumentation-http": "^0.222.0",
+    "@opentelemetry/resources": "^2.11.0",
+    "@opentelemetry/sdk-metrics": "^2.11.0",
+    "@opentelemetry/sdk-trace-base": "^2.11.0",
+    "@opentelemetry/sdk-trace-node": "^2.11.0",
+{{/if}}
+    "@prisma/adapter-pg": "7.10.0",
+    "@prisma/client": "7.10.0",
+    "express": "^5.2.1"
+  },
+  "devDependencies": {
+{{#if cap.events}}
+{{#if (eq option.events.transport "rabbitmq")}}
+    "@types/amqplib": "^0.10.8",
+{{/if}}
+{{/if}}
+    "@types/express": "^5.0.6",
+    "@types/node": "^24.0.0",
+{{#if extra.tests}}
+{{#if cap.email}}
+    "@types/smtp-server": "^3.5.13",
+    "smtp-server": "^3.19.16",
+{{/if}}
+    "vitest": "^5.0.3",
+{{/if}}
+    "prisma": "7.10.0",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.3"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

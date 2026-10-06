@@ -1,0 +1,110 @@
+---
+title: Access to the packages
+description: The SDK's packages are on GitHub Packages. Reading them needs a GitHub token — here is how to set it up in Maven, npm and pip.
+---
+
+All packages are published from the repository `babulvaibhav/egradx-v1-workspace`, at version **1.0.0**. GitHub Packages asks for a token even to **read** a package, so this is the first thing to set up.
+
+## 1. Create a token
+
+On GitHub: **Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate new token**, with the scope **`read:packages`** (and `repo` if the repository is private to you). Keep it in an environment variable — never in your repository:
+
+```sh
+# macOS / Linux
+export GITHUB_TOKEN=ghp_...
+# Windows PowerShell
+$env:GITHUB_TOKEN = "ghp_..."
+```
+
+## 2. Tell your build tool about it
+
+<Languages>
+<Tab value="Java">
+
+In `~/.m2/settings.xml` (your machine, not the project), a server entry with the token:
+
+```xml title="~/.m2/settings.xml"
+<settings>
+  <servers>
+    <server>
+      <id>egradx-sdk-github</id>
+      <username>YOUR_GITHUB_USERNAME</username>
+      <password>${env.GITHUB_TOKEN}</password>
+    </server>
+  </servers>
+</settings>
+```
+
+In your project's `pom.xml`, the repository with the **same id**:
+
+```xml title="pom.xml"
+<repositories>
+  <repository>
+    <id>egradx-sdk-github</id>
+    <url>https://maven.pkg.github.com/babulvaibhav/egradx-v1-workspace</url>
+  </repository>
+</repositories>
+```
+
+</Tab>
+<Tab value="Node">
+
+In your project's `.npmrc` (safe to commit: the token comes from the environment):
+
+```ini title=".npmrc"
+@babulvaibhav:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
+```
+
+Every package is scoped `@babulvaibhav/egradx-*`; everything else still comes from npmjs.org.
+
+</Tab>
+<Tab value="Python">
+
+The Python packages are wheels attached to the GitHub release [`python-v1.0.0`](https://github.com/babulvaibhav/egradx-v1-workspace/releases/tag/python-v1.0.0); GitHub has no Python registry. Download them once into a folder, then install from it. With the [GitHub CLI](https://cli.github.com/) (`gh auth login` first):
+
+```sh
+gh release download python-v1.0.0 -R babulvaibhav/egradx-v1-workspace -p "*.whl" -D egradx-wheels
+```
+
+Without the CLI, download the `.whl` files from the release page into a folder named `egradx-wheels`.
+
+Then point pip or uv at the folder:
+
+```sh
+pip install egradx-sdk==1.0.0 --find-links egradx-wheels
+# or, with uv, in pyproject.toml:
+#   [tool.uv]
+#   find-links = ["egradx-wheels"]
+```
+
+</Tab>
+</Languages>
+
+## 3. Check it works
+
+<Languages>
+<Tab value="Java">
+
+```sh
+mvn dependency:get -Dartifact=com.egradx:egradx-bom:1.0.0:pom
+```
+
+</Tab>
+<Tab value="Node">
+
+```sh
+npm view @babulvaibhav/egradx-sdk version   # 1.0.0
+```
+
+</Tab>
+<Tab value="Python">
+
+```sh
+ls egradx-wheels   # egradx_sdk-1.0.0-py3-none-any.whl, egradx_core-1.0.0-…, …
+```
+
+</Tab>
+</Languages>
+
+A `401 Unauthorized` means the token is missing or lacks `read:packages`; in Maven, also check that the `<server>` id matches the `<repository>` id.

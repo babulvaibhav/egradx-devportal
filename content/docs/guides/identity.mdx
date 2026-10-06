@@ -1,0 +1,176 @@
+---
+title: Sign-in & identity
+description: Users, organizations, roles, sessions, invitations, password reset and profiles — tables and endpoints your application gets from the SDK instead of writing them.
+---
+
+<Parity id="identity.sign-in" />
+
+## What it is
+
+Every application needs people who sign in, the organizations they work for, and what each may do there. The SDK keeps all of it — tables, endpoints, emails — **inside your application**, on your database. Your code never stores a password, issues a token or keeps a users table.
+
+- A **user** is one account. They belong to **organizations** through a **membership**, which gives them exactly **one role** there.
+- A **role** is a named set of **authorities** (permissions) such as `note.write`. Your code checks authorities, never role names, so an administrator can reshape roles without a deployment.
+- A **session** acts in one organization at a time. Switching organization issues new tokens.
+- One organization is special: the **platform organization**, whose administrator manages the others.
+
+## How it works
+
+<Mermaid chart={`sequenceDiagram
+  participant B as Browser
+  participant A as Your application (with the SDK)
+  participant D as PostgreSQL
+  B->>A: POST /egradx/auth/login {username, password}
+  A->>D: user, password hash (Argon2id), membership
+  A-->>B: access token (RS256, 60 min) + refresh token (7 days)
+  B->>A: GET /api/notes  Authorization: Bearer …
+  A->>A: verify the signature locally (no network)
+  A->>D: still active? sessions cut off? organization active? role's authorities now?
+  A-->>B: your endpoint runs with the caller resolved`} />
+
+The access token carries **who** (`sub`), the session's organization and role — never the authorities. On **every request** the SDK checks the signature, then reads from the database whether the person is still active, whether their sessions were cut off (password changed, "sign out everywhere"), whether the organization is still active, and what their role holds **now**. A permission granted or taken away applies on the next request, not at the next sign-in. A role's authorities are cached for 60 seconds per instance; the instance that made a change sees it at once.
+
+## Wiring it in
+
+Nothing is written for sign-in itself: the SDK serves `/egradx/auth/**`. You give it a database, a folder for its signing keys and the secret that protects them, and an issuer name stamped on every token.
+
+<Languages>
+<Tab value="Java">
+
+<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/resources/application.yml" region="config" title="application.yml" />
+
+`egradx-sdk` configures everything else itself. Write `keystorePath` exactly so: it is read as written.
+
+</Tab>
+<Tab value="Node">
+
+<RepoSnippet file="apps/egradx-devportal/examples/node/src/app.ts" region="main" title="src/app.ts" />
+
+</Tab>
+<Tab value="Python">
+
+<RepoSnippet file="apps/egradx-devportal/examples/python/application.py" region="main" title="application.py" />
+
+</Tab>
+</Languages>
+
+## What it answers
+
+Recorded from the example applications:
+
+<RecordedRun name="sign-in" />
+
+The session's `authorities` are a snapshot for the browser to decide what to show; the server reads them afresh on every call. Tokens are shown shortened here: they are secrets.
+
+## The accounts that exist from the start
+
+| Who | Username | Password | Made by |
+|---|---|---|---|
+| The platform's administrator | `platform-admin` | `change-me-platform-admin` unless set before the **first** start | the SDK, on every start (idempotent) |
+| Your first organizations and their administrators | yours | yours | your code, through provisioning (below) |
+
+Set the platform administrator's password before the first start: Java `egradx.auth.platform.admin-password` (or `EGRADX_AUTH_PLATFORM_ADMIN_PASSWORD`), Node `auth: { platform: { adminPassword } }`, Python `AuthOptions(platform=PlatformSettings(admin_password=...))`. Changing it later does nothing: it is only used when the account is created. The SDK logs a warning on every start while the default is in use.
+
+The platform administrator holds every SDK authority but **none of your application's**: on your business endpoints they are refused. To work inside an organization they need a membership there.
+
+## Organizations and their first administrator
+
+Provisioning creates an organization, its `Admin` role and its first administrator in one transaction. Your listener runs inside it, before the administrator exists, so roles and permissions are in place by the first sign-in; if it throws, nothing is created.
+
+<Languages>
+<Tab value="Java">
+
+<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/java/com/acme/notes/Setup.java" region="seed-permission" title="Setup.java" />
+
+</Tab>
+<Tab value="Node">
+
+<RepoSnippet file="apps/egradx-devportal/examples/node/src/setup.ts" region="seed-permission" title="src/setup.ts" />
+
+</Tab>
+<Tab value="Python">
+
+<RepoSnippet file="apps/egradx-devportal/examples/python/seeding.py" region="seed-permission" title="seeding.py" />
+
+</Tab>
+</Languages>
+
+Over HTTP, the platform administrator provisions with `POST /egradx/auth/organizations`. Every organization gets one role from the SDK, `Admin`, with the authorities to manage its users, roles, audit trail and notifications. Any other role (Manager, Staff…) is yours to create in the listener — see [authorization](/docs/guides/authorization).
+
+## The account flows
+
+All of these are SDK endpoints; the [HTTP reference](/docs/reference/http) has every request and answer.
+
+| Flow | Endpoints | Notes |
+|---|---|---|
+| Sign in, renew, sign out | `POST /egradx/auth/login`, `/refresh`, `/logout` | Someone in several organizations gets `400 ORG_SELECTION_REQUIRED` with `details.organizations`, then signs in again naming one. Refresh tokens are not rotated. |
+| Who am I | `GET /egradx/auth/me`, `GET /egradx/auth/my/organization(s)` | |
+| Switch organization | `POST /egradx/auth/my/organizations/{id}/switch` | New tokens; send the old refresh token to retire it. |
+| Change password | `POST /egradx/auth/my/password` | Ends every other session; answers with fresh tokens. |
+| Sign out everywhere | `POST /egradx/auth/my/sessions/revoke-all` | |
+| Forgotten password | `POST /egradx/auth/password/forgot`, `/password/reset` | Always 202, so it reveals no accounts. Needs email and `links.base-url`. |
+| Invitations | `/egradx/auth/my/invitations`, `/egradx/auth/invitations/{token}` | A link by email; the invitee chooses a password, or signs in if they have an account. |
+| Change sign-in email | `/egradx/auth/my/email`, `/my/email/confirm` | A six-digit code to the new address. |
+| Profiles, addresses, preferences | `/egradx/auth/my/profile/**` | Addresses are verified with a code before use. |
+| Users and roles of an organization | `/egradx/auth/my/users/**`, `/my/roles/**` | Its administrators manage them. |
+
+The emails these flows send (reset link, invitation, codes) are [notification types](/docs/guides/notifications) of the SDK's, sent through the same outbox as yours. The links point at `links.base-url` plus `/reset-password?token=…` and `/accept-invite?token=…`: your frontend serves those pages.
+
+## Configuration
+
+| | Java (`egradx.auth.*`) | Node (`auth: {…}`) | Python (`AuthOptions(...)`) | Default |
+|---|---|---|---|---|
+| Issuer, stamped on every token | `issuer-uri` | `issuer` | `issuer` | required |
+| Signing keys | `egradx.security.crypto.keystorePath`, `.passphrase` | `keys: { keystorePath, passphrase }` | `keystore_path`, `keystore_passphrase` | required |
+| Access token lifetime | `access-token-ttl-minutes` | `accessTokenTtlMinutes` | `access_token_ttl_minutes` | 60 |
+| Refresh token lifetime | `refresh-token-ttl-days` | `refreshTokenTtlDays` | `refresh_token_ttl_days` | 7 |
+| Role cache | `role-authorities-cache-ttl-seconds` | `roleAuthoritiesCacheTtlSeconds` | `role_authorities_cache_ttl_seconds` | 60 |
+| Links in emails | `links.base-url` | `links: { baseUrl }` | `links=LinkSettings(base_url=…)` | none: no reset or invitation emails |
+| Sign-in attempt limit | `rate-limit.*` (5 per account and address, 100 per address, 15 min) | `rateLimit: {…}` | `rate_limit=RateLimitSettings(…)` (`None` turns it off) | on |
+| Platform organization and administrator | `platform.*` | `platform: {…}` | `platform=PlatformSettings(…)` | see above |
+| Contact channels people may add | `profile.channels` | `profile: { channels }` | `profile=ProfileSettings(channels=…)` | email, sms, whatsapp, slack |
+
+Java reads environment variables through Spring (`EGRADX_AUTH_ISSUERURI`…); Node and Python read none themselves — the application passes values, as the examples do. The [configuration reference](/docs/reference/configuration) lists every key.
+
+## Guarantees and limits
+
+- **Passwords** are hashed with Argon2id (the same parameters in every language), and a wrong username takes as long as a wrong password.
+- **Effective at once, everywhere:** deactivating a person, ending their sessions, suspending an organization, changing someone's role. Changing what a role holds is immediate on the instance that made the change and takes up to 60 seconds elsewhere.
+- **Deactivation is global**: a person deactivated by one organization's administrator can no longer use any organization.
+- **Per instance:** the sign-in attempt limit counts on each instance separately.
+- **Not yet:** refresh-token rotation, a list of one's sessions to end one by one, sign-in by one-time code, single sign-on. `POST /egradx/auth/register` creates an account in no organization.
+- **Several instances, several languages:** they must share the keys folder and the issuer. Then a token issued by one is accepted by all — even across Java, Node and Python. See [keys](/docs/guides/keys).
+
+## In OIM
+
+OIM has no sign-in code at all: both its frontends call the SDK's endpoints directly. What it does is make sure every request passes through the SDK's authentication. In Java it declares its own security chain — which replaces the SDK's — so it must add the SDK's filter itself:
+
+<Languages>
+<Tab value="Java">
+
+<RepoSnippet file="apps/egradx-oim/backend/src/main/java/com/egradx/oim/common/config/SecurityConfig.java" region="identity-chain" title="SecurityConfig.java" />
+
+<Callout type="warn" title="Your own SecurityFilterChain replaces the SDK's">
+  Then add `egradxAuthenticationFilter` before `UsernamePasswordAuthenticationFilter`, and the SDK's entry point. Without the filter, no request is ever signed in — and nothing says so.
+</Callout>
+
+</Tab>
+<Tab value="Node">
+
+<RepoSnippet file="apps/egradx-oim/backend-node/src/app.ts" region="identity-chain" title="src/app.ts" />
+
+</Tab>
+<Tab value="Python">
+
+<RepoSnippet file="apps/egradx-oim/backend-python/src/egradx_oim/app.py" region="identity-chain" title="app.py" />
+
+</Tab>
+</Languages>
+
+<Screenshot name="oim-sign-in" alt="OIM's sign-in page" caption="OIM's sign-in page calls POST /egradx/auth/login; the browser client keeps the session." />
+
+## See also
+
+- [Authorization](/docs/guides/authorization): your permissions and who holds them.
+- [Web](/docs/guides/web): sign-in, renewal and organization choice in the browser.
+- [HTTP reference](/docs/reference/http) and [token claims](/docs/reference/headers-and-tokens).

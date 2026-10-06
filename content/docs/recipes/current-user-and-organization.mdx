@@ -1,0 +1,54 @@
+---
+title: Get the current user and organization
+description: Who is calling and which organization they act in — in a controller, a service, and background work that outlives the request.
+---
+
+## In a request
+
+<Languages>
+<Tab value="Java">
+
+<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/java/com/acme/notes/NoteService.java" region="tenant-scope" title="NoteService.java" />
+
+`EgradxTenantContextAccessor.current()` gives `EgradxTenantContext(userId, organizationId, platformSession, authorityNames)`, or empty outside a request. In a controller, `@AuthenticationPrincipal EgradxAuthenticatedPrincipal principal` gives the same person.
+
+</Tab>
+<Tab value="Node">
+
+<RepoSnippet file="apps/egradx-devportal/examples/node/src/notes.ts" region="tenant-scope" title="src/notes.ts" />
+
+`currentCaller()` gives `{ userId, organizationId, authorities, … }`, or `undefined` outside a request.
+
+</Tab>
+<Tab value="Python">
+
+<RepoSnippet file="apps/egradx-devportal/examples/python/notes.py" region="tenant-scope" title="notes.py" />
+
+`signed_in_user()` (or `current_caller()`) gives `user_id`, `organization_id`, `authorities`…
+
+</Tab>
+</Languages>
+
+Filter every query of yours by the organization. Answer an id from another organization with 404, the same as an id that never existed.
+
+## In background work
+
+The caller lives in request-scoped storage. Work that runs later, or on another thread, doesn't see it:
+
+| | Java | Node | Python |
+|---|---|---|---|
+| Held in | a thread-local | `AsyncLocalStorage` | a `ContextVar` |
+| Promises / tasks started in the request | — | see it | see it |
+| `@Async`, executors, other threads | see nothing | — | — |
+| Timers, consumers, jobs started outside a request | see nothing | see nothing | see nothing |
+
+So capture the ids in the request and pass them along: as job arguments, in the event's `organizationId`, or in the message. An event handler reads the organization from the event, never from "the current caller".
+
+## In the browser
+
+`useAuth().session` holds the `user`, the `organizationId` and `organizationName`, the `roleName` and the session's `authorities`. It is a snapshot for deciding what to show. The server reads the caller afresh on every request.
+
+## See also
+
+- [Multi-tenancy](/docs/guides/multi-tenancy)
+- [Testing](/docs/guides/testing#unit-tests-without-a-server): setting the caller in a unit test.

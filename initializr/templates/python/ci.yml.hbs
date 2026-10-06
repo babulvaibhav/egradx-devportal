@@ -1,0 +1,24 @@
+name: ci
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: {{project.module}}_test
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U postgres" --health-interval 5s --health-retries 10
+    env:
+      # A token that can read the SDK's repository (repository secret EGRADX_PACKAGES_TOKEN).
+      GITHUB_TOKEN: $\{{ secrets.EGRADX_PACKAGES_TOKEN }}
+      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/{{project.module}}_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: python scripts/get_wheels.py
+      - run: uv sync
+      - run: uv run pytest

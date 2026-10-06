@@ -1,0 +1,220 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry.json",
+  "name": "egradx",
+  "homepage": "https://egradx.com",
+  "items": [
+    {
+      "name": "audit-log",
+      "type": "registry:block",
+      "title": "Audit log",
+      "description": "The audit trail: search and filters (optionally kept in the address by the application), newest first a page at a time, each record in full, a thing's history, and the CSV export. Also AuditTimeline and AuditHistoryButton for detail pages.",
+      "dependencies": [
+        "@babulvaibhav/egradx-client",
+        "@babulvaibhav/egradx-react",
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "alert-dialog",
+        "badge",
+        "button",
+        "input",
+        "label",
+        "select",
+        "separator",
+        "sheet",
+        "skeleton",
+        "table"
+      ],
+      "files": [
+        {
+          "path": "registry/egradx/egradx-ui.ts",
+          "type": "registry:lib",
+          "target": "components/egradx/egradx-ui.ts"
+        },
+        {
+          "path": "registry/egradx/egradx-common.tsx",
+          "type": "registry:component",
+          "target": "components/egradx/egradx-common.tsx"
+        },
+        {
+          "path": "registry/egradx/audit/audit-format.ts",
+          "type": "registry:lib",
+          "target": "components/egradx/audit/audit-format.ts"
+        },
+        {
+          "path": "registry/egradx/audit/audit-changes.tsx",
+          "type": "registry:component",
+          "target": "components/egradx/audit/audit-changes.tsx"
+        },
+        {
+          "path": "registry/egradx/audit/audit-record-sheet.tsx",
+          "type": "registry:component",
+          "target": "components/egradx/audit/audit-record-sheet.tsx"
+        },
+        {
+          "path": "registry/egradx/audit/audit-timeline.tsx",
+          "type": "registry:component",
+          "target": "components/egradx/audit/audit-timeline.tsx"
+        },
+        {
+          "path": "registry/egradx/audit/audit-log.tsx",
+          "type": "registry:component",
+          "target": "components/egradx/audit/audit-log.tsx"
+        }
+      ]
+    },
+    {
+      "name": "notification-channels",
+      "type": "registry:block",
+      "title": "Notification channels",
+      "description": "An organization's (or the platform's) notification channels: each one's status and settings, a write-only secret, a test message, and the delivery log with retry.",
+      "dependencies": [
+        "@babulvaibhav/egradx-client",
+        "@babulvaibhav/egradx-react",
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "alert-dialog",
+        "badge",
+        "button",
+        "card",
+        "checkbox",
+        "input",
+        "label",
+        "select",
+        "skeleton",
+        "table",
+        "tabs",
+        "textarea"
+      ],
+      "files": [
+        {
+          "path": "registry/egradx/egradx-ui.ts",
+          "type": "registry:lib",
+          "target": "components/egradx/egradx-ui.ts"
+        },
+        {
+          "path": "registry/egradx/egradx-common.tsx",
+          "type": "registry:component",
+          "target": "components/egradx/egradx-common.tsx"
+        },
+        {
+          "path": "registry/egradx/notifications/channel-forms.ts",
+          "type": "registry:lib",
+          "target": "components/egradx/notifications/channel-forms.ts"
+        },
+        {
+          "path": "registry/egradx/notifications/channel-card.tsx",
+          "type": "registry:component",
+          "target": "components/egradx/notifications/channel-card.tsx"
+        },
+        {
+          "path": "registry/egradx/notifications/delivery-log.tsx",
+          "type": "registry:component",
+          "target": "components/egradx/notifications/delivery-log.tsx"
+        },
+        {
+          "path": "registry/egradx/notifications/notification-channels.tsx",
+          "type": "registry:component",
+          "target": "components/egradx/notifications/notification-channels.tsx"
+        }
+      ]
+    },
+    {
+      "name": "notification-settings",
+      "type": "registry:block",
+      "title": "Notification settings",
+      "description": "A person's own notification settings: their addresses on each channel, verified by a code sent there, and which kinds of message they receive on which channel.",
+      "dependencies": [
+        "@babulvaibhav/egradx-client",
+        "@babulvaibhav/egradx-react",
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "alert-dialog",
+        "badge",
+        "button",
+        "card",
+        "checkbox",
+        "dialog",
+        "input",
+        "label",
+        "select",
+        "skeleton"
+      ],
+      "files": [
+        {
+          "path": "registry/egradx/egradx-ui.ts",
+          "type": "registry:lib",
+          "target": "components/egradx/egradx-ui.ts"
+        },
+        {
+          "path": "registry/egradx/egradx-common.tsx",
+          "type": "registry:component",
+          "target": "components/egradx/egradx-common.tsx"
+        },
+        {
+          "path": "registry/egradx/notifications/add-contact-dialog.tsx",
+          "type": "registry:component",
+          "target": "components/egradx/notifications/add-contact-dialog.tsx"
+        },
+        {
+          "path": "registry/egradx/notifications/verify-contact-dialog.tsx",
+          "type": "registry:component",
+          "target": "components/egradx/notifications/verify-contact-dialog.tsx"
+        },
+        {
+          "path": "registry/egradx/notifications/contacts-card.tsx",
+          "type": "registry:component",
+          "target": "components/egradx/notifications/contacts-card.tsx"
+        },
+        {
+          "path": "registry/egradx/notifications/preferences-matrix.tsx",
+          "type": "registry:component",
+          "target": "components/egradx/notifications/preferences-matrix.tsx"
+        },
+        {
+          "path": "registry/egradx/notifications/notification-settings.tsx",
+          "type": "registry:component",
+          "target": "components/egradx/notifications/notification-settings.tsx"
+        }
+      ]
+    },
+    {
+      "name": "notification-bell",
+      "type": "registry:block",
+      "title": "Notification bell",
+      "description": "The signed-in person's notifications in a popover: unread count, live arrivals, older pages and read state. Navigation and announcements are the application's, through callbacks.",
+      "dependencies": [
+        "@babulvaibhav/egradx-client",
+        "@babulvaibhav/egradx-react",
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "alert-dialog",
+        "button",
+        "input",
+        "popover",
+        "skeleton",
+        "tooltip"
+      ],
+      "files": [
+        {
+          "path": "registry/egradx/egradx-ui.ts",
+          "type": "registry:lib",
+          "target": "components/egradx/egradx-ui.ts"
+        },
+        {
+          "path": "registry/egradx/egradx-common.tsx",
+          "type": "registry:component",
+          "target": "components/egradx/egradx-common.tsx"
+        },
+        {
+          "path": "registry/egradx/notifications/notification-bell.tsx",
+          "type": "registry:component",
+          "target": "components/egradx/notifications/notification-bell.tsx"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,64 @@
+---
+title: Add request ids to your own log format
+description: Put the request id, trace id, person and organization on every log line, whatever logger and format you use.
+---
+
+The SDK gives every request a request id. It takes the caller's `X-Request-ID` if there is a valid one, or makes a new UUID, and returns it in the `X-Request-ID` header. The id is on error bodies, audit records, messages and events. Put it on your log lines too, and a user's "ref 4f1c2a9e" leads straight to them.
+
+<Languages>
+<Tab value="Java">
+
+**Nothing to do** with Spring Boot's default logging. Every line gets `[traceId,spanId,requestId]`.
+
+With your own `logback-spring.xml`, include the SDK's correlation pattern and use it:
+
+```xml title="logback-spring.xml"
+<configuration>
+  <include resource="org/springframework/boot/logging/logback/defaults.xml" />
+  <include resource="META-INF/egradx-observability/logback-correlation.xml" />
+  <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder>
+      <pattern>%d{ISO8601} %-5level ${EGRADX_CORRELATION} %logger{36} - %msg%n</pattern>
+    </encoder>
+  </appender>
+  <root level="INFO"><appender-ref ref="CONSOLE" /></root>
+</configuration>
+```
+
+In code: `EgradxRequestContext.currentRequestId()`.
+
+</Tab>
+<Tab value="Node">
+
+With pino, spread the SDK's options and every line gets `requestId`, `traceId`, `spanId`, `userId` and `organizationId`:
+
+```ts
+import pino from 'pino';
+import { egradxPinoOptions } from '@babulvaibhav/egradx-sdk';
+
+export const log = pino({ ...egradxPinoOptions() });
+```
+
+For plain text, prefix lines with `correlationPrefix()`. In code: `currentContext()?.requestId`.
+
+</Tab>
+<Tab value="Python">
+
+<RepoSnippet file="apps/egradx-devportal/examples/python/main.py" region="log-correlation" title="main.py" />
+
+In code: `mdc_value("requestId")`.
+
+</Tab>
+</Languages>
+
+## Outside a request
+
+Event handlers and notification deliveries carry the id of the request that published or sent them, so their lines join that request's. Timers and jobs you start yourself have no request: give them an id of their own.
+
+## Send it on
+
+When you call another service, pass `X-Request-ID` along. The other service keeps it, and one id then covers the whole chain. The browser client sends a fresh one with every call.
+
+## See also
+
+- [Observability](/docs/guides/observability#request-ids-in-your-logs) · [Ship logs](/docs/recipes/ship-logs)

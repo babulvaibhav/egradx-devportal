@@ -1,0 +1,369 @@
+{
+  "capturedAt": "2026-10-05T14:15:41.715Z",
+  "sdkVersion": "1.0.0",
+  "languages": {
+    "java": [
+      {
+        "name": "without-token",
+        "title": "Without a token",
+        "request": {
+          "method": "POST",
+          "path": "/api/notes",
+          "body": {
+            "title": "Call the supplier"
+          }
+        },
+        "response": {
+          "status": 401,
+          "body": {
+            "success": false,
+            "error": {
+              "code": "NOT_AUTHENTICATED",
+              "message": "Sign in to continue",
+              "timestamp": "2026-10-05T14:15:24.635268700Z",
+              "requestId": "c3de37b6-43cc-4472-9a04-ef1fad17605e",
+              "traceId": "a8ee7f6faa9047dd26e391bc88b3ef79"
+            }
+          }
+        }
+      },
+      {
+        "name": "without-permission",
+        "title": "Signed in, without the permission",
+        "request": {
+          "method": "POST",
+          "path": "/api/notes",
+          "as": "platform-admin (no note.write)",
+          "body": {
+            "title": "Call the supplier"
+          }
+        },
+        "response": {
+          "status": 403,
+          "body": {
+            "success": false,
+            "error": {
+              "code": "ACCESS_DENIED",
+              "message": "You do not have permission to perform this action",
+              "timestamp": "2026-10-05T14:15:24.676352300Z",
+              "requestId": "1289c9e2-81db-4a65-80e3-a55b74c32629",
+              "traceId": "47a43a60cbb44b3e7d9bfc3376760118"
+            }
+          }
+        }
+      },
+      {
+        "name": "created",
+        "title": "With the permission",
+        "request": {
+          "method": "POST",
+          "path": "/api/notes",
+          "as": "ada@example.com (Admin of Demo, holds note.write)",
+          "body": {
+            "title": "Call the supplier"
+          }
+        },
+        "response": {
+          "status": 201,
+          "body": {
+            "id": "d7c0b18c-8854-443f-b969-83d84de850ca",
+            "organizationId": "05817b4a-7d07-4442-930e-57fdd09d4c7d",
+            "title": "Call the supplier",
+            "body": null
+          }
+        }
+      },
+      {
+        "name": "audit-record",
+        "title": "The audit record it wrote",
+        "request": {
+          "method": "GET",
+          "path": "/egradx/audit/events?action=notes.note.created",
+          "as": "ada@example.com"
+        },
+        "response": {
+          "status": 200,
+          "body": {
+            "id": "01a10c6b-5b32-7790-bfbb-243d8903300d",
+            "seq": 26,
+            "occurredAt": "2026-10-05T14:15:24.722353Z",
+            "recordedAt": "2026-10-05T14:15:24.725786Z",
+            "organizationId": "05817b4a-7d07-4442-930e-57fdd09d4c7d",
+            "organizationName": "Demo",
+            "category": "notes",
+            "action": "notes.note.created",
+            "outcome": "SUCCESS",
+            "reason": null,
+            "actor": {
+              "type": "USER",
+              "id": "b9e21442-f9ec-4f92-abb6-d69aecab3419",
+              "organizationId": "05817b4a-7d07-4442-930e-57fdd09d4c7d",
+              "label": null,
+              "name": "Ada Admin"
+            },
+            "entity": {
+              "type": "note",
+              "id": "d7c0b18c-8854-443f-b969-83d84de850ca",
+              "label": "Call the supplier"
+            },
+            "before": null,
+            "after": {
+              "id": "d7c0b18c-8854-443f-b969-83d84de850ca",
+              "body": null,
+              "title": "Call the supplier",
+              "organizationId": "05817b4a-7d07-4442-930e-57fdd09d4c7d"
+            },
+            "changedFields": null,
+            "details": null,
+            "clientAddress": "0:0:0:0:0:0:0:1",
+            "userAgent": "node",
+            "requestId": "b1eff681-4cc4-45a0-a51d-1da4f3e3b2e2",
+            "traceId": "f842e7b1d8f9771ac003965bc2a662f8"
+          }
+        }
+      }
+    ],
+    "node": [
+      {
+        "name": "without-token",
+        "title": "Without a token",
+        "request": {
+          "method": "POST",
+          "path": "/api/notes",
+          "body": {
+            "title": "Call the supplier"
+          }
+        },
+        "response": {
+          "status": 401,
+          "body": {
+            "success": false,
+            "error": {
+              "code": "NOT_AUTHENTICATED",
+              "message": "Sign in to continue",
+              "timestamp": "2026-10-05T14:15:32.761Z",
+              "requestId": "db4c4618-0d4d-4099-9470-685c90c8c780",
+              "traceId": "f347c8aa41ef44d928d1c334272c4a9c"
+            }
+          }
+        }
+      },
+      {
+        "name": "without-permission",
+        "title": "Signed in, without the permission",
+        "request": {
+          "method": "POST",
+          "path": "/api/notes",
+          "as": "platform-admin (no note.write)",
+          "body": {
+            "title": "Call the supplier"
+          }
+        },
+        "response": {
+          "status": 403,
+          "body": {
+            "success": false,
+            "error": {
+              "code": "ACCESS_DENIED",
+              "message": "You do not have permission to perform this action",
+              "timestamp": "2026-10-05T14:15:32.769Z",
+              "requestId": "5c8694a7-1e45-4292-8e73-6bff43512323",
+              "traceId": "bf70d804a7e9d2491b73040731790f1b"
+            }
+          }
+        }
+      },
+      {
+        "name": "created",
+        "title": "With the permission",
+        "request": {
+          "method": "POST",
+          "path": "/api/notes",
+          "as": "ada@example.com (Admin of Demo, holds note.write)",
+          "body": {
+            "title": "Call the supplier"
+          }
+        },
+        "response": {
+          "status": 201,
+          "body": {
+            "id": "a074d4ff-0b05-49a1-8a94-0973b811bb09",
+            "organizationId": "8d41721e-4d59-494c-8f8c-8487d9adc1b2",
+            "title": "Call the supplier",
+            "body": null
+          }
+        }
+      },
+      {
+        "name": "audit-record",
+        "title": "The audit record it wrote",
+        "request": {
+          "method": "GET",
+          "path": "/egradx/audit/events?action=notes.note.created",
+          "as": "ada@example.com"
+        },
+        "response": {
+          "status": 200,
+          "body": {
+            "id": "01a10c6b-7ac9-7c13-b999-ba0b67a1f5ad",
+            "seq": 25,
+            "occurredAt": "2026-10-05T14:15:32.809Z",
+            "recordedAt": "2026-10-05T14:15:32.810451Z",
+            "organizationId": "8d41721e-4d59-494c-8f8c-8487d9adc1b2",
+            "organizationName": "Demo",
+            "category": "notes",
+            "action": "notes.note.created",
+            "outcome": "SUCCESS",
+            "reason": null,
+            "actor": {
+              "type": "USER",
+              "id": "ee2cb897-0694-440d-b000-e3aedd2f7e20",
+              "organizationId": "8d41721e-4d59-494c-8f8c-8487d9adc1b2",
+              "label": null,
+              "name": "Ada Admin"
+            },
+            "entity": {
+              "type": "note",
+              "id": "a074d4ff-0b05-49a1-8a94-0973b811bb09",
+              "label": "Call the supplier"
+            },
+            "before": null,
+            "after": {
+              "id": "a074d4ff-0b05-49a1-8a94-0973b811bb09",
+              "body": null,
+              "title": "Call the supplier",
+              "organizationId": "8d41721e-4d59-494c-8f8c-8487d9adc1b2"
+            },
+            "changedFields": null,
+            "details": null,
+            "clientAddress": "0:0:0:0:0:0:0:1",
+            "userAgent": "node",
+            "requestId": "ffb842cc-3c7e-4ab7-a67b-eba0388cf495",
+            "traceId": "45746ef376bfbddd48fd18f63113241e"
+          }
+        }
+      }
+    ],
+    "python": [
+      {
+        "name": "without-token",
+        "title": "Without a token",
+        "request": {
+          "method": "POST",
+          "path": "/api/notes",
+          "body": {
+            "title": "Call the supplier"
+          }
+        },
+        "response": {
+          "status": 401,
+          "body": {
+            "success": false,
+            "error": {
+              "code": "NOT_AUTHENTICATED",
+              "message": "Sign in to continue",
+              "timestamp": "2026-10-05T14:15:40.828Z",
+              "requestId": "c8ddb164-0bbd-4d2a-b5f7-e9173a90b7a7",
+              "traceId": "79e694744334f8f2400a8b1f793813e6"
+            }
+          }
+        }
+      },
+      {
+        "name": "without-permission",
+        "title": "Signed in, without the permission",
+        "request": {
+          "method": "POST",
+          "path": "/api/notes",
+          "as": "platform-admin (no note.write)",
+          "body": {
+            "title": "Call the supplier"
+          }
+        },
+        "response": {
+          "status": 403,
+          "body": {
+            "success": false,
+            "error": {
+              "code": "ACCESS_DENIED",
+              "message": "You do not have permission to perform this action",
+              "timestamp": "2026-10-05T14:15:40.836Z",
+              "requestId": "4bb6b793-a7d0-40cd-b1d5-e9c10b1bccbe",
+              "traceId": "f7d31da5189ab0c63acf69d81616704c"
+            }
+          }
+        }
+      },
+      {
+        "name": "created",
+        "title": "With the permission",
+        "request": {
+          "method": "POST",
+          "path": "/api/notes",
+          "as": "ada@example.com (Admin of Demo, holds note.write)",
+          "body": {
+            "title": "Call the supplier"
+          }
+        },
+        "response": {
+          "status": 201,
+          "body": {
+            "id": "1d484808-70a3-422e-b60d-8f610e78ff2f",
+            "organizationId": "95602ad6-dc6e-440e-a8a5-5f01592d2c5f",
+            "title": "Call the supplier",
+            "body": null
+          }
+        }
+      },
+      {
+        "name": "audit-record",
+        "title": "The audit record it wrote",
+        "request": {
+          "method": "GET",
+          "path": "/egradx/audit/events?action=notes.note.created",
+          "as": "ada@example.com"
+        },
+        "response": {
+          "status": 200,
+          "body": {
+            "id": "01a10c6b-9a32-7fbe-9050-41e3dfdb0114",
+            "seq": 25,
+            "occurredAt": "2026-10-05T14:15:40.850885Z",
+            "recordedAt": "2026-10-05T14:15:40.851800Z",
+            "organizationId": "95602ad6-dc6e-440e-a8a5-5f01592d2c5f",
+            "organizationName": "Demo",
+            "category": "notes",
+            "action": "notes.note.created",
+            "outcome": "SUCCESS",
+            "reason": null,
+            "actor": {
+              "type": "USER",
+              "id": "a475acb7-6a2e-4fb1-a34b-e4228f34c92a",
+              "organizationId": "95602ad6-dc6e-440e-a8a5-5f01592d2c5f",
+              "label": null,
+              "name": "Ada Admin"
+            },
+            "entity": {
+              "type": "note",
+              "id": "1d484808-70a3-422e-b60d-8f610e78ff2f",
+              "label": "Call the supplier"
+            },
+            "before": null,
+            "after": {
+              "id": "1d484808-70a3-422e-b60d-8f610e78ff2f",
+              "body": null,
+              "title": "Call the supplier",
+              "organizationId": "95602ad6-dc6e-440e-a8a5-5f01592d2c5f"
+            },
+            "changedFields": null,
+            "details": null,
+            "clientAddress": "127.0.0.1",
+            "userAgent": "node",
+            "requestId": "9a7378bb-18b3-4a9b-804b-7071d8a8bd6b",
+            "traceId": "47dd0c3204e5e43298dda535547937b8"
+          }
+        }
+      }
+    ]
+  }
+}

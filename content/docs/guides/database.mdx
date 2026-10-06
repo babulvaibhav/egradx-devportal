@@ -1,0 +1,81 @@
+---
+title: Database & migrations
+description: The SDK's tables live in your PostgreSQL database beside yours, each library migrating its own — in an order that lets your tables reference them.
+---
+
+<Parity id="core.migrations" />
+
+## What it is
+
+Each library owns its tables and migrates them itself, recording what it applied in a history table of its own — so its versions never collide with your `V1`, `V2`. Your application keeps its own migrations as usual. One rule ties them: **the SDK's sign-in tables exist before your migrations run**, so your tables can reference `egradx_organization` and `egradx_user`.
+
+| Library | Its tables | Its history table |
+|---|---|---|
+| Sign-in & identity | `egradx_organization`, `egradx_user`, `egradx_role`, `egradx_authority`, memberships, refresh tokens, profiles, contacts, invitations, password resets, email changes | `egradx_auth_schema_history` |
+| Audit | `egradx_audit_event` | `egradx_audit_schema_history` |
+| Notifications | messages, deliveries, attachments, templates, channel settings, bulk sends, in-app notices and read state | `egradx_notification_schema_history` |
+| Events | `egradx_event_outbox`, `egradx_event_inbox` | `egradx_events_schema_history` |
+
+The SQL is written once, in the SDK's contracts, and every language ships the same files: Java, Node and Python can migrate — and share — one database. The [database reference](/docs/reference/database) lists every table and column.
+
+**PostgreSQL only**, for now.
+
+## The order
+
+1. The SDK's sign-in tables.
+2. **Your** migrations.
+3. The audit trail's, then notifications'. (Events' when you use them.)
+
+## In each language
+
+<Languages>
+<Tab value="Java">
+
+Nothing to call: each library migrates with its own Flyway instance at start-up, in this order, and Spring Boot's Flyway runs yours from `src/main/resources/db/migration` as usual:
+
+<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/resources/db/migration/V1__notes.sql" region="migration" title="db/migration/V1__notes.sql" />
+
+On a new database your Flyway finds the SDK's tables already there and starts at a baseline of 0, so your `V1` still runs. If you set `spring.flyway.baseline-on-migrate` yourself, yours wins.
+
+`egradx-sdk` brings `flyway-core` and `flyway-database-postgresql`. To create the tables some other way, turn a library's migration off (`egradx.auth.schema.migrate: false`, likewise `audit`, `notification`, `events`) and run the SQL from `db/egradx-<library>/postgresql/` in its jar.
+
+</Tab>
+<Tab value="Node">
+
+Migrate before creating the SDK, with your migrations in the middle:
+
+<RepoSnippet file="apps/egradx-devportal/examples/node/src/app.ts" region="main" title="src/app.ts" />
+
+`migrate({ database, location, table })` is the SDK's runner, for your SQL files too (`V1__notes.sql`, `V2__…`). It writes Flyway's history format and checksums, takes an advisory lock so instances don't race, and refuses a migration that changed after it was applied. Prisma only maps your tables (`prisma generate`); don't use `prisma migrate` for them, and never for the SDK's.
+
+</Tab>
+<Tab value="Python">
+
+Migrate before starting the SDK, with your migrations in the middle:
+
+<RepoSnippet file="apps/egradx-devportal/examples/python/application.py" region="main" title="application.py" />
+
+`migrate_async(url, folder, table)` is the SDK's runner, for your SQL files too. It writes Flyway's history format and checksums, takes an advisory lock, and refuses a migration that changed after it was applied.
+
+</Tab>
+</Languages>
+
+Your table, the same in every language:
+
+<RepoSnippet file="apps/egradx-devportal/examples/node/migrations/V1__notes.sql" region="migration" title="migrations/V1__notes.sql" />
+
+## Rules for your migrations
+
+- **Never change an applied migration**: add a new one. A changed file stops the start-up ("was changed after it was applied").
+- **Don't alter the SDK's tables.** Reference them; add your own beside them.
+- **One history table per application.** Java's is `flyway_schema_history`; the Node and Python examples name theirs `<app>_schema_history`. For a Java and a Node version of one application to share a database, give both the same name.
+- **Name your tables apart** (`notes_note`, as the examples do) — the `egradx_` prefix is the SDK's.
+
+## Adopting existing tables
+
+A database whose sign-in tables were made before the history tables existed is recognised: the SDK finds which version they are at, records it, and applies only what is newer. An old audit table of your own can be copied in once, right after the audit table is created — Java with an `EgradxAuditSchemaCallback` bean; Node and Python with `migrateEgradx`'s `afterAudit` / `migrate_egradx`'s `after_audit` hook. OIM's backends move their old `audit_logs` table this way.
+
+## See also
+
+- [Database reference](/docs/reference/database)
+- [Recipe: run the SDK's migrations before your own](/docs/recipes/migrations-order) · [add a column to your table](/docs/recipes/add-a-column)

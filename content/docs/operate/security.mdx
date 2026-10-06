@@ -1,0 +1,49 @@
+---
+title: Security checklist
+description: What the SDK protects for you, what it leaves to your application, and the settings that matter — for a review before going live.
+---
+
+## What the SDK does
+
+| Area | What it does |
+|---|---|
+| Passwords | Argon2id, the same parameters in every language. A wrong username takes as long as a wrong password. |
+| Tokens | RS256 access tokens (60 minutes) and refresh tokens (7 days), signed with the application's own key. |
+| Every request | checks the signature, then reads from the database whether the person is active, whether their sessions were ended, whether the organization is active, and what their role holds now |
+| Sign-in attempts | limited per account and address (5) and per address (100) in 15 minutes, per instance |
+| Account flows | password reset and invitations answer the same whether or not an account exists; links are single use and expire |
+| Secrets it stores | channel credentials encrypted with a passphrase, never returned by the API |
+| Audit | append-only against the application; keys such as `password`, `token`, `secret` and `otp` are redacted from states |
+| Errors | a 5xx never reveals anything; untrusted request ids are replaced |
+| Next.js backend-for-frontend | tokens in HttpOnly cookies, renewed on the server, cross-site writes refused |
+| Webhooks | signed with HMAC when a secret is stored |
+
+## What is left to your application
+
+- [ ] **Authorization on every endpoint.** The SDK lets every request through to your code; an endpoint without a check is public.
+- [ ] **Tenant isolation in every query.** The SDK knows the caller's organization; your queries must use it. Answer another organization's id with 404.
+- [ ] **Ids the client sends** are checked against the organization before use.
+- [ ] **Background work** carries its organization explicitly; it has no caller.
+- [ ] **Secrets of your own** are sealed ([store a secret](/docs/recipes/store-a-secret)) and kept out of logs and audit states. Add your own sensitive keys to the audit redaction list.
+- [ ] **The browser:** tokens in `localStorage` can be read by any script on the page. Use a strict CSP, or the backend-for-frontend.
+
+## Keys and passphrases
+
+- [ ] The keys folder is readable only by the application, backed up, and never committed (the generated `.gitignore` and `.dockerignore` exclude `keys/`).
+- [ ] Passphrases come from a secret store and are different from each other.
+- [ ] The platform administrator's password is set before the first start, or changed right after it.
+
+## Known gaps to weigh
+
+- Refresh tokens aren't rotated, and there is no list of one's sessions to end one at a time. "Sign out everywhere" exists.
+- No JWKS endpoint, and keys don't rotate on their own. Services that verify each other's tokens share the keys folder.
+- The sign-in limit is per instance: add one at the load balancer.
+- No single sign-on and no sign-in by one-time code.
+- The audit trail is append-only against the application, not tamper-evident against the database's owner.
+- Kafka has no TLS or SASL settings yet.
+
+[Known limitations](/docs/operate/known-limitations) has the complete list.
+
+## See also
+
+- [Production checklist](/docs/operate/production) · [Sign-in & identity](/docs/guides/identity#guarantees-and-limits) · [Authorization](/docs/guides/authorization)

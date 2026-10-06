@@ -1,0 +1,161 @@
+---
+title: Audit trail
+description: Who changed what, and when — recorded in the same transaction as the change, append-only, kept as long as you say, searched, and exported.
+---
+
+<Parity id="audit.record" />
+
+## What it is
+
+An append-only record of what people did: sign-ins and refusals, role changes, settings — the SDK records those itself — and the business changes **your** application records. Each record says who did it (from the signed-in caller), in which organization, to what (an entity), with the state before and after, and the request and trace it came from.
+
+- **With the transaction:** a record of a change commits with the change, or not at all. A record never describes a change that rolled back, and a change never commits without its record.
+- **Failures survive:** a refused or failed attempt (`denied(...)`, `failure(...)`) is written on its own and stays even when the work rolls back.
+- **Append-only:** the database refuses to change or delete records, except the retention purge.
+- **Secrets never stored:** keys like `password`, `token`, `secret`, `otp` are redacted wherever they appear in a state.
+
+## Recording a change
+
+Record from the service that makes the change, inside its transaction, after the change:
+
+<Languages>
+<Tab value="Java">
+
+<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/java/com/acme/notes/NoteService.java" region="note-service" title="NoteService.java — create" />
+
+<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/java/com/acme/notes/NoteService.java" region="note-update" title="NoteService.java — update" />
+
+Pass plain values (records, DTOs, maps) as `before` and `after`, never JPA entities: they are serialised at once.
+
+</Tab>
+<Tab value="Node">
+
+<RepoSnippet file="apps/egradx-devportal/examples/node/src/notes.ts" region="note-routes" title="src/notes.ts — create" />
+
+<RepoSnippet file="apps/egradx-devportal/examples/node/src/notes.ts" region="note-update" title="src/notes.ts — update" />
+
+The record joins `egradxTransaction(prisma, …)` without being passed it. A plain `prisma.$transaction(...)` is **not** joined: the record would be written on its own, and survive a rollback.
+
+</Tab>
+<Tab value="Python">
+
+<RepoSnippet file="apps/egradx-devportal/examples/python/notes.py" region="note-routes" title="notes.py — create" />
+
+<RepoSnippet file="apps/egradx-devportal/examples/python/notes.py" region="note-update" title="notes.py — update" />
+
+The record joins `egradx_transaction(engine)`. To use the ORM in it, bind a session to its connection: `AsyncSession(bind=connection, join_transaction_mode="create_savepoint")`.
+
+</Tab>
+</Languages>
+
+| Builder | What it sets |
+|---|---|
+| `of("notes.note.created")` | the action: `category.entity.verb`, lower case, past tense; the category is its first word |
+| `.organization(id)` | whose record it is — who may read it |
+| `.entity(type, id, label)` | what it is about; `label` is shown, `type` + `id` give its history |
+| `.before(x)`, `.after(y)` | the states; the record lists the fields that changed |
+| `.detail(key, value)` | anything else worth keeping (a reason, a quantity) |
+| `.failure(code)`, `.denied(code)` | an attempt that failed or was refused: written on its own, kept on rollback |
+| `.actor(...)` | rarely: who did it, when it is not the signed-in caller (a job: `EgradxAuditActor.system("nightly import")`) |
+
+## What it records
+
+<RecordedRun name="audit" />
+
+`changedFields` is worked out before secrets are redacted, so a changed password shows as changed without its value. Names — the actor's, the organization's — are looked up when records are read, not stored, so they follow renames and an erased person's name disappears.
+
+## Your actions on the audit screen
+
+Describe your actions once, so the audit screen can offer them as filters with words people understand:
+
+<Languages>
+<Tab value="Java">
+
+<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/java/com/acme/notes/NoteAuditActions.java" region="audit-catalog" title="NoteAuditActions.java" />
+
+</Tab>
+<Tab value="Node">
+
+<RepoSnippet file="apps/egradx-devportal/examples/node/src/notes.ts" region="audit-catalog" title="src/notes.ts" />
+
+Passed as `createEgradx({ audit: { actions: AUDIT_ACTIONS } })`.
+
+</Tab>
+<Tab value="Python">
+
+<RepoSnippet file="apps/egradx-devportal/examples/python/notes.py" region="audit-catalog" title="notes.py" />
+
+Passed as `SdkOptions(audit={"actions": AUDIT_ACTIONS})`.
+
+</Tab>
+</Languages>
+
+Recording an action that is not in the catalog still works; the catalog only labels.
+
+## Reading it
+
+| Endpoint | What it gives | Needs |
+|---|---|---|
+| `GET /egradx/audit/events` | the caller's organization's records, newest first, a page at a time (`cursor`, `size` ≤ 200) | `egradx.audit.read` |
+| `GET /egradx/audit/events/{id}` | one record | same |
+| `GET /egradx/audit/timeline?entityType=&entityId=` | one thing's history | same |
+| `GET /egradx/audit/actions` | the catalog | same |
+| `GET /egradx/audit/events/export` | the same filters as CSV (up to 100 000 rows; recorded itself) | same |
+| `/egradx/audit/platform/**` | the same across every organization | `egradx.audit.platform.read` |
+
+Filters: `from`, `to`, `action`, `actionPrefix`, `category`, `outcome`, `actorId`, `actorType`, `entityType`, `entityId`, `changedField`, `correlationId` (a request or trace id) and `q` (text). Repeat a parameter for "any of". The [web packages](/docs/guides/web) have hooks for all of it, and a ready audit screen (`audit-log`).
+
+## A library of your own
+
+A library that must not depend on the audit package publishes the same event and lets the application record it: Java `ApplicationEventPublisher.publishEvent(EgradxAuditEvent)`, Node `publishAuditEvent(event)`, Python `await publish_audit_event(event)` — each from the core package.
+
+## Configuration
+
+| | Java (`egradx.audit.*`) | Node (`audit: {…}`) | Python (`audit={…}`) | Default |
+|---|---|---|---|---|
+| Keep records for | `retention.default-period: 7y` | `retention: { defaultPeriod: '7y' }` | `"retention": AuditRetentionSettings(default_period="7y")` | for ever |
+| …per category | `retention.categories.auth: 2y` | `retention: { categories: { auth: '2y' } }` | `categories={"auth": "2y"}` | — |
+| Purge every | `retention.purge-interval: 1h` | `intervalMs` | `interval_seconds` | 1 hour |
+| Only some instances purge | `retention.enabled: false` on the others | `enabled: false` | `enabled=False` | all, one at a time |
+| More secret keys | `redaction.keys`, `.fragments` | `redaction: { keys, fragments }` | `redaction_keys`, `redaction_fragments` | built-in list |
+| Largest state kept | `max-state-bytes: 32768` | `maxStateBytes` | `max_state_bytes` | 32 KB, then a marker |
+| Largest export | `export.max-rows: 100000` | `export: { maxRows }` | `export_max_rows` | 100 000 |
+
+Node and Python accept single-unit periods only (`7y`, `18m`, `90d`); a wrong one is reported when the purge runs. Java also takes combined ones (`1y6m`) and refuses a wrong one at start-up.
+
+## Guarantees and limits
+
+- **One trail for every language:** the same table and formats, so Java, Node and Python services can share a database and read each other's records.
+- **Append-only against your application**, not against the database's owner: there is no tamper-evident chain.
+- **Personal data:** records cannot be edited, so retention is how they leave. Keep states to what an auditor needs, and add your own sensitive keys to the redaction list.
+- **Throttled repeats:** a burst of identical refusals (a password guessed many times) is kept once per minute.
+- **PostgreSQL only.**
+
+## In OIM
+
+Every OIM service records its changes with the state before and after; a stock transfer records the quantity and both warehouses as details:
+
+<Languages>
+<Tab value="Java">
+
+<RepoSnippet file="apps/egradx-oim/backend/src/main/java/com/egradx/oim/product/application/ProductService.java" region="update-product-audit" title="ProductService.java" />
+
+</Tab>
+<Tab value="Node">
+
+<RepoSnippet file="apps/egradx-oim/backend-node/src/products.ts" region="update-product-audit" title="src/products.ts" />
+
+</Tab>
+<Tab value="Python">
+
+<RepoSnippet file="apps/egradx-oim/backend-python/src/egradx_oim/products.py" region="update-product-audit" title="products.py" />
+
+</Tab>
+</Languages>
+
+<Screenshot name="oim-audit-trail" alt="OIM's audit log: a table of who did what and when, with filters by area, action, outcome and date" caption="OIM's audit log reads these records through the SDK's endpoints." />
+
+## See also
+
+- [Recipe: record an update with before and after](/docs/recipes/audit-an-update) · [export the trail as CSV](/docs/recipes/export-the-audit-trail)
+- [The audit actions the SDK records](/docs/reference/audit-actions)

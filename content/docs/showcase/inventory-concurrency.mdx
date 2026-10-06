@@ -1,0 +1,86 @@
+---
+title: Inventory under concurrency
+description: How OIM keeps stock exact when orders race — single-statement stock moves, a status compare-and-swap, and a fixed lock order for transfers.
+---
+
+Stock is the one thing in OIM that many people change at once. Three small techniques keep it exact, in every backend. None of them is in the SDK; they are what an application on it still has to get right.
+
+## 1. Every stock move is one statement
+
+Reserving stock for an order checks and changes it in **one** `UPDATE`, which the database runs atomically. A read followed by a write would let two orders both see the last 5 units.
+
+<Languages>
+<Tab value="Java">
+
+<RepoSnippet file="apps/egradx-oim/backend/src/main/java/com/egradx/oim/inventory/infrastructure/InventoryRepository.java" region="stock-reserve" title="InventoryRepository.java" />
+
+</Tab>
+<Tab value="Node">
+
+<RepoSnippet file="apps/egradx-oim/backend-node/src/inventory.ts" region="stock-moves" title="src/inventory.ts" />
+
+</Tab>
+<Tab value="Python">
+
+<RepoSnippet file="apps/egradx-oim/backend-python/src/egradx_oim/inventory.py" region="stock-moves" title="inventory.py" />
+
+</Tab>
+</Languages>
+
+`available_quantity >= :quantity` in the `WHERE` is the check. Zero rows updated means there wasn't enough, and the service answers 409 `INSUFFICIENT_INVENTORY`. The organization is in the `WHERE` too: one statement, both rules.
+
+The Java backend's tests run 100 threads, each reserving 1 unit of a product with 10 available. Exactly 10 succeed, and the row ends with 0 available and 10 reserved.
+
+## 2. An order's status changes only from what was read
+
+Cancelling releases stock; completing consumes it. Two requests racing to cancel the same order must not both release. The status update names the status it expects, and the side effects run only if it changed:
+
+<Languages>
+<Tab value="Java">
+
+<RepoSnippet file="apps/egradx-oim/backend/src/main/java/com/egradx/oim/order/application/OrderService.java" region="order-status-cas" title="OrderService.java" />
+
+</Tab>
+<Tab value="Node">
+
+<RepoSnippet file="apps/egradx-oim/backend-node/src/orders.ts" region="order-status-cas" title="src/orders.ts" />
+
+</Tab>
+<Tab value="Python">
+
+<RepoSnippet file="apps/egradx-oim/backend-python/src/egradx_oim/orders.py" region="order-status-cas" title="orders.py" />
+
+</Tab>
+</Languages>
+
+## 3. Transfers lock rows in one order
+
+A transfer debits one warehouse and credits another. Two transfers in opposite directions, A→B and B→A, would each lock one row and wait for the other: a deadlock. Locking the two rows in a fixed order (the lower id first) makes that impossible:
+
+<Languages>
+<Tab value="Java">
+
+<RepoSnippet file="apps/egradx-oim/backend/src/main/java/com/egradx/oim/inventory/application/InventoryService.java" region="transfer-lock-order" title="InventoryService.java" />
+
+</Tab>
+<Tab value="Node">
+
+<RepoSnippet file="apps/egradx-oim/backend-node/src/inventory.ts" region="transfer-lock-order" title="src/inventory.ts" />
+
+</Tab>
+<Tab value="Python">
+
+<RepoSnippet file="apps/egradx-oim/backend-python/src/egradx_oim/inventory.py" region="transfer-lock-order" title="inventory.py" />
+
+The ids are compared the way Java compares UUIDs, so all three backends lock in the same order and can share a database safely.
+
+</Tab>
+</Languages>
+
+## Where the SDK comes in
+
+Each of these runs in a transaction that the SDK's audit records, notices and events join. A stock move that fails rolls back its audit record and its notice too, and a successful one commits them together.
+
+## See also
+
+- [Multi-tenancy](/docs/guides/multi-tenancy#in-oim) · [The low-stock alert](/docs/showcase/low-stock-alert)

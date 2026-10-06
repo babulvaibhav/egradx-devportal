@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://egradx.com/contracts/schemas/enums.json",
+  "title": "EgradxEnums",
+  "description": "Shared enums (Java: com.egradx.core.enums). Values are exact, including case and the existing misspelling DEPLOYEMENT; SDKs must not rename them.",
+  "$defs": {
+    "UserType": {
+      "enum": ["Human", "Remote", "System", "Service", "Guest"],
+      "description": "Human: a person. Remote: a probe/agent. System: a job. Service: a microservice or third party. Guest: a temporary token."
+    },
+    "OtpMedium": { "enum": ["EMAIL", "SMS"] },
+    "SmsType": { "enum": ["SINGLE_SMS", "BULK_SMS"] },
+    "RequestStatus": { "enum": ["PENDING", "ONTRIAL", "ACTIVATED", "EXPIRED"] },
+    "SoftwareStatus": {
+      "enum": ["UNDER_DEVELOPMENT", "READY_TO_USE", "UAT_DEPLOYEMENT_PENDING", "UAT_DEPLOYEMENT_COMPLETE", "PROD_DEPLOYEMENT_PENDING", "PROD_DEPLOYEMENT_COMPLETE"]
+    },
+    "SoftwareAccessibility": { "enum": ["SHARED", "PRIVATE", "SYSTEM"] },
+    "UserBillingActions": { "enum": ["ADD", "REMOVE"] },
+    "ProbeClusterType": { "enum": ["PLATFORM", "SOFTWARE", "ACCOUNT"] },
+    "EgradxEventType": {
+      "enum": ["PROCESS_EVENT", "ACCOUNT_CREATION_EVENT", "USER_CREATION_EVENT", "SOFTWARE_SUBSCRIBE_EVENT", "SOFTWARE_UNSUBSCRIBE_EVENT"]
+    },
+    "EgradxOutboxEventStatus": { "enum": ["NEW", "PUBLISHING", "PUBLISHED", "FAILED", "DEAD"] }
+  }
+}

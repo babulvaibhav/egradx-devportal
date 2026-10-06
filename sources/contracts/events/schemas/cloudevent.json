@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://egradx.com/contracts/events/cloudevent.json",
+  "title": "EGRADX event",
+  "description": "A CloudEvents 1.0 event in structured JSON, as every EGRADX SDK writes and reads it (Java: com.egradx.events.EgradxEvent). Extension attributes carry the W3C trace context and the request id, so a handler continues the publisher's trace.",
+  "type": "object",
+  "required": ["specversion", "id", "type", "source", "time", "datacontenttype", "data"],
+  "properties": {
+    "specversion": { "const": "1.0" },
+    "id": { "type": "string", "format": "uuid", "description": "A UUIDv7." },
+    "type": {
+      "type": "string",
+      "maxLength": 200,
+      "pattern": "^[a-z][a-z0-9]*(\\.[a-z0-9][a-z0-9-]*)+\\.v[1-9][0-9]*$",
+      "description": "<area>.<entity>.<what-happened>.v<N>"
+    },
+    "source": { "type": "string", "minLength": 1, "description": "The publishing service." },
+    "subject": { "type": "string", "description": "What the event is about (an id). The Kafka key." },
+    "time": { "type": "string", "format": "date-time", "description": "When the change happened, ISO-8601 in UTC." },
+    "datacontenttype": { "const": "application/json" },
+    "organizationid": { "type": "string", "format": "uuid", "description": "The organization the event belongs to." },
+    "traceparent": { "type": "string", "description": "W3C traceparent of the publishing request." },
+    "tracestate": { "type": "string", "description": "W3C tracestate of the publishing request." },
+    "requestid": { "type": "string", "description": "The publishing request's X-Request-ID." },
+    "data": { "type": "object", "description": "The type's own payload: schemas/<type>.json." }
+  }
+}

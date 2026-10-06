@@ -1,0 +1,61 @@
+---
+title: Configure Slack or Twilio
+description: Turn on Slack, SMS and WhatsApp for an organization — settings and a secret stored per organization, checked before they are saved.
+---
+
+Slack, SMS and WhatsApp are set up **per organization**, by its administrators, at run time. Nothing goes in your application's configuration. Settings are checked when they are saved, and the secret is encrypted and never returned.
+
+Every call needs `egradx.notification.manage`. The copy-in `notification-channels` screen does all of this:
+
+```sh
+npx shadcn@latest add https://<this portal>/r/notification-channels.json
+```
+
+## Slack
+
+The secret is the Slack app's **bot token** (`xoxb-…`), with the `chat:write` scope. No settings are needed.
+
+```http
+PUT /egradx/notifications/admin/channels/slack
+{ "enabled": true, "settings": {}, "secret": "xoxb-…" }
+```
+
+Addresses are Slack member or channel ids (`U024BE7LH`, `C024BE91L`); people add their own on their settings screen. Invite the app to a channel before posting to it.
+
+## SMS with Twilio
+
+```http
+PUT /egradx/notifications/admin/channels/sms
+{ "enabled": true,
+  "settings": { "provider": "twilio", "accountSid": "AC…", "from": "+14155552671" },
+  "secret": "the Twilio auth token" }
+```
+
+Give exactly one of `from` (a number in international format) or `messagingServiceSid` (`MG…`). Addresses are E.164 numbers: `+919812345678`.
+
+## WhatsApp
+
+Twilio, with the same settings as SMS and `"provider": "twilio"`, or Meta's Cloud API with `"provider": "meta"` and its phone number id. Outside the 24 hours after a person last wrote to you, WhatsApp delivers only templates that Meta has approved.
+
+## Test it
+
+```http
+POST /egradx/notifications/admin/channels/slack/test
+{ "address": "U024BE7LH" }
+```
+
+`GET /egradx/notifications/admin/channels` shows each channel and, when one can't be used, why (`unavailableReason`). A send on a channel that isn't set up is refused before anything is queued, with 400 `CHANNEL_UNAVAILABLE`.
+
+## For every organization at once
+
+The platform's administrators store settings under `/egradx/notifications/admin/platform/channels/{channel}`. An organization with no settings of its own uses those.
+
+## Good to know
+
+- Slack, Twilio and Meta are tested against local stand-ins of their APIs, not the live services.
+- `egradx.notification.channels.slack.enabled: false` (and `.sms`, `.whatsapp`, `.webhook`) removes a channel from a Java application; Node `builtInChannels: { slack: false }`, Python `BuiltInChannels(slack=False)`.
+- A provider of your own (another SMS gateway) plugs in as an `EgradxSmsProvider`; a whole new channel as a [custom channel](/docs/recipes/custom-channel).
+
+## See also
+
+- [Notifications](/docs/guides/notifications#where-messages-go) · [HTTP: notification administration](/docs/reference/http/notification#notification-administration)

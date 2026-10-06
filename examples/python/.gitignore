@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+.pytest_cache/
+egradx-wheels/
+*.log
+.env
+# The signing keys the SDK creates on the first start: secrets, never committed.
+keys/
+.DS_Store

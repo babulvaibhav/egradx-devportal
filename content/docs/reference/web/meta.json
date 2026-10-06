@@ -1,0 +1,9 @@
+{
+  "title": "Web",
+  "pages": [
+    "index",
+    "egradx-client",
+    "egradx-next",
+    "egradx-react"
+  ]
+}

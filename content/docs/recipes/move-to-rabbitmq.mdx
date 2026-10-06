@@ -1,0 +1,98 @@
+---
+title: Move from in-process events to RabbitMQ
+description: The same publishing and handling code, on a broker — so other services can handle your events.
+---
+
+In-process events are handled by the service that published them. Once a second service needs them, put a broker between them. Your code doesn't change; the transport does.
+
+[The Initializr](/start?caps=events:transport=rabbitmq) generates all of the following when you choose **Events → RabbitMQ**.
+
+## 1. Run RabbitMQ
+
+```yaml title="docker-compose.yml"
+  rabbitmq:                 # http://localhost:15672 (guest / guest)
+    image: rabbitmq:4-management-alpine
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+```
+
+## 2. Add the client and set the transport
+
+<Languages>
+<Tab value="Java">
+
+```xml title="pom.xml"
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-amqp</artifactId>
+</dependency>
+```
+
+```yaml title="application.yml"
+spring:
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+egradx:
+  events:
+    transport: rabbitmq
+```
+
+</Tab>
+<Tab value="Node">
+
+```sh
+npm install amqplib@^2 && npm install -D @types/amqplib
+```
+
+```sh title=".env"
+EGRADX_EVENTS_TRANSPORT=rabbitmq
+EGRADX_EVENTS_RABBITMQ_URL=amqp://guest:guest@localhost:5672
+```
+
+Or pass `transport: 'rabbitmq'` to `createEvents`.
+
+</Tab>
+<Tab value="Python">
+
+```toml title="pyproject.toml"
+dependencies = ["egradx-events[rabbitmq]==1.0.0"]
+```
+
+```sh title=".env"
+EGRADX_EVENTS_TRANSPORT=rabbitmq
+EGRADX_EVENTS_RABBITMQ_URL=amqp://guest:guest@localhost:5672
+```
+
+Or pass `transport="rabbitmq"` to `EgradxEvents`.
+
+</Tab>
+</Languages>
+
+## 3. Start, and look
+
+On start the service declares everything it needs:
+
+| | Name |
+|---|---|
+| The exchange every service publishes to (topic, routed by event type) | `egradx.events` |
+| This service's queue, shared by its instances | `egradx.events.<source>` (quorum) |
+| Its retry queue: a failed handling comes back after 5 s | `egradx.events.<source>.retry` |
+| Its dead letters, after 10 deliveries | `egradx.events.<source>.dead` |
+
+`<source>` is the service's name: `spring.application.name` in Java, `source` in Node and Python. The queue is bound to the event types its handlers handle. Publish a note, and the RabbitMQ console shows the message pass through.
+
+## What changes, and what doesn't
+
+- **Publishing** still writes to the outbox in your transaction. The relay now sends to the exchange instead of calling the handlers directly.
+- **Handling** still runs once per handler, through the inbox.
+- **Every service bound to a type gets it,** each on its own queue. That is the point of the move.
+- **Events in the outbox when you switch** are sent over the new transport.
+
+## Kafka instead
+
+Use `transport: kafka` with `spring-kafka` / `@confluentinc/kafka-javascript` / `egradx-events[kafka]`, and the brokers in `egradx.events.kafka.bootstrap-servers` / `EGRADX_EVENTS_KAFKA_BROKERS`. There is one topic per event type, and the consumer group is the source. Choose Kafka when events must be kept and replayed. TLS and SASL settings aren't there yet.
+
+## See also
+
+- [Events](/docs/guides/events#choosing-a-transport) · [Dead letters](/docs/recipes/dead-letters)

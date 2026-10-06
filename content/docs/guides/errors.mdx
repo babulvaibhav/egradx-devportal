@@ -1,0 +1,132 @@
+---
+title: Errors
+description: One error envelope and one set of codes for every endpoint — the SDK's and yours — in every language, so a frontend switches on a code, never on a message.
+---
+
+<Parity id="errors.envelope" />
+
+## What it is
+
+Every failure answers with the same JSON, whichever library or language produced it:
+
+```json
+{ "success": false,
+  "error": { "code": "NOTE_NOT_FOUND", "message": "There is no note 42", "timestamp": "2026-10-05T12:46:17.037Z",
+             "requestId": "…", "traceId": "…", "details": { } } }
+```
+
+- **`code`** is what clients switch on. The generic ones — `NOT_AUTHENTICATED`, `ACCESS_DENIED`, `NOT_FOUND`, `CONFLICT`, `INVALID_REQUEST`, `INTERNAL_ERROR` — plus the SDK's own (`AUTH_INVALID_CREDENTIALS`, `SESSION_REVOKED`…) and yours (`NOTE_NOT_FOUND`).
+- **`message`** is for people, and never parsed.
+- **A 5xx never reveals anything:** its message is always "Something went wrong"; the failure is logged with its stack trace and the request id.
+- **`details`** appears only for codes that carry something to act on (`ORG_SELECTION_REQUIRED` lists the organizations).
+
+## Throwing
+
+Throw the SDK's exceptions; give them a code of your own when a client should tell the case apart:
+
+<Languages>
+<Tab value="Java">
+
+<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/java/com/acme/notes/NoteService.java" region="note-validation" title="NoteService.java" />
+
+<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/java/com/acme/notes/NoteService.java" region="tenant-scope" title="NoteService.java" />
+
+</Tab>
+<Tab value="Node">
+
+<RepoSnippet file="apps/egradx-devportal/examples/node/src/notes.ts" region="note-validation" title="src/notes.ts" />
+
+<RepoSnippet file="apps/egradx-devportal/examples/node/src/notes.ts" region="tenant-scope" title="src/notes.ts" />
+
+</Tab>
+<Tab value="Python">
+
+<RepoSnippet file="apps/egradx-devportal/examples/python/notes.py" region="note-validation" title="notes.py" />
+
+<RepoSnippet file="apps/egradx-devportal/examples/python/notes.py" region="tenant-scope" title="notes.py" />
+
+</Tab>
+</Languages>
+
+| Exception (`com.egradx.core.exception`, `@babulvaibhav/egradx-core`, `egradx.core`) | Status | Code unless you give one |
+|---|---|---|
+| `ValidationException`, `BadRequestException` | 400 | `INVALID_REQUEST` |
+| `AuthenticationException` | 401 | `NOT_AUTHENTICATED` |
+| `AuthorizationException` | 403 | `ACCESS_DENIED` |
+| `NotFoundException` | 404 | `NOT_FOUND` |
+| `DuplicateResourceException` | 409 | `CONFLICT` |
+| `NotImplementedException` | 501 | `INTERNAL_ERROR` |
+| `ServerUnavailableException` | 503 | `INTERNAL_ERROR` |
+| `ServerException(status)` | the status | the generic code for it |
+| anything else | 500 | `INTERNAL_ERROR` |
+
+Node and Python exceptions also take `details`. Better than a code at each throw: a class of your own extending one of these with its code fixed, as OIM's `InsufficientInventoryException` does.
+
+## What callers get
+
+<RecordedRun name="errors" />
+
+## Wiring the envelope in
+
+<Languages>
+<Tab value="Java">
+
+The SDK's endpoints answer this way already. For **your** endpoints, add one advice extending the SDK's — every generated project has it:
+
+<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/java/com/acme/notes/ApiExceptionHandler.java" region="error-advice" title="ApiExceptionHandler.java" />
+
+<Callout type="warn" title="Without it">
+  A Java application on `egradx-sdk` alone answers its own endpoints' failures in Spring Boot's format: a `NotFoundException` becomes a 500, a validation failure Spring's `/error` body. The advice above (or `egradx-webservice`, which carries one) fixes that.
+</Callout>
+
+`EgradxExceptionHandlerSupport` already answers the core exceptions, Bean Validation (`@Valid`), a missing parameter, a malformed value or body, and Spring MVC's own refusals (unknown path, wrong method) with their statuses. Override `handleBeanValidation` for your own wording; add handlers for exceptions of yours that don't extend the core ones, using `respond(status, code, message[, details])`.
+
+</Tab>
+<Tab value="Node">
+
+`app.use(...egradxErrors())`, after every route, answers everything: the SDK's exceptions, an unreadable body, an unknown path (404), anything else (500, logged). See `src/app.ts`. Node has no validation library of its own: check bodies and throw `ValidationException`.
+
+</Tab>
+<Tab value="Python">
+
+`sdk.install(app)` registers the handlers: the SDK's exceptions, pydantic's validation errors (400 `INVALID_REQUEST`, naming the field), unknown paths and methods, and anything else (500, logged).
+
+</Tab>
+</Languages>
+
+## In the browser
+
+The client turns every refusal into an `EgradxApiError` with `status`, `code`, `message`, `requestId`, `traceId` and `details` — or `NETWORK_ERROR` when there was no answer, `HTTP_<status>` when the answer wasn't the envelope (a proxy's error page). Switch on `code`:
+
+<RepoSnippet file="apps/egradx-devportal/examples/web-vite/src/Notes.tsx" title="src/Notes.tsx" />
+
+Show the request id on a 5xx ("ref 4f1c2a9e"): it finds the failure in the logs.
+
+## In OIM
+
+OIM's own exceptions extend the core's with their codes, so the SDK's handling answers them; its Java advice adds only what OIM decides:
+
+<Languages>
+<Tab value="Java">
+
+<RepoSnippet file="apps/egradx-oim/backend/src/main/java/com/egradx/oim/common/exception/InsufficientInventoryException.java" region="own-error-code" title="InsufficientInventoryException.java" />
+
+<RepoSnippet file="apps/egradx-oim/backend/src/main/java/com/egradx/oim/common/exception/GlobalExceptionHandler.java" region="error-handler" title="GlobalExceptionHandler.java" />
+
+</Tab>
+<Tab value="Node">
+
+<RepoSnippet file="apps/egradx-oim/backend-node/src/http.ts" region="error-handler" title="src/http.ts" />
+
+</Tab>
+<Tab value="Python">
+
+OIM's Python errors are `OimError(status, code, message)`, answered through the SDK's `error_body` — the same as Node's.
+
+</Tab>
+</Languages>
+
+## See also
+
+- [Error codes reference](/docs/reference/errors): every code, its status, and the flow that answers it.
+- [Recipe: handle SESSION_REVOKED in the frontend](/docs/recipes/handle-session-revoked)

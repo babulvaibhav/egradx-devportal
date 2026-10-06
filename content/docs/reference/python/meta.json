@@ -1,0 +1,19 @@
+{
+  "title": "Python",
+  "pages": [
+    "index",
+    "egradx-sdk",
+    "egradx-core",
+    "egradx-auth",
+    "egradx-audit",
+    "egradx-notification",
+    "egradx-events",
+    "egradx-observability",
+    "egradx-fastapi",
+    "egradx-security",
+    "egradx-migrations",
+    "egradx-tls-provider",
+    "egradx-audit-auth",
+    "egradx-notification-auth"
+  ]
+}

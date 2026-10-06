@@ -1,0 +1,116 @@
+---
+title: Multi-tenancy
+description: Many organizations share one application and one database. The SDK knows which one each caller acts in; your application keeps their data apart.
+---
+
+<Parity id="tenancy.context" />
+
+## What it is
+
+One deployment serves many organizations (tenants), in one database. The SDK resolves, on every request, **which organization the caller is acting in** — and checks it is still active and that they still belong to it. What it cannot do for you is keep **your** tables apart: every row your application stores belongs to an organization, and every query must say which.
+
+| The SDK | Your application |
+|---|---|
+| Knows the session's organization, on every request | Stores `organization_id` on each of its rows |
+| Refuses a token whose organization was suspended | Filters **every** query by the caller's organization |
+| Keeps its own tables (users, audit, notifications) apart | Checks that an id the client sends belongs to that organization |
+| Gives each organization its own roles | Answers another organization's id with **404**, never 403 |
+
+<Callout type="warn" title="Not automatic">
+  There is no row-level security or query filter that does it for you yet. One forgotten `WHERE organization_id = …` shows one customer's data to another.
+</Callout>
+
+## The caller's organization
+
+<Languages>
+<Tab value="Java">
+
+<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/java/com/acme/notes/NoteService.java" region="tenant-scope" title="NoteService.java" />
+
+`EgradxTenantContextAccessor.current()` gives `EgradxTenantContext(userId, organizationId, platformSession, authorityNames)` for the current request, or empty outside one. In a controller, `@AuthenticationPrincipal EgradxAuthenticatedPrincipal` gives the same person.
+
+</Tab>
+<Tab value="Node">
+
+<RepoSnippet file="apps/egradx-devportal/examples/node/src/notes.ts" region="tenant-scope" title="src/notes.ts" />
+
+`currentCaller()` gives the caller of the current request (`userId`, `organizationId`, `authorities`…), or `undefined`.
+
+</Tab>
+<Tab value="Python">
+
+<RepoSnippet file="apps/egradx-devportal/examples/python/notes.py" region="tenant-scope" title="notes.py" />
+
+`signed_in_user()` (or `current_caller()`) gives the caller of the current request (`user_id`, `organization_id`, `authorities`…).
+
+</Tab>
+</Languages>
+
+Every query names the organization, so another organization's note is simply not found:
+
+<RecordedRun name="errors" steps={['not-found']} />
+
+In Java the repository makes it hard to forget:
+
+<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/java/com/acme/notes/NoteRepository.java" region="note-repository" title="NoteRepository.java" />
+
+## The rules
+
+1. **Every table of yours has `organization_id`**, referencing `egradx_organization (id)`.
+2. **Every read and every write filters by it**, including updates and deletes: `WHERE id = :id AND organization_id = :org`.
+3. **Ids the client sends are checked** — a customer, a product inside an order — by looking them up with the organization.
+4. **Not found, not forbidden:** an id of another organization gets the same 404 as one that never existed, so ids cannot be probed.
+5. **Background work carries its organization.** Outside a request there is no caller: put the organization id in the job, the event (`organizationId`) or the message.
+6. **Caches are keyed by organization.**
+
+## Background work
+
+| | Java | Node | Python |
+|---|---|---|---|
+| The caller is held in | a thread-local, cleared after the request | `AsyncLocalStorage`, which follows promises started during the request | a `ContextVar`, copied into tasks started during the request |
+| `@Async`, executors, after-commit listeners on another thread | see nothing | — | — |
+| Timers or consumers started outside a request | see nothing | see nothing | see nothing |
+
+Capture the organization (and user) in the request and pass them along. An [event](/docs/guides/events) carries its `organizationId`; a handler reads it from the event.
+
+## Guarantees and limits
+
+- **Suspending an organization** refuses its sessions on their next request, on every instance.
+- **Someone removed from an organization** keeps a session there holding no authorities until it expires — so tenant data must be gated on an authority, not on being signed in.
+- **The SDK's services** (roles, users) take an organization id and act on it without checking the caller, so start-up code can use them. Don't pass them an organization id from a request without checking it is the caller's.
+- **The platform administrator's session** acts in the platform organization: they see no organization's business data.
+
+## In OIM
+
+OIM wraps the caller's organization once, and every query of all six of its services uses it. Its stock movements are single SQL statements that carry the organization too:
+
+<Languages>
+<Tab value="Java">
+
+<RepoSnippet file="apps/egradx-oim/backend/src/main/java/com/egradx/oim/common/tenant/CurrentTenant.java" region="current-tenant" title="CurrentTenant.java" />
+
+<RepoSnippet file="apps/egradx-oim/backend/src/main/java/com/egradx/oim/inventory/infrastructure/InventoryRepository.java" region="stock-reserve" title="InventoryRepository.java" />
+
+</Tab>
+<Tab value="Node">
+
+<RepoSnippet file="apps/egradx-oim/backend-node/src/oim.ts" region="current-tenant" title="src/oim.ts" />
+
+<RepoSnippet file="apps/egradx-oim/backend-node/src/inventory.ts" region="stock-moves" title="src/inventory.ts" />
+
+</Tab>
+<Tab value="Python">
+
+<RepoSnippet file="apps/egradx-oim/backend-python/src/egradx_oim/oim.py" region="current-tenant" title="oim.py" />
+
+<RepoSnippet file="apps/egradx-oim/backend-python/src/egradx_oim/inventory.py" region="stock-moves" title="inventory.py" />
+
+</Tab>
+</Languages>
+
+In the browser, OIM clears everything it cached when the person or the organization changes; its browser tests check that a switch shows nothing of the previous organization.
+
+## See also
+
+- [Authorization](/docs/guides/authorization)
+- [Showcase: OIM](/docs/showcase/oim) — how its inventory stays correct under concurrent orders.

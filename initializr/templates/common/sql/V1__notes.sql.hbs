@@ -1,0 +1,10 @@
+-- docs:region migration
+-- The application's own table. Its migrations run after the SDK's sign-in tables exist, so it may reference them.
+CREATE TABLE {{project.module}}_note (
+    id              UUID PRIMARY KEY,
+    organization_id UUID         NOT NULL REFERENCES egradx_organization (id),
+    title           VARCHAR(200) NOT NULL,
+    body            TEXT
+);
+CREATE INDEX {{project.module}}_note_organization ON {{project.module}}_note (organization_id);
+-- docs:end

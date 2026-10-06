@@ -1,0 +1,101 @@
+---
+title: Configure SMTP
+description: Your application's own mail server for every organization, and an organization's own SMTP settings when it wants its mail to come from its domain.
+---
+
+An email goes out through the first of these that exists:
+
+1. **The organization's own settings**, stored by its administrators.
+2. **Settings stored for all organizations**, by the platform's administrators.
+3. **Your application's mail server**, from its configuration.
+
+Most applications need only the third.
+
+## Your application's mail server
+
+<Languages>
+<Tab value="Java">
+
+```yaml title="application.yml"
+spring:
+  mail:
+    host: smtp.example.com
+    port: 587
+    username: ${SMTP_USER}
+    password: ${SMTP_PASSWORD}
+    properties:
+      mail.smtp.starttls.enable: true
+      mail.smtp.connectiontimeout: 10000   # JavaMail waits for ever by default
+      mail.smtp.timeout: 30000
+      mail.smtp.writetimeout: 30000
+egradx:
+  notification:
+    email:
+      from: no-reply@example.com
+      from-name: Notes
+management:
+  health:
+    mail:
+      enabled: false   # a mail outage delays email; it must not mark the application down
+```
+
+</Tab>
+<Tab value="Node">
+
+```ts
+createEgradx({
+  // …
+  notifications: {
+    builtInChannels: {
+      email: {
+        // nodemailer's SMTP options
+        transport: { host: 'smtp.example.com', port: 587, auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASSWORD } },
+        from: 'no-reply@example.com',
+        fromName: 'Notes',
+      },
+    },
+  },
+});
+```
+
+</Tab>
+<Tab value="Python">
+
+```python
+from egradx.sdk import ApplicationEmail, BuiltInChannels, NotificationsOptions, SmtpTransport
+
+NotificationsOptions(built_in_channels=BuiltInChannels(email=ApplicationEmail(
+    SmtpTransport("smtp.example.com", 587, username=os.environ["SMTP_USER"], password=os.environ["SMTP_PASSWORD"]),
+    sender="no-reply@example.com", sender_name="Notes")))
+```
+
+`start_tls=None` (the default) upgrades when the server offers it; `use_tls=True` for port 465.
+
+</Tab>
+</Languages>
+
+Locally, point it at Mailpit (`localhost:1025`, no TLS, no password) and read what was sent at `http://localhost:8025`.
+
+## An organization's own server
+
+An organization's administrators (with `egradx.notification.manage`) store settings for their organization. The password goes in `secret`: it is encrypted with the secrets passphrase and never returned.
+
+```http
+PUT /egradx/notifications/admin/channels/email
+Content-Type: application/json
+
+{ "enabled": true,
+  "settings": { "host": "smtp.acme.com", "port": 587, "username": "notes@acme.com", "startTls": true,
+                "from": "notes@acme.com", "fromName": "Acme Notes", "replyTo": "help@acme.com" },
+  "secret": "the SMTP password" }
+```
+
+Then `POST /egradx/notifications/admin/channels/email/test` with an `address` sends a test message. The copy-in `notification-channels` screen does both. The platform's administrators store settings for all organizations the same way under `/egradx/notifications/admin/platform/channels/email`.
+
+## Check it
+
+`GET /egradx/notifications/admin/deliveries?channel=email` shows each delivery: `SENT`, or a retry pending, or `DEAD` with `lastError`. A failed send is retried at 30 seconds, doubling up to an hour, eight times by default.
+
+## See also
+
+- [Notifications](/docs/guides/notifications#where-messages-go) · [Slack or Twilio](/docs/recipes/configure-slack-or-twilio)

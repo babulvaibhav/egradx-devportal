@@ -1,0 +1,285 @@
+{
+  "capturedAt": "2026-10-05T14:15:41.721Z",
+  "sdkVersion": "1.0.0",
+  "languages": {
+    "java": [
+      {
+        "name": "inbox",
+        "title": "The bell: the newest notice",
+        "request": {
+          "method": "GET",
+          "path": "/egradx/notifications?size=1"
+        },
+        "response": {
+          "status": 200,
+          "body": {
+            "items": [
+              {
+                "id": "3b6b078e-6ffc-4246-b459-4100daf752fc",
+                "scope": "ORGANIZATION",
+                "organizationId": "05817b4a-7d07-4442-930e-57fdd09d4c7d",
+                "notificationKey": "notes.note.created",
+                "title": "New note",
+                "body": "Call the supplier",
+                "metadata": {
+                  "noteId": "d7c0b18c-8854-443f-b969-83d84de850ca"
+                },
+                "createdAt": "2026-10-05T14:15:24.727354Z",
+                "readAt": null
+              }
+            ],
+            "page": 0,
+            "size": 1,
+            "hasMore": false
+          }
+        }
+      },
+      {
+        "name": "unread-count",
+        "title": "Its unread count",
+        "request": {
+          "method": "GET",
+          "path": "/egradx/notifications/unread-count"
+        },
+        "response": {
+          "status": 200,
+          "body": {
+            "count": 1
+          }
+        }
+      },
+      {
+        "name": "email",
+        "title": "The email, as the mail server received it",
+        "request": {
+          "method": "SMTP",
+          "path": "to ada@example.com"
+        },
+        "response": {
+          "status": 250,
+          "body": {
+            "from": "\"Notes\" <no-reply@notes.local>",
+            "to": "ada@example.com",
+            "subject": "Your note \"Call the supplier\" is saved",
+            "html": "<p>Your note <strong>Call the supplier</strong> is saved in Notes.</p>\n<p>Everyone in your organization can see it in their notifications.</p>"
+          }
+        }
+      },
+      {
+        "name": "delivery",
+        "title": "Its delivery, in the delivery log",
+        "request": {
+          "method": "GET",
+          "path": "/egradx/notifications/admin/deliveries?channel=email"
+        },
+        "response": {
+          "status": 200,
+          "body": {
+            "id": "9d2c4136-f442-4fe9-b10b-75664537004f",
+            "messageId": "224c02b1-5bce-4f60-9dcf-bd8202541e6a",
+            "organizationId": "05817b4a-7d07-4442-930e-57fdd09d4c7d",
+            "channel": "email",
+            "notificationKey": "notes.note.created",
+            "address": "ada@example.com",
+            "status": "SENT",
+            "attempts": 1,
+            "nextAttemptAt": "2026-10-05T14:20:24.873211Z",
+            "lastError": null,
+            "providerMessageId": "<541510657.0.1791209725225@[192.168.0.108]>",
+            "createdAt": "2026-10-05T14:15:24.830227Z",
+            "updatedAt": "2026-10-05T14:15:25.285617Z",
+            "sentAt": "2026-10-05T14:15:25.285617Z",
+            "traceId": "f842e7b1d8f9771ac003965bc2a662f8",
+            "requestId": "b1eff681-4cc4-45a0-a51d-1da4f3e3b2e2"
+          }
+        }
+      }
+    ],
+    "node": [
+      {
+        "name": "inbox",
+        "title": "The bell: the newest notice",
+        "request": {
+          "method": "GET",
+          "path": "/egradx/notifications?size=1"
+        },
+        "response": {
+          "status": 200,
+          "body": {
+            "items": [
+              {
+                "id": "f6fed02a-32e6-4f0f-9398-c6622f54cdbd",
+                "scope": "ORGANIZATION",
+                "organizationId": "8d41721e-4d59-494c-8f8c-8487d9adc1b2",
+                "notificationKey": "notes.note.created",
+                "title": "New note",
+                "body": "Call the supplier",
+                "metadata": {
+                  "noteId": "a074d4ff-0b05-49a1-8a94-0973b811bb09"
+                },
+                "createdAt": "2026-10-05T14:15:32.811Z",
+                "readAt": null
+              }
+            ],
+            "page": 0,
+            "size": 1,
+            "hasMore": false
+          }
+        }
+      },
+      {
+        "name": "unread-count",
+        "title": "Its unread count",
+        "request": {
+          "method": "GET",
+          "path": "/egradx/notifications/unread-count"
+        },
+        "response": {
+          "status": 200,
+          "body": {
+            "count": 1
+          }
+        }
+      },
+      {
+        "name": "email",
+        "title": "The email, as the mail server received it",
+        "request": {
+          "method": "SMTP",
+          "path": "to ada@example.com"
+        },
+        "response": {
+          "status": 250,
+          "body": {
+            "from": "\"Notes\" <no-reply@notes.local>",
+            "to": "ada@example.com",
+            "subject": "Your note \"Call the supplier\" is saved",
+            "html": "<p>Your note <strong>Call the supplier</strong> is saved in Notes.</p>\n<p>Everyone in your organization can see it in their notifications.</p>"
+          }
+        }
+      },
+      {
+        "name": "delivery",
+        "title": "Its delivery, in the delivery log",
+        "request": {
+          "method": "GET",
+          "path": "/egradx/notifications/admin/deliveries?channel=email"
+        },
+        "response": {
+          "status": 200,
+          "body": {
+            "id": "c87a50c4-c59d-48e6-95fd-6d652333b900",
+            "messageId": "2fa3c454-cb6e-4973-b5cd-3a1d0ba57909",
+            "organizationId": "8d41721e-4d59-494c-8f8c-8487d9adc1b2",
+            "channel": "email",
+            "notificationKey": "notes.note.created",
+            "address": "ada@example.com",
+            "status": "SENT",
+            "attempts": 1,
+            "nextAttemptAt": "2026-10-05T14:20:32.871Z",
+            "lastError": null,
+            "providerMessageId": "<ad1f3b07-de7c-fd81-593c-0831b70d52d8@notes.local>",
+            "createdAt": "2026-10-05T14:15:32.840Z",
+            "updatedAt": "2026-10-05T14:15:33.044Z",
+            "sentAt": "2026-10-05T14:15:33.044Z",
+            "traceId": "45746ef376bfbddd48fd18f63113241e",
+            "requestId": "ffb842cc-3c7e-4ab7-a67b-eba0388cf495"
+          }
+        }
+      }
+    ],
+    "python": [
+      {
+        "name": "inbox",
+        "title": "The bell: the newest notice",
+        "request": {
+          "method": "GET",
+          "path": "/egradx/notifications?size=1"
+        },
+        "response": {
+          "status": 200,
+          "body": {
+            "items": [
+              {
+                "id": "95dd6537-05a1-4e8e-8d0a-5d596acc3161",
+                "scope": "ORGANIZATION",
+                "organizationId": "95602ad6-dc6e-440e-a8a5-5f01592d2c5f",
+                "notificationKey": "notes.note.created",
+                "title": "New note",
+                "body": "Call the supplier",
+                "metadata": {
+                  "noteId": "1d484808-70a3-422e-b60d-8f610e78ff2f"
+                },
+                "createdAt": "2026-10-05T14:15:40.860327Z",
+                "readAt": null
+              }
+            ],
+            "page": 0,
+            "size": 1,
+            "hasMore": false
+          }
+        }
+      },
+      {
+        "name": "unread-count",
+        "title": "Its unread count",
+        "request": {
+          "method": "GET",
+          "path": "/egradx/notifications/unread-count"
+        },
+        "response": {
+          "status": 200,
+          "body": {
+            "count": 1
+          }
+        }
+      },
+      {
+        "name": "email",
+        "title": "The email, as the mail server received it",
+        "request": {
+          "method": "SMTP",
+          "path": "to ada@example.com"
+        },
+        "response": {
+          "status": 250,
+          "body": {
+            "from": "\"Notes\" <no-reply@notes.local>",
+            "to": "ada@example.com",
+            "subject": "Your note \"Call the supplier\" is saved",
+            "html": "<p>Your note <strong>Call the supplier</strong> is saved in Notes.</p>\n<p>Everyone in your organization can see it in their notifications.</p>"
+          }
+        }
+      },
+      {
+        "name": "delivery",
+        "title": "Its delivery, in the delivery log",
+        "request": {
+          "method": "GET",
+          "path": "/egradx/notifications/admin/deliveries?channel=email"
+        },
+        "response": {
+          "status": 200,
+          "body": {
+            "id": "cd670a75-cb0c-49ec-a02b-3317ced883d2",
+            "messageId": "e8975021-f881-403f-b017-f9d63b6af563",
+            "organizationId": "95602ad6-dc6e-440e-a8a5-5f01592d2c5f",
+            "channel": "email",
+            "notificationKey": "notes.note.created",
+            "address": "ada@example.com",
+            "status": "SENT",
+            "attempts": 1,
+            "nextAttemptAt": "2026-10-05T14:20:40.923300Z",
+            "lastError": null,
+            "providerMessageId": "<179120974095.29724.10631854466733005317@KERLPTP-53.dlink.router>",
+            "createdAt": "2026-10-05T14:15:40.892555Z",
+            "updatedAt": "2026-10-05T14:15:41.089496Z",
+            "sentAt": "2026-10-05T14:15:41.089496Z",
+            "traceId": "47dd0c3204e5e43298dda535547937b8",
+            "requestId": "9a7378bb-18b3-4a9b-804b-7071d8a8bd6b"
+          }
+        }
+      }
+    ]
+  }
+}

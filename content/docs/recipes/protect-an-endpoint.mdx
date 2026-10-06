@@ -1,0 +1,59 @@
+---
+title: Protect an endpoint with a permission
+description: Let only people whose role holds an authority call an endpoint, and answer everyone else with the SDK's 401 or 403.
+---
+
+The SDK lets every request through to your code, signed in or not. An endpoint is protected only when it says which authority it needs.
+
+## 1. Name the authority on the endpoint
+
+<Languages>
+<Tab value="Java">
+
+<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/java/com/acme/notes/NoteController.java" region="note-controller" title="NoteController.java" />
+
+Name the authority exactly as stored: `hasAuthority('note.write')`, with no `ROLE_` prefix. `hasAnyAuthority('a', 'b')` accepts any one of them. Method security is already on.
+
+</Tab>
+<Tab value="Node">
+
+<RepoSnippet file="apps/egradx-devportal/examples/node/src/notes.ts" region="note-routes" title="src/notes.ts" />
+
+`requireAuthority('a', 'b')` needs **all** of them. For "any of", check inside the handler: `currentCaller()!.authorities.has('a')`.
+
+</Tab>
+<Tab value="Python">
+
+<RepoSnippet file="apps/egradx-devportal/examples/python/notes.py" region="note-routes" title="notes.py" />
+
+`require_authority("a", "b")` needs **all** of them, and is already a `Depends`. For "any of", use `authorize(lambda caller: …)`.
+
+</Tab>
+</Languages>
+
+## 2. Make sure someone holds it
+
+An authority nobody holds refuses everyone. Add it to the catalog and give it to a role: see [add a permission](/docs/recipes/add-a-permission).
+
+## What callers get
+
+<RecordedRun name="first-endpoint" steps={['without-token', 'without-permission', 'created']} />
+
+| Situation | Answer |
+|---|---|
+| No token | 401 `NOT_AUTHENTICATED` |
+| A token that is refused (expired, sessions ended, organization suspended) | 401 `SESSION_EXPIRED` |
+| Signed in, without the authority | 403 `ACCESS_DENIED` |
+
+<Callout type="warn" title="Java: your own SecurityFilterChain replaces the SDK's">
+  If you declare one, add the SDK's `egradxAuthenticationFilter` before `UsernamePasswordAuthenticationFilter`. Without it no request is ever signed in, so every protected endpoint answers 401. See [identity](/docs/guides/identity#in-oim).
+</Callout>
+
+## Hiding the button too
+
+`<Can authority="note.write">…</Can>` in React shows its children only to people whose session holds the authority. That decides what to show; it is never the check. The server's check above is.
+
+## See also
+
+- [Authorization](/docs/guides/authorization)
+- [Add a permission and give it to a role](/docs/recipes/add-a-permission)

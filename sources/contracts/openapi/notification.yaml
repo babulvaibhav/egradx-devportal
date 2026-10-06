@@ -1,0 +1,1542 @@
+openapi: 3.1.0
+info:
+  title: EGRADX notification API
+  version: 1.0.0
+tags:
+- description: "Notification administration for the organization your session is in:\
+    \ templates, channel settings, the delivery log, and sends to its members. Looking\
+    \ needs `egradx.notification.read`; changing or sending needs `egradx.notification.manage`,\
+    \ which implies read. Anything belonging to another organization answers `NOT_FOUND`\
+    \ (404)."
+  name: Notification administration
+- description: "The signed-in person's own in-app notifications. Needs only a signed-in\
+    \ session (`NOT_AUTHENTICATED`, 401, without one): every route acts on the caller's\
+    \ own notifications, never on an id passed in."
+  name: Notifications inbox
+- description: What a notification settings screen offers. The choices themselves
+    are stored on the person's profile by egradx-auth (`PUT /egradx/auth/my/profile/preferences`).
+  name: Notification preferences
+- description: "The notification administration routes for what belongs to no single\
+    \ organization: templates and channel settings that apply to every organization\
+    \ without their own, the log of platform-level messages, in-app notices to every\
+    \ user, and sends to every user. Everything needs `egradx.notification.broadcast`,\
+    \ which only a role in the platform organization can hold."
+  name: Notification administration (platform)
+paths:
+  /egradx/notifications:
+    get:
+      description: "A page of the caller's notifications, newest first; `unreadOnly=true`\
+        \ leaves out those already read. Needs a signed-in session."
+      operationId: list
+      parameters:
+      - in: query
+        name: page
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - in: query
+        name: size
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 20
+      - in: query
+        name: unreadOnly
+        required: false
+        schema:
+          type: boolean
+          default: false
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxInboxPage"
+          description: OK
+      summary: List your notifications
+      tags:
+      - Notifications inbox
+  /egradx/notifications/admin/bulk-sends:
+    post:
+      description: "Sends on one channel to every member of your organization, or\
+        \ on the platform routes to every user, from a template (`notificationKey`\
+        \ with `model`) or from the text given; answers 202 and the send continues\
+        \ in the background. Needs `egradx.notification.manage` (on the platform routes,\
+        \ `egradx.notification.broadcast`). Refusals include `CHANNEL_UNAVAILABLE`,\
+        \ `AUDIENCE_TOO_LARGE` and `TEMPLATE_INVALID` (400)."
+      operationId: sendToEveryone_1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkSendRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/SendAccepted"
+          description: OK
+      summary: Send a message to everyone
+      tags:
+      - Notification administration
+  /egradx/notifications/admin/bulk-sends/{bulkSendId}:
+    get:
+      description: "Needs `egradx.notification.read` or `egradx.notification.manage`\
+        \ (on the platform routes, `egradx.notification.broadcast`). A bulk send outside\
+        \ this scope answers `NOT_FOUND` (404)."
+      operationId: bulkSend_1
+      parameters:
+      - in: path
+        name: bulkSendId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxBulkSendView"
+          description: OK
+      summary: Get a bulk send
+      tags:
+      - Notification administration
+  /egradx/notifications/admin/channels:
+    get:
+      description: "Every channel, whether it can send here (and why not), and the\
+        \ settings stored for this scope. Needs `egradx.notification.read` or `egradx.notification.manage`\
+        \ (on the platform routes, `egradx.notification.broadcast`)."
+      operationId: channels_1
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ChannelStatus"
+          description: OK
+      summary: List the channels
+      tags:
+      - Notification administration
+  /egradx/notifications/admin/channels/{channel}:
+    delete:
+      description: "Needs `egradx.notification.manage` (on the platform routes, `egradx.notification.broadcast`).\
+        \ Answers `NOT_FOUND` (404) when nothing is stored for the channel."
+      operationId: deleteChannel_1
+      parameters:
+      - in: path
+        name: channel
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+      summary: Delete a channel's stored settings
+      tags:
+      - Notification administration
+    put:
+      description: "Stores whether the channel is enabled, its settings and its secret,\
+        \ for this scope. Needs `egradx.notification.manage` (on the platform routes,\
+        \ `egradx.notification.broadcast`)."
+      operationId: saveChannel_1
+      parameters:
+      - in: path
+        name: channel
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChannelConfigRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxChannelConfigView"
+          description: OK
+      summary: Save a channel's settings
+      tags:
+      - Notification administration
+  /egradx/notifications/admin/channels/{channel}/secret:
+    delete:
+      description: "Needs `egradx.notification.manage` (on the platform routes, `egradx.notification.broadcast`).\
+        \ Answers `NOT_FOUND` (404) when no secret is stored for the channel."
+      operationId: clearSecret_1
+      parameters:
+      - in: path
+        name: channel
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+      summary: Clear a channel's secret
+      tags:
+      - Notification administration
+  /egradx/notifications/admin/channels/{channel}/test:
+    post:
+      description: "Sends the library's settings-work message to the address given,\
+        \ through the outbox like any other message, so its result is in the delivery\
+        \ log a moment later. Answers 202. Needs `egradx.notification.manage` (on\
+        \ the platform routes, `egradx.notification.broadcast`)."
+      operationId: testChannel_1
+      parameters:
+      - in: path
+        name: channel
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChannelTestRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/SendAccepted"
+          description: OK
+      summary: Send a test message through a channel
+      tags:
+      - Notification administration
+  /egradx/notifications/admin/deliveries:
+    get:
+      description: "A page of deliveries, filtered by `status`, `channel` and `trace`\
+        \ (a trace id or an `X-Request-ID`: what one request sent). Needs `egradx.notification.read`\
+        \ or `egradx.notification.manage` (on the platform routes, `egradx.notification.broadcast`)."
+      operationId: deliveries_1
+      parameters:
+      - in: query
+        name: status
+        required: false
+        schema:
+          type: string
+          enum:
+          - PENDING
+          - SENT
+          - DEAD
+      - in: query
+        name: channel
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: trace
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: page
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - in: query
+        name: size
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 20
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxDeliveryPage"
+          description: OK
+      summary: Search the delivery log
+      tags:
+      - Notification administration
+  /egradx/notifications/admin/deliveries/{deliveryId}:
+    get:
+      description: "Needs `egradx.notification.read` or `egradx.notification.manage`\
+        \ (on the platform routes, `egradx.notification.broadcast`). A delivery outside\
+        \ this scope answers `NOT_FOUND` (404)."
+      operationId: delivery_1
+      parameters:
+      - in: path
+        name: deliveryId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxDeliveryView"
+          description: OK
+      summary: Get a delivery
+      tags:
+      - Notification administration
+  /egradx/notifications/admin/deliveries/{deliveryId}/requeue:
+    post:
+      description: "Gives a `DEAD` delivery a fresh set of attempts, after fixing\
+        \ whatever killed it. Needs `egradx.notification.manage` (on the platform\
+        \ routes, `egradx.notification.broadcast`). A delivery in any other status\
+        \ is refused with `INVALID_REQUEST` (400)."
+      operationId: requeue_1
+      parameters:
+      - in: path
+        name: deliveryId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxDeliveryView"
+          description: OK
+      summary: Requeue a dead delivery
+      tags:
+      - Notification administration
+  /egradx/notifications/admin/in-app:
+    post:
+      description: "To one person (`audience` USER), the organization (ORGANIZATION),\
+        \ or, on the platform routes only, a named organization or every user of every\
+        \ organization (PLATFORM); answers 201 with its id. Needs `egradx.notification.manage`\
+        \ (on the platform routes, `egradx.notification.broadcast`). PLATFORM from\
+        \ the organization routes is refused with `ACCESS_DENIED` (403)."
+      operationId: publish_1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InAppRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/Published"
+          description: OK
+      summary: Publish an in-app notification
+      tags:
+      - Notification administration
+  /egradx/notifications/admin/platform/bulk-sends:
+    post:
+      description: "Sends on one channel to every member of your organization, or\
+        \ on the platform routes to every user, from a template (`notificationKey`\
+        \ with `model`) or from the text given; answers 202 and the send continues\
+        \ in the background. Needs `egradx.notification.manage` (on the platform routes,\
+        \ `egradx.notification.broadcast`). Refusals include `CHANNEL_UNAVAILABLE`,\
+        \ `AUDIENCE_TOO_LARGE` and `TEMPLATE_INVALID` (400)."
+      operationId: sendToEveryone
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkSendRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/SendAccepted"
+          description: OK
+      summary: Send a message to everyone
+      tags:
+      - Notification administration (platform)
+  /egradx/notifications/admin/platform/bulk-sends/{bulkSendId}:
+    get:
+      description: "Needs `egradx.notification.read` or `egradx.notification.manage`\
+        \ (on the platform routes, `egradx.notification.broadcast`). A bulk send outside\
+        \ this scope answers `NOT_FOUND` (404)."
+      operationId: bulkSend
+      parameters:
+      - in: path
+        name: bulkSendId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxBulkSendView"
+          description: OK
+      summary: Get a bulk send
+      tags:
+      - Notification administration (platform)
+  /egradx/notifications/admin/platform/channels:
+    get:
+      description: "Every channel, whether it can send here (and why not), and the\
+        \ settings stored for this scope. Needs `egradx.notification.read` or `egradx.notification.manage`\
+        \ (on the platform routes, `egradx.notification.broadcast`)."
+      operationId: channels
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ChannelStatus"
+          description: OK
+      summary: List the channels
+      tags:
+      - Notification administration (platform)
+  /egradx/notifications/admin/platform/channels/{channel}:
+    delete:
+      description: "Needs `egradx.notification.manage` (on the platform routes, `egradx.notification.broadcast`).\
+        \ Answers `NOT_FOUND` (404) when nothing is stored for the channel."
+      operationId: deleteChannel
+      parameters:
+      - in: path
+        name: channel
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+      summary: Delete a channel's stored settings
+      tags:
+      - Notification administration (platform)
+    put:
+      description: "Stores whether the channel is enabled, its settings and its secret,\
+        \ for this scope. Needs `egradx.notification.manage` (on the platform routes,\
+        \ `egradx.notification.broadcast`)."
+      operationId: saveChannel
+      parameters:
+      - in: path
+        name: channel
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChannelConfigRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxChannelConfigView"
+          description: OK
+      summary: Save a channel's settings
+      tags:
+      - Notification administration (platform)
+  /egradx/notifications/admin/platform/channels/{channel}/secret:
+    delete:
+      description: "Needs `egradx.notification.manage` (on the platform routes, `egradx.notification.broadcast`).\
+        \ Answers `NOT_FOUND` (404) when no secret is stored for the channel."
+      operationId: clearSecret
+      parameters:
+      - in: path
+        name: channel
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+      summary: Clear a channel's secret
+      tags:
+      - Notification administration (platform)
+  /egradx/notifications/admin/platform/channels/{channel}/test:
+    post:
+      description: "Sends the library's settings-work message to the address given,\
+        \ through the outbox like any other message, so its result is in the delivery\
+        \ log a moment later. Answers 202. Needs `egradx.notification.manage` (on\
+        \ the platform routes, `egradx.notification.broadcast`)."
+      operationId: testChannel
+      parameters:
+      - in: path
+        name: channel
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChannelTestRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/SendAccepted"
+          description: OK
+      summary: Send a test message through a channel
+      tags:
+      - Notification administration (platform)
+  /egradx/notifications/admin/platform/deliveries:
+    get:
+      description: "A page of deliveries, filtered by `status`, `channel` and `trace`\
+        \ (a trace id or an `X-Request-ID`: what one request sent). Needs `egradx.notification.read`\
+        \ or `egradx.notification.manage` (on the platform routes, `egradx.notification.broadcast`)."
+      operationId: deliveries
+      parameters:
+      - in: query
+        name: status
+        required: false
+        schema:
+          type: string
+          enum:
+          - PENDING
+          - SENT
+          - DEAD
+      - in: query
+        name: channel
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: trace
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: page
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - in: query
+        name: size
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 20
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxDeliveryPage"
+          description: OK
+      summary: Search the delivery log
+      tags:
+      - Notification administration (platform)
+  /egradx/notifications/admin/platform/deliveries/{deliveryId}:
+    get:
+      description: "Needs `egradx.notification.read` or `egradx.notification.manage`\
+        \ (on the platform routes, `egradx.notification.broadcast`). A delivery outside\
+        \ this scope answers `NOT_FOUND` (404)."
+      operationId: delivery
+      parameters:
+      - in: path
+        name: deliveryId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxDeliveryView"
+          description: OK
+      summary: Get a delivery
+      tags:
+      - Notification administration (platform)
+  /egradx/notifications/admin/platform/deliveries/{deliveryId}/requeue:
+    post:
+      description: "Gives a `DEAD` delivery a fresh set of attempts, after fixing\
+        \ whatever killed it. Needs `egradx.notification.manage` (on the platform\
+        \ routes, `egradx.notification.broadcast`). A delivery in any other status\
+        \ is refused with `INVALID_REQUEST` (400)."
+      operationId: requeue
+      parameters:
+      - in: path
+        name: deliveryId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxDeliveryView"
+          description: OK
+      summary: Requeue a dead delivery
+      tags:
+      - Notification administration (platform)
+  /egradx/notifications/admin/platform/in-app:
+    post:
+      description: "To one person (`audience` USER), the organization (ORGANIZATION),\
+        \ or, on the platform routes only, a named organization or every user of every\
+        \ organization (PLATFORM); answers 201 with its id. Needs `egradx.notification.manage`\
+        \ (on the platform routes, `egradx.notification.broadcast`). PLATFORM from\
+        \ the organization routes is refused with `ACCESS_DENIED` (403)."
+      operationId: publish
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InAppRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/Published"
+          description: OK
+      summary: Publish an in-app notification
+      tags:
+      - Notification administration (platform)
+  /egradx/notifications/admin/platform/templates:
+    delete:
+      description: "Needs `egradx.notification.manage` (on the platform routes, `egradx.notification.broadcast`).\
+        \ Answers `NOT_FOUND` (404) when nothing is stored for that key, channel and\
+        \ locale."
+      operationId: deleteTemplate_1
+      parameters:
+      - in: query
+        name: notificationKey
+        required: true
+        schema:
+          type: string
+      - in: query
+        name: channel
+        required: true
+        schema:
+          type: string
+      - in: query
+        name: locale
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+      summary: Delete a stored template
+      tags:
+      - Notification administration (platform)
+    get:
+      description: "The templates stored for your organization, or on the platform\
+        \ routes those stored for all organizations. Needs `egradx.notification.read`\
+        \ or `egradx.notification.manage` (on the platform routes, `egradx.notification.broadcast`)."
+      operationId: templates_1
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EgradxStoredTemplateView"
+          description: OK
+      summary: List the stored templates
+      tags:
+      - Notification administration (platform)
+    put:
+      description: "Stores the template for a notification key, channel and optional\
+        \ locale, replacing any stored for the same. Needs `egradx.notification.manage`\
+        \ (on the platform routes, `egradx.notification.broadcast`). Refuses a template\
+        \ that does not compile or uses an undeclared variable with `TEMPLATE_INVALID`\
+        \ (400), and a missing `notificationKey`, `channel` or `body` with `INVALID_REQUEST`\
+        \ (400)."
+      operationId: saveTemplate_1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TemplateRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxStoredTemplateView"
+          description: OK
+      summary: Save a template
+      tags:
+      - Notification administration (platform)
+  /egradx/notifications/admin/platform/templates/preview:
+    post:
+      description: "Renders unsaved template text with sample values, for the preview\
+        \ beside the editor. Needs `egradx.notification.read` or `egradx.notification.manage`\
+        \ (on the platform routes, `egradx.notification.broadcast`)."
+      operationId: preview_1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PreviewRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxMessageContent"
+          description: OK
+      summary: Preview a template
+      tags:
+      - Notification administration (platform)
+  /egradx/notifications/admin/platform/types:
+    get:
+      description: "The notification types and the variables each takes, for a template\
+        \ editor. Needs `egradx.notification.read` or `egradx.notification.manage`\
+        \ (on the platform routes, `egradx.notification.broadcast`)."
+      operationId: types_1
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TypeView"
+          description: OK
+      summary: List the notification types
+      tags:
+      - Notification administration (platform)
+  /egradx/notifications/admin/templates:
+    delete:
+      description: "Needs `egradx.notification.manage` (on the platform routes, `egradx.notification.broadcast`).\
+        \ Answers `NOT_FOUND` (404) when nothing is stored for that key, channel and\
+        \ locale."
+      operationId: deleteTemplate
+      parameters:
+      - in: query
+        name: notificationKey
+        required: true
+        schema:
+          type: string
+      - in: query
+        name: channel
+        required: true
+        schema:
+          type: string
+      - in: query
+        name: locale
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+      summary: Delete a stored template
+      tags:
+      - Notification administration
+    get:
+      description: "The templates stored for your organization, or on the platform\
+        \ routes those stored for all organizations. Needs `egradx.notification.read`\
+        \ or `egradx.notification.manage` (on the platform routes, `egradx.notification.broadcast`)."
+      operationId: templates
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EgradxStoredTemplateView"
+          description: OK
+      summary: List the stored templates
+      tags:
+      - Notification administration
+    put:
+      description: "Stores the template for a notification key, channel and optional\
+        \ locale, replacing any stored for the same. Needs `egradx.notification.manage`\
+        \ (on the platform routes, `egradx.notification.broadcast`). Refuses a template\
+        \ that does not compile or uses an undeclared variable with `TEMPLATE_INVALID`\
+        \ (400), and a missing `notificationKey`, `channel` or `body` with `INVALID_REQUEST`\
+        \ (400)."
+      operationId: saveTemplate
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TemplateRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxStoredTemplateView"
+          description: OK
+      summary: Save a template
+      tags:
+      - Notification administration
+  /egradx/notifications/admin/templates/preview:
+    post:
+      description: "Renders unsaved template text with sample values, for the preview\
+        \ beside the editor. Needs `egradx.notification.read` or `egradx.notification.manage`\
+        \ (on the platform routes, `egradx.notification.broadcast`)."
+      operationId: preview
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PreviewRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxMessageContent"
+          description: OK
+      summary: Preview a template
+      tags:
+      - Notification administration
+  /egradx/notifications/admin/types:
+    get:
+      description: "The notification types and the variables each takes, for a template\
+        \ editor. Needs `egradx.notification.read` or `egradx.notification.manage`\
+        \ (on the platform routes, `egradx.notification.broadcast`)."
+      operationId: types
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TypeView"
+          description: OK
+      summary: List the notification types
+      tags:
+      - Notification administration
+  /egradx/notifications/preference-options:
+    get:
+      description: "The channels that reach a person and are registered here, and\
+        \ the kinds of message a person may opt out of. Needs a signed-in session."
+      operationId: options
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/Options"
+          description: OK
+      summary: Get the notification preference options
+      tags:
+      - Notification preferences
+  /egradx/notifications/read-all:
+    post:
+      description: "Answers with `marked`, how many were marked. Needs a signed-in\
+        \ session."
+      operationId: markAllRead
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties:
+                  type: integer
+                  format: int32
+          description: OK
+      summary: Mark all your notifications read
+      tags:
+      - Notifications inbox
+  /egradx/notifications/stream:
+    get:
+      description: "A server-sent event stream (event `notification`) of the caller's\
+        \ notifications published after it opened. It does not replay earlier ones:\
+        \ load the list and the count first. Needs a signed-in session."
+      operationId: stream
+      responses:
+        "200":
+          content:
+            text/event-stream:
+              schema:
+                $ref: "#/components/schemas/SseEmitter"
+          description: OK
+      summary: Stream new notifications
+      tags:
+      - Notifications inbox
+  /egradx/notifications/unread-count:
+    get:
+      description: "Answers with `count`, the number not yet read. Needs a signed-in\
+        \ session."
+      operationId: unreadCount
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties:
+                  type: integer
+                  format: int64
+          description: OK
+      summary: Count your unread notifications
+      tags:
+      - Notifications inbox
+  /egradx/notifications/{id}/read:
+    post:
+      description: Answers 204. Needs a signed-in session. A notification that is
+        not the caller's to see answers `NOTIFICATION_NOT_FOUND` (404).
+      operationId: markRead
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: OK
+      summary: Mark a notification read
+      tags:
+      - Notifications inbox
+components:
+  schemas:
+    BulkSendRequest:
+      type: object
+      properties:
+        body:
+          type:
+          - string
+          - "null"
+        channel:
+          type:
+          - string
+          - "null"
+        format:
+          type:
+          - string
+          - "null"
+          enum:
+          - TEXT
+          - HTML
+        model:
+          type:
+          - object
+          - "null"
+          additionalProperties: {}
+        notificationKey:
+          type:
+          - string
+          - "null"
+        replyTo:
+          type:
+          - string
+          - "null"
+        subject:
+          type:
+          - string
+          - "null"
+    ChannelConfigRequest:
+      type: object
+      properties:
+        enabled:
+          type:
+          - boolean
+          - "null"
+        secret:
+          type:
+          - string
+          - "null"
+        settings:
+          type:
+          - object
+          - "null"
+          additionalProperties: {}
+    ChannelStatus:
+      type: object
+      properties:
+        available:
+          type:
+          - boolean
+          - "null"
+        channel:
+          type:
+          - string
+          - "null"
+        configuration:
+          anyOf:
+          - $ref: "#/components/schemas/EgradxChannelConfigView"
+          - type: "null"
+        unavailableReason:
+          type:
+          - string
+          - "null"
+    ChannelTestRequest:
+      type: object
+      properties:
+        address:
+          type:
+          - string
+          - "null"
+    EgradxBulkSendView:
+      type: object
+      properties:
+        audience:
+          type:
+          - string
+          - "null"
+          enum:
+          - ORGANIZATION_MEMBERS
+          - ALL_USERS
+        audienceOrganizationId:
+          type:
+          - string
+          - "null"
+          format: uuid
+        channel:
+          type:
+          - string
+          - "null"
+        createdAt:
+          type:
+          - string
+          - "null"
+          format: date-time
+        id:
+          type:
+          - string
+          - "null"
+          format: uuid
+        lastError:
+          type:
+          - string
+          - "null"
+        messageIds:
+          type:
+          - array
+          - "null"
+          items:
+            type: string
+            format: uuid
+        notificationKey:
+          type:
+          - string
+          - "null"
+        optedOut:
+          type:
+          - integer
+          - "null"
+          format: int32
+        organizationId:
+          type:
+          - string
+          - "null"
+          format: uuid
+        recipientsExpanded:
+          type:
+          - integer
+          - "null"
+          format: int32
+        status:
+          type:
+          - string
+          - "null"
+          enum:
+          - EXPANDING
+          - COMPLETE
+          - FAILED
+        unreachable:
+          type:
+          - integer
+          - "null"
+          format: int32
+        updatedAt:
+          type:
+          - string
+          - "null"
+          format: date-time
+    EgradxChannelConfigView:
+      type: object
+      properties:
+        channel:
+          type:
+          - string
+          - "null"
+        createdAt:
+          type:
+          - string
+          - "null"
+          format: date-time
+        enabled:
+          type:
+          - boolean
+          - "null"
+        hasSecret:
+          type:
+          - boolean
+          - "null"
+        id:
+          type:
+          - string
+          - "null"
+          format: uuid
+        organizationId:
+          type:
+          - string
+          - "null"
+          format: uuid
+        settings:
+          type:
+          - object
+          - "null"
+          additionalProperties: {}
+        updatedAt:
+          type:
+          - string
+          - "null"
+          format: date-time
+    EgradxDeliveryPage:
+      type: object
+      properties:
+        items:
+          type:
+          - array
+          - "null"
+          items:
+            $ref: "#/components/schemas/EgradxDeliveryView"
+        page:
+          type:
+          - integer
+          - "null"
+          format: int32
+        size:
+          type:
+          - integer
+          - "null"
+          format: int32
+        totalElements:
+          type:
+          - integer
+          - "null"
+          format: int64
+    EgradxDeliveryView:
+      type: object
+      properties:
+        address:
+          type:
+          - string
+          - "null"
+        attempts:
+          type:
+          - integer
+          - "null"
+          format: int32
+        channel:
+          type:
+          - string
+          - "null"
+        createdAt:
+          type:
+          - string
+          - "null"
+          format: date-time
+        id:
+          type:
+          - string
+          - "null"
+          format: uuid
+        lastError:
+          type:
+          - string
+          - "null"
+        messageId:
+          type:
+          - string
+          - "null"
+          format: uuid
+        nextAttemptAt:
+          type:
+          - string
+          - "null"
+          format: date-time
+        notificationKey:
+          type:
+          - string
+          - "null"
+        organizationId:
+          type:
+          - string
+          - "null"
+          format: uuid
+        providerMessageId:
+          type:
+          - string
+          - "null"
+        requestId:
+          type:
+          - string
+          - "null"
+        sentAt:
+          type:
+          - string
+          - "null"
+          format: date-time
+        status:
+          type:
+          - string
+          - "null"
+          enum:
+          - PENDING
+          - SENT
+          - DEAD
+        traceId:
+          type:
+          - string
+          - "null"
+        updatedAt:
+          type:
+          - string
+          - "null"
+          format: date-time
+    EgradxInboxItem:
+      type: object
+      properties:
+        body:
+          type:
+          - string
+          - "null"
+        createdAt:
+          type:
+          - string
+          - "null"
+          format: date-time
+        id:
+          type:
+          - string
+          - "null"
+          format: uuid
+        metadata:
+          type:
+          - object
+          - "null"
+          additionalProperties: {}
+        notificationKey:
+          type:
+          - string
+          - "null"
+        organizationId:
+          type:
+          - string
+          - "null"
+          format: uuid
+        readAt:
+          type:
+          - string
+          - "null"
+          format: date-time
+        scope:
+          type:
+          - string
+          - "null"
+          enum:
+          - USER
+          - ORGANIZATION
+          - PLATFORM
+        title:
+          type:
+          - string
+          - "null"
+    EgradxInboxPage:
+      type: object
+      properties:
+        hasMore:
+          type:
+          - boolean
+          - "null"
+        items:
+          type:
+          - array
+          - "null"
+          items:
+            $ref: "#/components/schemas/EgradxInboxItem"
+        page:
+          type:
+          - integer
+          - "null"
+          format: int32
+        size:
+          type:
+          - integer
+          - "null"
+          format: int32
+    EgradxMessageContent:
+      type: object
+      properties:
+        body:
+          type:
+          - string
+          - "null"
+        format:
+          type:
+          - string
+          - "null"
+          enum:
+          - TEXT
+          - HTML
+        subject:
+          type:
+          - string
+          - "null"
+    EgradxStoredTemplateView:
+      type: object
+      properties:
+        body:
+          type:
+          - string
+          - "null"
+        channel:
+          type:
+          - string
+          - "null"
+        createdAt:
+          type:
+          - string
+          - "null"
+          format: date-time
+        format:
+          type:
+          - string
+          - "null"
+          enum:
+          - TEXT
+          - HTML
+        id:
+          type:
+          - string
+          - "null"
+          format: uuid
+        locale:
+          type:
+          - string
+          - "null"
+        notificationKey:
+          type:
+          - string
+          - "null"
+        organizationId:
+          type:
+          - string
+          - "null"
+          format: uuid
+        subject:
+          type:
+          - string
+          - "null"
+        updatedAt:
+          type:
+          - string
+          - "null"
+          format: date-time
+    InAppRequest:
+      type: object
+      properties:
+        audience:
+          type:
+          - string
+          - "null"
+        body:
+          type:
+          - string
+          - "null"
+        metadata:
+          type:
+          - object
+          - "null"
+          additionalProperties: {}
+        notificationKey:
+          type:
+          - string
+          - "null"
+        organizationId:
+          type:
+          - string
+          - "null"
+          format: uuid
+        title:
+          type:
+          - string
+          - "null"
+        userId:
+          type:
+          - string
+          - "null"
+          format: uuid
+    Options:
+      type: object
+      properties:
+        channels:
+          type:
+          - array
+          - "null"
+          items:
+            type: string
+        types:
+          type:
+          - array
+          - "null"
+          items:
+            $ref: "#/components/schemas/TypeOption"
+    PreviewRequest:
+      type: object
+      properties:
+        body:
+          type:
+          - string
+          - "null"
+        channel:
+          type:
+          - string
+          - "null"
+        format:
+          type:
+          - string
+          - "null"
+          enum:
+          - TEXT
+          - HTML
+        model:
+          type:
+          - object
+          - "null"
+          additionalProperties: {}
+        notificationKey:
+          type:
+          - string
+          - "null"
+        subject:
+          type:
+          - string
+          - "null"
+    Published:
+      type: object
+      properties:
+        notificationId:
+          type:
+          - string
+          - "null"
+          format: uuid
+    SendAccepted:
+      type: object
+      properties:
+        bulkSendId:
+          type:
+          - string
+          - "null"
+          format: uuid
+        messageIds:
+          type:
+          - array
+          - "null"
+          items:
+            type: string
+            format: uuid
+        recipients:
+          type:
+          - integer
+          - "null"
+          format: int32
+    SseEmitter:
+      type: object
+      properties:
+        timeout:
+          type:
+          - integer
+          - "null"
+          format: int64
+    TemplateRequest:
+      type: object
+      properties:
+        body:
+          type:
+          - string
+          - "null"
+        channel:
+          type:
+          - string
+          - "null"
+        format:
+          type:
+          - string
+          - "null"
+          enum:
+          - TEXT
+          - HTML
+        locale:
+          type:
+          - string
+          - "null"
+        notificationKey:
+          type:
+          - string
+          - "null"
+        subject:
+          type:
+          - string
+          - "null"
+    TypeOption:
+      type: object
+      properties:
+        description:
+          type:
+          - string
+          - "null"
+        key:
+          type:
+          - string
+          - "null"
+    TypeView:
+      type: object
+      properties:
+        description:
+          type:
+          - string
+          - "null"
+        key:
+          type:
+          - string
+          - "null"
+        optional:
+          type:
+          - array
+          - "null"
+          items:
+            type: string
+          uniqueItems: true
+        required:
+          type:
+          - array
+          - "null"
+          items:
+            type: string
+          uniqueItems: true
+        userCanOptOut:
+          type:
+          - boolean
+          - "null"

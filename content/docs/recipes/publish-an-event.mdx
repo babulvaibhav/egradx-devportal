@@ -1,0 +1,88 @@
+---
+title: Publish an event and handle it
+description: Publish a fact in the same transaction as your change, and handle it once per handler — in this service now, in others later.
+---
+
+<Parity id="events.outbox" />
+
+Events are a package of their own: add `egradx-platform-events` (Java), `@babulvaibhav/egradx-events` or `egradx-events`. In [the Initializr](/start?caps=events), choose **Events**.
+
+## 1. Start it (Node and Python)
+
+Java starts events when the package is on the classpath. Node and Python migrate its tables, start it after the SDK, and close it at shutdown:
+
+<Languages>
+<Tab value="Java">
+
+Nothing to do. Its tables are migrated at start-up, and the relay runs on every instance.
+
+</Tab>
+<Tab value="Node">
+
+<RepoSnippet file="apps/egradx-devportal/examples/node/src/app.ts" region="main" title="src/app.ts" />
+
+</Tab>
+<Tab value="Python">
+
+<RepoSnippet file="apps/egradx-devportal/examples/python/application.py" region="main" title="application.py" />
+
+</Tab>
+</Languages>
+
+## 2. Publish with the change
+
+<Languages>
+<Tab value="Java">
+
+<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/java/com/acme/notes/NoteService.java" region="note-service" title="NoteService.java" />
+
+</Tab>
+<Tab value="Node">
+
+<RepoSnippet file="apps/egradx-devportal/examples/node/src/notes.ts" region="note-routes" title="src/notes.ts" />
+
+</Tab>
+<Tab value="Python">
+
+<RepoSnippet file="apps/egradx-devportal/examples/python/notes.py" region="note-routes" title="notes.py" />
+
+Put dates in `data` as ISO strings yourself.
+
+</Tab>
+</Languages>
+
+The event is written to the outbox **in your transaction**. If the change rolls back, the event never existed. After the commit the relay sends it.
+
+**Name it** `<area>.<entity>.<what-happened>.v<N>`: `notes.note.created.v1`. Publish facts, not commands. An incompatible change to `data` is a new version, published beside the old one.
+
+## 3. Handle it
+
+<Languages>
+<Tab value="Java">
+
+<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/java/com/acme/notes/NoteStatsHandler.java" region="event-handler" title="NoteStatsHandler.java" />
+
+Give `name()` a fixed value: it is the inbox's key.
+
+</Tab>
+<Tab value="Node">
+
+<RepoSnippet file="apps/egradx-devportal/examples/node/src/events.ts" region="event-handler" title="src/events.ts" />
+
+</Tab>
+<Tab value="Python">
+
+<RepoSnippet file="apps/egradx-devportal/examples/python/events.py" region="event-handler" title="events.py" />
+
+</Tab>
+</Languages>
+
+Each handler runs in its own transaction, together with an inbox row, so a second delivery of the same event is dropped. A handler that throws is retried later. Keep handlers idempotent anyway, and don't assume any order.
+
+## What happened
+
+<RecordedRun name="events" />
+
+## See also
+
+- [Events](/docs/guides/events) · [Move to RabbitMQ](/docs/recipes/move-to-rabbitmq) · [Dead letters](/docs/recipes/dead-letters) · [Events reference](/docs/reference/events)

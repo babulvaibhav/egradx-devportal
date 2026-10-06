@@ -1,0 +1,48 @@
+---
+title: Add a capability
+description: The order a new capability is built in — contract, Java, Node, Python, web, conformance, docs — and what "done" means.
+---
+
+## 1. The contract
+
+Write what every SDK must do, in `contracts/`:
+
+- **HTTP endpoints:** in the Java controller, with `@Operation` (summary, who may call it, its refusals). Then regenerate the OpenAPI file and commit both together.
+- **Tables:** a new migration `V<next>__<what>.sql` in `contracts/db/postgresql/<capability>/`. Never edit an applied one.
+- **Events:** a new type in `contracts/events/`, compatible changes only; anything else is a `.v2`.
+- **Error codes:** in `contracts/schemas/error-codes.json`, with their status.
+- **Behaviour that must be byte-identical** (a format, a hash, a rendering): a test vector in `contracts/test-vectors/`, seeded from what Java produces.
+
+Some choices Java doesn't settle, such as a library for Node or a Python idiom. Write those down and have them reviewed before building on them.
+
+## 2. Java
+
+Build it in the Java module, with tests on a real PostgreSQL, and the contract tests passing (`*OpenApiContractTest`, the vector tests). Java is the reference: when the other SDKs disagree with it later, they change.
+
+## 3. Node, then Python
+
+Port it with the same names: classes and functions, options (camelCase in Node, snake_case in Python), endpoints, codes, metrics. Each SDK tests its own code against the contract's vectors and against PostgreSQL. No test reads another SDK's output.
+
+## 4. Web
+
+If the capability has endpoints people use from a browser: regenerate the client's types (`pnpm run generate` in `sdks/web/packages/client`), and add a store and a React hook. Add a copy-in screen if one is worth having.
+
+## 5. Conformance and OIM
+
+- Add black-box tests to `conformance/tests/`, through HTTP only, checked against the contract's schemas.
+- Use the capability in OIM if it fits, in all three backends. The browser tests then cover it end to end.
+- The capability is at parity in a language when conformance passes against that language's OIM backend.
+
+## 6. Docs
+
+- Mark it in `apps/egradx-devportal/data/parity.json`.
+- Write or extend the guide, and add a recipe if there is a task to show.
+- Code on the pages comes from the example applications or OIM, through `docs:region` markers, never pasted ([the portal](/docs/contribute/the-portal)).
+- Add an entry to [what's new](/docs/whats-new).
+
+## Done means
+
+- [ ] The contract changed first, and every SDK passes it.
+- [ ] Java, Node and Python have it, with the same names.
+- [ ] Conformance passes against all three OIM backends.
+- [ ] The portal documents it, from code that compiles.

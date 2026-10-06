@@ -1,0 +1,54 @@
+---
+title: Send an email when something happens
+description: Queue an email with your change — sent after the commit, retried if the mail server is down, and logged.
+---
+
+Three pieces: a **type** that names the message, a **template** for it, and a **send** next to the change.
+
+## 1. Declare the type and write its template
+
+See [add a notification type](/docs/recipes/add-a-notification-type). For this recipe the type is `notes.note.created`, which needs a `title`:
+
+<RepoSnippet file="apps/egradx-devportal/examples/node/notification-templates/notes.note.created/email.subject.txt" title="notification-templates/notes.note.created/email.subject.txt" />
+
+## 2. Send it with the change
+
+<Languages>
+<Tab value="Java">
+
+<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/java/com/acme/notes/NoteService.java" region="note-email" title="NoteService.java" />
+
+</Tab>
+<Tab value="Node">
+
+<RepoSnippet file="apps/egradx-devportal/examples/node/src/notes.ts" region="note-email" title="src/notes.ts" />
+
+</Tab>
+<Tab value="Python">
+
+<RepoSnippet file="apps/egradx-devportal/examples/python/notes.py" region="note-email" title="notes.py" />
+
+</Tab>
+</Languages>
+
+Called inside the change's transaction, the message is queued with it. If the change rolls back, nothing is sent. Sending happens later, on the dispatcher, so a slow mail server never slows the request.
+
+`send` checks everything before it queues: the channel is set up, the template renders with these variables, the addresses are valid. If not, it refuses with a 400: `CHANNEL_UNAVAILABLE`, `TEMPLATE_INVALID` or `RECIPIENTS_UNREACHABLE`.
+
+## 3. Point it at a mail server
+
+Locally, the generated compose file runs Mailpit; open `http://localhost:8025` to read what was sent. For production, see [configure SMTP](/docs/recipes/configure-smtp).
+
+## What happened
+
+<RecordedRun name="notifications" steps={['email', 'delivery']} />
+
+A user receives it at their **verified** email address, or the one they sign in with. If the type is declared `userCanOptOut()` and they turned it off, they don't receive it.
+
+## When the email must never fail the change
+
+An email queued in the transaction is atomic with it, which is usually what you want. If you'd rather lose the email than fail the change, send it after the commit and catch everything, as OIM's low-stock alert does: see [notifications](/docs/guides/notifications#messages-that-must-not-break-the-change).
+
+## See also
+
+- [Notifications](/docs/guides/notifications) · [Send to someone who isn't a user](/docs/recipes/send-to-address) · [Check the email in a test](/docs/recipes/assert-audit-and-email)

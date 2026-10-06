@@ -1,0 +1,9 @@
+<!DOCTYPE html>
+<html>
+<body style="font-family: sans-serif; line-height: 1.5;">
+  <p>{{#if recipientName}}Hello {{recipientName}},{{else}}Hello,{{/if}}</p>
+  <p>To sign in with {{newEmail}} from now on, enter this code where you asked for the change:</p>
+  <p style="font-size: 28px; letter-spacing: 6px; font-weight: bold;">{{code}}</p>
+  <p>It expires in {{expiresInMinutes}} minutes. If you did not ask for this, ignore this message: nothing changes without the code.</p>
+</body>
+</html>

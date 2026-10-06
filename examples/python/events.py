@@ -1,0 +1,20 @@
+"""An event handler: what this application does with the events it publishes (another service could do the same)."""
+
+from sqlalchemy import text
+
+
+# docs:region event-handler
+class NoteStats:
+    """Counts each organization's notes from notes.note.created.v1. The SDK calls it once per event, after the
+    note committed, in a transaction of its own (``connection``): a second delivery of the same event is dropped, and a
+    failure is tried again later."""
+
+    type = "notes.note.created.v1"
+    name = "note-stats"  # stable: it is how the SDK remembers what this handler has seen
+
+    async def handle(self, event, connection) -> None:
+        await connection.execute(text(
+            "INSERT INTO notes_note_stats (organization_id, notes_created) VALUES (CAST(:organization AS uuid), 1) "
+            "ON CONFLICT (organization_id) DO UPDATE SET notes_created = notes_note_stats.notes_created + 1"),
+            {"organization": event.organization_id})
+# docs:end

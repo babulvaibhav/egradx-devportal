@@ -1,0 +1,19 @@
+{
+  "title": "Node",
+  "pages": [
+    "index",
+    "egradx-audit",
+    "egradx-audit-auth",
+    "egradx-auth",
+    "egradx-core",
+    "egradx-events",
+    "egradx-express",
+    "egradx-migrations",
+    "egradx-notification",
+    "egradx-notification-auth",
+    "egradx-observability",
+    "egradx-sdk",
+    "egradx-security",
+    "egradx-tls-provider"
+  ]
+}

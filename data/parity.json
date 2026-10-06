@@ -1,0 +1,59 @@
+{
+  "$comment": "What each language offers, shown as badges on every guide and whole on /docs/reference/parity. yes = available and checked by the conformance suite or the example applications; partial = usable with the caveat in notes; planned = not built; no = not available; na = not applicable. Change it with the code it describes.",
+  "capabilities": [
+    { "id": "identity.sign-in", "area": "Sign-in & identity", "name": "Sign-in, refresh, sign-out, sessions", "java": "yes", "node": "yes", "python": "yes", "web": "yes" },
+    { "id": "identity.organizations", "area": "Sign-in & identity", "name": "Organizations, users, roles and permissions", "java": "yes", "node": "yes", "python": "yes", "web": "yes", "notes": { "web": "Typed calls for every endpoint; no ready screens for users and roles (OIM has its own)." } },
+    { "id": "identity.invitations", "area": "Sign-in & identity", "name": "Invitations, password reset, email change", "java": "yes", "node": "yes", "python": "yes", "web": "yes", "notes": { "java": "The emails need the notification libraries (in egradx-sdk) and egradx.auth.links.base-url.", "node": "As Java: links.baseUrl.", "python": "As Java: LinkSettings(base_url=…)." } },
+    { "id": "identity.profiles", "area": "Sign-in & identity", "name": "Profiles, verified contact addresses, preferences", "java": "yes", "node": "yes", "python": "yes", "web": "yes" },
+    { "id": "identity.org-switch", "area": "Sign-in & identity", "name": "Choosing and switching organization", "java": "yes", "node": "yes", "python": "yes", "web": "yes" },
+    { "id": "identity.service-tokens", "area": "Sign-in & identity", "name": "Service-to-service tokens (client credentials)", "java": "partial", "node": "partial", "python": "partial", "web": "na", "notes": { "java": "EgradxServiceTokenManager is a client of an outside OAuth server; egradx-auth cannot issue these tokens.", "node": "As Java.", "python": "As Java." } },
+    { "id": "identity.sso", "area": "Sign-in & identity", "name": "Single sign-on (SAML, OIDC), one-time-code sign-in", "java": "planned", "node": "planned", "python": "planned", "web": "planned" },
+
+    { "id": "authz.endpoints", "area": "Authorization & tenancy", "name": "Protecting an endpoint with a permission", "java": "yes", "node": "yes", "python": "yes", "web": "yes", "notes": { "web": "<Can> and hasAuthority only decide what to show; the server decides." } },
+    { "id": "authz.app-permissions", "area": "Authorization & tenancy", "name": "The application's own permissions and roles", "java": "yes", "node": "yes", "python": "yes", "web": "na" },
+    { "id": "tenancy.context", "area": "Authorization & tenancy", "name": "The caller's organization on every request", "java": "yes", "node": "yes", "python": "yes", "web": "yes" },
+    { "id": "tenancy.scoping", "area": "Authorization & tenancy", "name": "Scoping the application's own queries automatically", "java": "planned", "node": "planned", "python": "planned", "web": "na", "notes": { "java": "Filter by the caller's organization in every query yourself.", "node": "As Java.", "python": "As Java." } },
+
+    { "id": "audit.record", "area": "Audit trail", "name": "Recording, in the change's transaction", "java": "yes", "node": "yes", "python": "yes", "web": "na", "notes": { "node": "Joins egradxTransaction (or an explicit tx); a plain prisma.$transaction is not joined.", "python": "Joins egradx_transaction (or an explicit connection)." } },
+    { "id": "audit.read", "area": "Audit trail", "name": "Reading: filters, history, CSV export", "java": "yes", "node": "yes", "python": "yes", "web": "yes" },
+    { "id": "audit.retention", "area": "Audit trail", "name": "Retention", "java": "yes", "node": "partial", "python": "partial", "web": "na", "notes": { "node": "Single-unit periods only (7y, 18m); a bad period fails at purge time, not at start.", "python": "As Node." } },
+    { "id": "audit.adoption", "area": "Audit trail", "name": "Moving an old audit table in", "java": "yes", "node": "partial", "python": "partial", "web": "na", "notes": { "node": "Through migrateEgradx's afterAudit hook only.", "python": "Through migrate_egradx's after_audit hook only." } },
+
+    { "id": "notifications.in-app", "area": "Notifications", "name": "In-app inbox and the live bell", "java": "yes", "node": "yes", "python": "yes", "web": "yes" },
+    { "id": "notifications.email", "area": "Notifications", "name": "Email, templates, locales", "java": "yes", "node": "yes", "python": "yes", "web": "na" },
+    { "id": "notifications.channels", "area": "Notifications", "name": "Slack, SMS, WhatsApp, webhooks", "java": "partial", "node": "partial", "python": "partial", "web": "na", "notes": { "java": "Tested against local stand-ins of Slack, Twilio and Meta, not the live services.", "node": "As Java.", "python": "As Java." } },
+    { "id": "notifications.preferences", "area": "Notifications", "name": "People's addresses and preferences", "java": "yes", "node": "yes", "python": "yes", "web": "yes" },
+    { "id": "notifications.bulk", "area": "Notifications", "name": "Bulk sends to an organization or everyone", "java": "yes", "node": "yes", "python": "yes", "web": "na" },
+    { "id": "notifications.admin", "area": "Notifications", "name": "Channel settings, delivery log, retries", "java": "yes", "node": "yes", "python": "yes", "web": "yes" },
+    { "id": "notifications.multi-instance", "area": "Notifications", "name": "Live push across several instances", "java": "partial", "node": "partial", "python": "partial", "web": "na", "notes": { "java": "Pushes reach this instance's streams; a broadcaster of your own (e.g. Redis pub/sub) reaches the rest. Nothing is lost: the inbox has it on the next load.", "node": "As Java: the broadcaster option.", "python": "As Java." } },
+
+    { "id": "events.outbox", "area": "Events", "name": "Publishing in the change's transaction; handlers once each", "java": "yes", "node": "yes", "python": "yes", "web": "na", "notes": { "java": "egradx-platform-events, added beside egradx-sdk.", "node": "@babulvaibhav/egradx-events; run migrateEvents and events.start() yourself.", "python": "egradx-events; run migrate_events and events.start() yourself." } },
+    { "id": "events.rabbitmq", "area": "Events", "name": "RabbitMQ transport, retries, dead letters", "java": "yes", "node": "yes", "python": "yes", "web": "na" },
+    { "id": "events.kafka", "area": "Events", "name": "Kafka transport, .DLT topics", "java": "partial", "node": "partial", "python": "partial", "web": "na", "notes": { "java": "No TLS or SASL settings yet.", "node": "No TLS or SASL settings yet; retry waits are not capped.", "python": "As Node." } },
+    { "id": "events.replay", "area": "Events", "name": "Replaying dead letters", "java": "planned", "node": "planned", "python": "planned", "web": "na", "notes": { "java": "By hand today: see the events guide.", "node": "As Java.", "python": "As Java." } },
+
+    { "id": "observability.request-ids", "area": "Observability", "name": "Request ids in logs, errors and records", "java": "yes", "node": "yes", "python": "yes", "web": "yes" },
+    { "id": "observability.tracing", "area": "Observability", "name": "Traces and metrics (OpenTelemetry, Micrometer)", "java": "yes", "node": "yes", "python": "yes", "web": "na" },
+    { "id": "observability.log-shipping", "area": "Observability", "name": "Log shipping as events", "java": "yes", "node": "yes", "python": "yes", "web": "na", "notes": { "node": "Wired by the application (EgradxLogShipper); no on/off setting.", "python": "As Node." } },
+    { "id": "observability.health", "area": "Observability", "name": "Health checks", "java": "na", "node": "no", "python": "no", "web": "na", "notes": { "java": "Spring Boot Actuator's.", "node": "None from the SDK yet.", "python": "None from the SDK yet." } },
+
+    { "id": "errors.envelope", "area": "Errors", "name": "One error envelope and codes", "java": "yes", "node": "yes", "python": "yes", "web": "yes", "notes": { "java": "For the application's own endpoints, add one advice extending EgradxExceptionHandlerSupport (the generated projects have it)." } },
+
+    { "id": "core.utilities", "area": "Core", "name": "Random strings, gzip, ids, lifecycle", "java": "yes", "node": "yes", "python": "yes", "web": "na" },
+    { "id": "core.sealed-secrets", "area": "Core", "name": "Sealed secrets (one column, AES-256-GCM)", "java": "yes", "node": "yes", "python": "yes", "web": "na" },
+    { "id": "core.enums", "area": "Core", "name": "Shared enums", "java": "yes", "node": "yes", "python": "yes", "web": "planned" },
+    { "id": "core.migrations", "area": "Core", "name": "Migrations beside the application's own", "java": "yes", "node": "yes", "python": "yes", "web": "na" },
+    { "id": "core.keys", "area": "Core", "name": "Signing keys, shared across languages", "java": "yes", "node": "yes", "python": "yes", "web": "na", "notes": { "java": "Start one instance first on an empty keys folder (several at once can each create keys).", "node": "As Java.", "python": "As Java." } },
+
+    { "id": "web.client", "area": "Web", "name": "Browser client, sessions, renewal", "java": "na", "node": "na", "python": "na", "web": "yes" },
+    { "id": "web.react", "area": "Web", "name": "React hooks", "java": "na", "node": "na", "python": "na", "web": "yes" },
+    { "id": "web.next", "area": "Web", "name": "Next.js backend-for-frontend", "java": "na", "node": "na", "python": "na", "web": "yes" },
+    { "id": "web.screens", "area": "Web", "name": "Copy-in screens (bell, audit log, settings, channels)", "java": "na", "node": "na", "python": "na", "web": "yes" },
+
+    { "id": "java.webservice", "area": "Java only", "name": "WebService base class, request context utilities", "java": "partial", "node": "na", "python": "na", "web": "na", "notes": { "java": "Not in egradx-sdk. getMessage and getTraceId (without X-Trace-Id) fail; use EgradxTenantContextAccessor and the request id instead." } },
+    { "id": "java.grpc", "area": "Java only", "name": "gRPC request context", "java": "partial", "node": "na", "python": "na", "web": "na", "notes": { "java": "The token and locale are not stored." } },
+    { "id": "java.webflux", "area": "Java only", "name": "WebFlux security", "java": "partial", "node": "na", "python": "na", "web": "na", "notes": { "java": "Token conversion only; no request context." } },
+
+    { "id": "testing.kit", "area": "Testing", "name": "A test kit (signed-in clients, captured mail and events)", "java": "planned", "node": "planned", "python": "planned", "web": "na", "notes": { "java": "The generated projects' tests show how today.", "node": "As Java.", "python": "As Java." } }
+  ]
+}

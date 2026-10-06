@@ -1,0 +1,78 @@
+---
+title: Quickstart — Node
+description: An Express application in TypeScript on the EGRADX SDK, signed in and calling the SDK's endpoints, in about ten minutes.
+---
+
+You need Node 24, a PostgreSQL database ([local environment](/docs/get-started/local-environment)) and [access to the packages](/docs/get-started/access) (the `.npmrc`).
+
+The code on this page is the portal's Node example application, `examples/node` — a small *notes* application built on the published packages and run by the portal's build checks. You can copy it whole.
+
+<Callout title="Or generate it">
+  [The Initializr](/start?lang=node) makes this project, and more, as a zip: choose what you need, and it builds and passes its tests as generated. This page builds it by hand, so you see each part.
+</Callout>
+
+<Steps>
+<Step>
+
+### Create the project
+
+```sh
+mkdir notes && cd notes
+npm init -y && npm pkg set type=module
+npm install @babulvaibhav/egradx-sdk express @prisma/client @prisma/adapter-pg
+npm install -D typescript tsx prisma @types/express @types/node
+```
+
+The SDK runs its SQL through **your** Prisma client, so its writes join your transactions. It owns no Prisma models: your schema holds only your own tables.
+
+<RepoSnippet file="apps/egradx-devportal/examples/node/prisma/schema.prisma" region="prisma-schema" title="prisma/schema.prisma" />
+
+```sh
+npx prisma generate
+```
+
+</Step>
+<Step>
+
+### Wire the SDK
+
+The SDK's tables are migrated first (so your tables can reference them), then your own, with the SDK's migration runner. `seed(...)`, `noteRoutes(...)` and the `onOrganizationCreated` listener are the application's own — they come in [your first endpoint](/docs/get-started/first-endpoint).
+
+<RepoSnippet file="apps/egradx-devportal/examples/node/src/app.ts" region="main" title="src/app.ts" />
+
+</Step>
+<Step>
+
+### Run it
+
+```sh
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/notes EGRADX_KEY_PASSPHRASE=change-it npx tsx src/main.ts
+```
+
+On first start the SDK creates its tables, generates the signing keys in `./keys`, and seeds the platform organization with its administrator.
+
+</Step>
+<Step>
+
+### Sign in
+
+```sh
+curl -s -X POST http://localhost:8080/egradx/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"platform-admin","password":"change-me-platform-admin"}'
+```
+
+The answer carries an `accessToken` and a `refreshToken`. Call the SDK with the access token:
+
+```sh
+curl -s http://localhost:8080/egradx/auth/me -H "Authorization: Bearer $ACCESS_TOKEN"
+```
+
+<Callout title="The seeded administrator">
+  `platform-admin` / `change-me-platform-admin` unless you pass `auth: { platform: { adminPassword } }` before the first start.
+</Callout>
+
+</Step>
+</Steps>
+
+**Next:** [your first endpoint](/docs/get-started/first-endpoint) — protected by a permission, and audited.

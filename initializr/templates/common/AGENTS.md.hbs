@@ -1,0 +1,15 @@
+# {{project.name}}: instructions for coding assistants
+
+This application is built on the EGRADX SDK {{sdkVersion}} ({{#if (eq language "java")}}Java, Spring Boot{{/if}}{{#if (eq language "node")}}Node, Express, Prisma{{/if}}{{#if (eq language "python")}}Python, FastAPI, SQLAlchemy{{/if}}). **Read `egradx-sdk-docs/AGENTS.md`
+before writing code**, and the pages under `egradx-sdk-docs/docs/` for the capability you touch. The SDK already does
+sign-in, permissions, the audit trail, notifications{{#if cap.events}}, events{{/if}} and request ids: this code holds the
+application's business logic only.
+
+## This project
+
+- Endpoints are under `/api/**`. Each states the permission it needs; without one an endpoint is public.
+- Every query on this application's own tables is scoped to the caller's organization. Another organization's
+  record answers 404, never 403.
+- A change worth auditing records an audit event in the same transaction, with `before` and `after`.
+- Errors are the SDK's exceptions with a code of this application (`NOTE_NOT_FOUND`), never hand-built responses.
+- The sample feature, *notes*, shows each of these; follow it for new features.

@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://egradx.com/contracts/schemas/error-codes.json",
+  "title": "EgradxErrorCodes",
+  "description": "Known values of error.code (see error.json). Every module returns the generic codes for the generic cases, plus its own specific codes; an application's own endpoints should use the generic codes too. Clients must still handle an unknown code.",
+  "$defs": {
+    "GenericErrorCode": {
+      "description": "The same code for the same case in every module and every SDK: 401 NOT_AUTHENTICATED, 403 ACCESS_DENIED, 404 NOT_FOUND, 409 CONFLICT, 400 INVALID_REQUEST, 500 INTERNAL_ERROR. A module may answer the same status with a more specific code (e.g. 401 AUTH_INVALID_CREDENTIALS).",
+      "enum": ["NOT_AUTHENTICATED", "ACCESS_DENIED", "NOT_FOUND", "CONFLICT", "INVALID_REQUEST", "INTERNAL_ERROR"]
+    },
+    "AuthErrorCode": {
+      "description": "egradx-auth's specific codes. Java: com.egradx.auth.EgradxAuthErrorCodes.",
+      "enum": [
+        "AUTH_INVALID_CREDENTIALS", "AUTH_REFRESH_TOKEN_INVALID", "AUTH_TOO_MANY_ATTEMPTS",
+        "SESSION_EXPIRED", "SESSION_REVOKED",
+        "ORG_SUSPENDED", "ORG_ACCESS_DENIED", "ORG_SELECTION_REQUIRED",
+        "PROFILE_INVALID",
+        "CONTACT_LIMIT_REACHED", "CONTACT_DUPLICATE", "CONTACT_ALREADY_VERIFIED",
+        "CONTACT_VERIFICATION_UNAVAILABLE", "CONTACT_VERIFICATION_RATE_LIMITED", "CONTACT_VERIFICATION_NOT_STARTED",
+        "CONTACT_VERIFICATION_INVALID_CODE", "CONTACT_VERIFICATION_EXPIRED", "CONTACT_VERIFICATION_TOO_MANY_ATTEMPTS",
+        "PASSWORD_INVALID", "PASSWORD_INCORRECT", "PASSWORD_RESET_INVALID", "PASSWORD_RESET_EXPIRED",
+        "INVITATION_INVALID", "INVITATION_EXPIRED", "INVITATION_ALREADY_ACCEPTED", "INVITATION_SIGN_IN_REQUIRED",
+        "INVITATION_EMAIL_MISMATCH", "INVITATION_ALREADY_MEMBER", "INVITATION_DELIVERY_UNAVAILABLE", "INVITATION_RATE_LIMITED",
+        "EMAIL_IN_USE", "EMAIL_UNCHANGED", "EMAIL_CHANGE_UNAVAILABLE", "EMAIL_CHANGE_RATE_LIMITED", "EMAIL_CHANGE_NOT_STARTED",
+        "EMAIL_CHANGE_INVALID_CODE", "EMAIL_CHANGE_EXPIRED", "EMAIL_CHANGE_TOO_MANY_ATTEMPTS"
+      ]
+    },
+    "AuditErrorCode": {
+      "description": "egradx-audit has no specific codes; it answers with the generic ones.",
+      "enum": []
+    },
+    "NotificationErrorCode": {
+      "description": "egradx-notification's specific codes (inbox, preferences and admin controllers).",
+      "enum": ["NOTIFICATION_NOT_FOUND", "TEMPLATE_INVALID", "CHANNEL_UNAVAILABLE", "AUDIENCE_TOO_LARGE", "RECIPIENTS_UNREACHABLE"]
+    }
+  }
+}

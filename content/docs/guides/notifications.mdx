@@ -1,0 +1,213 @@
+---
+title: Notifications
+description: The in-app bell with its live stream, and email, Slack, SMS, WhatsApp and webhooks — templated, queued with your change, retried, and sent only where people want them.
+---
+
+<Parity id="notifications.in-app" />
+
+## What it is
+
+Two separate things, never implied by each other:
+
+| | In-app | Everything else |
+|---|---|---|
+| What | A notice in people's inbox — the bell — pushed live to open pages | A message on a channel: email, Slack, SMS, WhatsApp, a webhook, or one of yours |
+| Call | `publishToOrganization`, `publishToUser`, `publishToPlatform` | `messenger.send(EgradxMessageRequest…)` |
+| Content | a title, a body, a key and ids for the frontend | a **template** per message type and channel, in each recipient's language |
+| Stored | one row per call, read state per person | an outbox: one delivery per address, retried, logged |
+| Who | everyone in the organization, one person, or everyone | users (at their **verified** address), raw addresses, or a whole organization |
+
+To tell people in the app *and* by email, make both calls.
+
+## How it works
+
+<Mermaid chart={`sequenceDiagram
+  participant S as Your service
+  participant D as PostgreSQL
+  participant X as SDK dispatcher
+  participant P as Mail server / Slack / Twilio
+  participant B as Open browsers
+  S->>D: your change + in-app notice + queued message (one transaction)
+  D-->>S: commit
+  S-->>B: the notice, live (after commit)
+  X->>D: claim due deliveries (lease)
+  X->>P: send
+  X->>D: SENT, or retry later (30 s … 32 min), or DEAD`} />
+
+Nothing is sent on your request's thread, and nothing is sent for a change that rolled back. The dispatcher runs inside your application, on every instance at once without double-sending; there is no broker.
+
+## In-app: the bell
+
+<Languages>
+<Tab value="Java">
+
+<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/java/com/acme/notes/NoteService.java" region="note-service" title="NoteService.java" />
+
+`EgradxInAppMessage(notificationKey, title, body, metadata)` — the key and the metadata (ids as strings) let the frontend choose an icon and a link. Metadata values must not be null in Java.
+
+</Tab>
+<Tab value="Node">
+
+<RepoSnippet file="apps/egradx-devportal/examples/node/src/notes.ts" region="note-routes" title="src/notes.ts" />
+
+</Tab>
+<Tab value="Python">
+
+<RepoSnippet file="apps/egradx-devportal/examples/python/notes.py" region="note-routes" title="notes.py" />
+
+Python's `EgradxInAppMessage(title, body, notification_key=…, metadata=…)` takes the title first: use keywords.
+
+</Tab>
+</Languages>
+
+- `publishToOrganization(org, message)` reaches everyone who was a member when it was published; later members don't see it.
+- `publishToUser(org, userId, message)` reaches one person, shown while they act in that organization (`null` organization: wherever they are).
+- `publishToPlatform(message)` reaches everyone; only the platform's administrators may do it over HTTP.
+
+The browser reads `GET /egradx/notifications` and `/unread-count`, then opens the live stream `GET /egradx/notifications/stream`. The stream replays nothing, so the list is reloaded each time it opens — [the web packages](/docs/guides/web) do all of that.
+
+## Email and the other channels
+
+### 1. Declare the message type
+
+A type names the variables its templates may use. The application does not start if a template uses one it does not declare.
+
+<Languages>
+<Tab value="Java">
+
+<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/java/com/acme/notes/NoteNotifications.java" region="notification-type" title="NoteNotifications.java" />
+
+</Tab>
+<Tab value="Node">
+
+<RepoSnippet file="apps/egradx-devportal/examples/node/src/notifications.ts" region="notification-type" title="src/notifications.ts" />
+
+</Tab>
+<Tab value="Python">
+
+<RepoSnippet file="apps/egradx-devportal/examples/python/notifications.py" region="notification-type" title="notifications.py" />
+
+</Tab>
+</Languages>
+
+### 2. Write its templates
+
+One file per channel and part, named `<key>/<channel>[.<locale>].(subject|body).(txt|html)`, in Handlebars. An `.html` body escapes values; a `.txt` one inserts them as they are.
+
+<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/resources/notification-templates/notes.note.created/email.subject.txt" title="notification-templates/notes.note.created/email.subject.txt" />
+
+<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/resources/notification-templates/notes.note.created/email.body.html" title="notification-templates/notes.note.created/email.body.html" />
+
+A French version is `email.fr.body.html`. A person's language comes from their profile; the search goes `pt-BR` → `pt` → the default. An organization's administrators can replace any template for their organization from the admin screens.
+
+### 3. Send it
+
+<Languages>
+<Tab value="Java">
+
+<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/java/com/acme/notes/NoteService.java" region="note-email" title="NoteService.java" />
+
+</Tab>
+<Tab value="Node">
+
+<RepoSnippet file="apps/egradx-devportal/examples/node/src/notes.ts" region="note-email" title="src/notes.ts" />
+
+</Tab>
+<Tab value="Python">
+
+<RepoSnippet file="apps/egradx-devportal/examples/python/notes.py" region="note-email" title="notes.py" />
+
+</Tab>
+</Languages>
+
+`send` checks everything before queuing — the channel exists and is set up, the template renders, the addresses are valid — and refuses with a 400 (`CHANNEL_UNAVAILABLE`, `TEMPLATE_INVALID`, `RECIPIENTS_UNREACHABLE`) rather than fail later.
+
+### What happened
+
+<RecordedRun name="notifications" />
+
+## Where messages go
+
+| Channel | Address | Set up by |
+|---|---|---|
+| `email` | an email address | an organization's own SMTP settings, else ones stored for all organizations, else **your application's mail server** |
+| `slack` | a Slack member or channel id | the organization's bot token |
+| `sms` | an E.164 number | the organization's Twilio account (or a provider of yours) |
+| `whatsapp` | an E.164 number | Meta or Twilio; outside 24 hours only approved templates arrive |
+| `webhook` | an `https://` URL | nothing needed; signed with HMAC when a secret is stored |
+| yours | anything | a channel of your own (an `EgradxNotificationChannel`) |
+
+Organization administrators set their channels at `/egradx/notifications/admin/channels/*` — or on the [copy-in channels screen](/docs/guides/web#copy-in-screens). Secrets (SMTP passwords, tokens) are encrypted with the secrets passphrase and never returned.
+
+Your application's own mail server, for every organization without settings of its own:
+
+| Java | Node | Python |
+|---|---|---|
+| `spring.mail.host`, `.port` + `egradx.notification.email.from` | `notifications: { builtInChannels: { email: { transport, from } } }` | `NotificationsOptions(built_in_channels=BuiltInChannels(email=ApplicationEmail(SmtpTransport(host, port), sender=…)))` |
+
+## People and their preferences
+
+- A user receives on a channel only at an address they have **verified** with a code — except email, which falls back to the address they sign in with.
+- A type declared `userCanOptOut()` appears on people's settings; sends honour it. Account messages (password reset) can't be opted out of.
+- `toOrganizationMembers()` sends to every active member (a bulk send: at most 1000 by default, expanded in the background), `toAddresses(...)` to people who aren't users.
+
+## Messages that must not break the change
+
+A message queued in your transaction is atomic with it — good for "your note is saved". When a message must never be able to fail the change (an alert on several channels, best effort), send it **after** the commit, each channel on its own, catching everything. That is how OIM's low-stock alert works:
+
+<Languages>
+<Tab value="Java">
+
+<RepoSnippet file="apps/egradx-oim/backend/src/main/java/com/egradx/oim/notification/LowStockAlerts.java" region="low-stock-alert" title="LowStockAlerts.java" />
+
+After a commit the finished transaction is still bound to the thread, so each send runs in a `REQUIRES_NEW` transaction.
+
+</Tab>
+<Tab value="Node">
+
+<RepoSnippet file="apps/egradx-oim/backend-node/src/oim.ts" region="low-stock-in-app" title="src/oim.ts — the notice, then the alert after commit" />
+
+<RepoSnippet file="apps/egradx-oim/backend-node/src/oim.ts" region="low-stock-alert" title="src/oim.ts — the alert" />
+
+</Tab>
+<Tab value="Python">
+
+<RepoSnippet file="apps/egradx-oim/backend-python/src/egradx_oim/oim.py" region="low-stock-in-app" title="oim.py — the notice, then the alert after commit" />
+
+<RepoSnippet file="apps/egradx-oim/backend-python/src/egradx_oim/oim.py" region="low-stock-alert" title="oim.py — the alert" />
+
+</Tab>
+</Languages>
+
+The price: an alert is lost if the process stops between the commit and the send. The in-app notice, written with the change, stays.
+
+<Screenshot name="oim-notification-bell" alt="OIM's dashboard with the notification bell open, showing a notification that arrived while the page was open" caption="A notice arriving live in OIM's bell." />
+
+## Configuration
+
+| | Java (`egradx.notification.*`) | Node (`notifications: {…}`) | Python (`NotificationsOptions(…)`) | Default |
+|---|---|---|---|---|
+| Your templates | `templates.locations: classpath:notification-templates/` | `templates: { directories }` | `template_directories` | none |
+| Sender, with your mail server | `email.from`, `email.from-name` | `builtInChannels.email.from`, `fromName` | `ApplicationEmail(sender=…, sender_name=…)` | — |
+| Secrets passphrase | `secrets.passphrase` (else the keys passphrase) | `secrets: { passphrase }` (else `EGRADX_NOTIFICATION_SECRETS_PASSPHRASE`, `EGRADX_SECURITY_CRYPTO_PASSPHRASE`) | `secrets_passphrase` (same fallbacks) | — |
+| This instance delivers | `dispatcher.enabled` | `dispatcher: { enabled }` | `DispatcherSettings(enabled=…)` | true |
+| Attempts, backoff | `dispatcher.max-attempts`, `.backoff.*` | `dispatcher: {…}` | `DispatcherSettings`, `EgradxBackoffPolicy` | 8; 30 s doubling to 1 h |
+| Bulk send cap | `bulk.max-recipients` | `bulk: { maxRecipients }` | `bulk_max_recipients` | 1000 |
+| Keep sent / dead / in-app | `retention.sent`, `.dead`, `.in-app` | `retention: {…}` | `RetentionSettings(…)` | 30 d / 90 d / 365 d |
+| The logging channel | `channels.log.enabled` | `builtInChannels.log` | `BuiltInChannels(log=True)` | off |
+
+Set `management.health.mail.enabled: false` in Java: a mail server outage delays email; it should not mark the application down.
+
+## Guarantees and limits
+
+- **At least once:** a delivery can be sent twice if an instance dies mid-send; webhooks carry an `Idempotency-Key`.
+- **Live push is per instance:** a notice published on one instance reaches the streams open on that instance. Nothing is lost — the others see it on their next load — and a broadcaster of your own (Redis pub/sub) makes it live everywhere.
+- **Five streams per person per instance**, each reconnecting every five minutes.
+- **Slack, SMS, WhatsApp and webhooks** are tested against local stand-ins of those services, not the live ones.
+- **One outbox for every language:** a message queued by Java can be delivered by a Node instance, and the other way round.
+
+## See also
+
+- [Recipe: send an email when something happens](/docs/recipes/send-an-email) · [add a notification type](/docs/recipes/add-a-notification-type) · [configure SMTP](/docs/recipes/configure-smtp)
+- [Web](/docs/guides/web): the bell, people's settings and the channel screens.
+- [Notification types reference](/docs/reference/notification-types)

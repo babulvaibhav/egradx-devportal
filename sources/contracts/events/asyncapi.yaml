@@ -1,0 +1,68 @@
+asyncapi: 3.0.0
+info:
+  title: EGRADX platform events
+  version: 2.0.0
+  description: |
+    Events every EGRADX SDK publishes and handles, whatever the transport.
+
+    Every event is a CloudEvents 1.0 event in structured JSON (application/cloudevents+json), as
+    schemas/cloudevent.json describes: the same bytes in every SDK and on every transport.
+    Its type is <area>.<entity>.<what-happened>.v<N> in lower case, e.g. egradx.auth.user.deactivated.v1;
+    an incompatible change to data is a new type (v2), published beside the old one until no one
+    handles the old one. The data of each type is the JSON Schema in schemas/<type>.json.
+
+    Transports (egradx.events.transport, EGRADX_EVENTS_TRANSPORT):
+      in-process  the default; no broker, handlers run in the publishing process.
+      rabbitmq    a durable topic exchange, egradx.events, routing key = type. Each service has its
+                  own quorum queue, egradx.events.<service>, bound to the types it handles, so every
+                  service gets every event it handles once, and instances of one service share it.
+                  A failed event waits in <queue>.retry (dead-lettered back after the retry delay),
+                  counting its deliveries in the x-egradx-deliveries header; past the delivery limit
+                  it goes to <queue>.dead. Message properties: content_type application/cloudevents+json,
+                  message_id = id, type = type, persistent.
+      kafka       one topic per type (an optional prefix before it), key = subject; consumer
+                  group = the service. A handler that keeps failing is retried with backoff, then
+                  the record goes, as it came, to <topic>.DLT with Spring Kafka's kafka_dlt-* headers
+                  (original topic, partition as 4 bytes and offset as 8, big-endian; exception
+                  class and message); so does a record that is not an event.
+
+    Order: nothing promises that events are handled in the order they were published. Relays
+    send in claim order and retry failures later, several relays run at once, and on Kafka the
+    key only keeps one subject's events of one type in the order they were sent. Where order
+    matters, carry a sequence number in data and let handlers cope with an older event late.
+
+    Delivery is at least once. Events a change produces are written to the outbox table in the
+    change's own transaction and relayed afterwards; handlers are deduplicated by event id through
+    the inbox table (db/postgresql/events/). Log records are the exception: they go straight to the
+    transport, best effort, and are not deduplicated.
+
+channels:
+  logRecords:
+    address: egradx.log.record.v1
+    description: Log lines, when egradx.observability.logging.shipping.enabled is true.
+    messages:
+      logRecord:
+        $ref: '#/components/messages/LogRecord'
+
+operations:
+  shipLogs:
+    action: send
+    channel:
+      $ref: '#/channels/logRecords'
+    description: |
+      Each SDK's log shipper, at or above the minimum level (INFO by default). The subject is the
+      logger's name; organizationid is the signed-in person's organization, when there is one.
+
+components:
+  messages:
+    LogRecord:
+      contentType: application/cloudevents+json
+      payload:
+        allOf:
+          - $ref: './schemas/cloudevent.json'
+          - type: object
+            properties:
+              type:
+                const: egradx.log.record.v1
+              data:
+                $ref: './schemas/egradx.log.record.v1.json'

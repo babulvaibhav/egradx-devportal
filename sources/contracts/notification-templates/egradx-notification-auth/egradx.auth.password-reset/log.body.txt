@@ -1,0 +1,1 @@
+Reset your password: {{link}} (works once, expires in {{expiresInMinutes}} minutes). If you did not ask for this, ignore this message.

@@ -1,0 +1,154 @@
+---
+title: Observability
+description: A request id on every request, log line, error and record; traces and metrics through OpenTelemetry or Micrometer; and log shipping as events — with the same names in every language.
+---
+
+<Parity id="observability.request-ids" />
+
+## What it is
+
+When something goes wrong, you need to find everything one request did: its log lines, its error, the audit records and messages it wrote, the events it published, and the trace across services. The SDK ties them together with ids:
+
+| | Where it comes from | Where it shows up |
+|---|---|---|
+| **Request id** | the caller's `X-Request-ID` (or `X-Trace-Id`), else a new UUID | the `X-Request-ID` response header, every log line, error bodies, audit records, queued messages, published events, handlers' log lines |
+| **Trace id** | the W3C trace context, when tracing is on | log lines, error bodies, audit records; spans in Jaeger |
+
+The browser client sends a fresh `X-Request-ID` with every call, and shows it on an error, so a user's report leads straight to the logs.
+
+## Request ids in your logs
+
+<Languages>
+<Tab value="Java">
+
+Nothing to do: every log line gets `[traceId,spanId,requestId]` (Spring Boot's correlation pattern, set by the SDK unless you set your own). With your own `logback-spring.xml`, include `META-INF/egradx-observability/logback-correlation.xml` and use `${EGRADX_CORRELATION}` in the pattern. Read it in code with `EgradxRequestContext.currentRequestId()`.
+
+</Tab>
+<Tab value="Node">
+
+Plain text: prefix lines with `correlationPrefix()`. pino: `pino({ ...egradxPinoOptions() })` adds `requestId`, `traceId`, `spanId`, `userId` and `organizationId` to every line. Read it with `currentContext()?.requestId`.
+
+</Tab>
+<Tab value="Python">
+
+<RepoSnippet file="apps/egradx-devportal/examples/python/main.py" region="log-correlation" title="main.py" />
+
+Read it with `mdc_value("requestId")`.
+
+</Tab>
+</Languages>
+
+Every error body carries both ids:
+
+<RecordedRun name="errors" steps={['not-found']} />
+
+## Traces and metrics
+
+The SDK records through the standard APIs — Micrometer's Observation API in Java, OpenTelemetry's in Node and Python — and stays silent until your application turns them on:
+
+<Languages>
+<Tab value="Java">
+
+Add `spring-boot-starter-actuator`, `micrometer-registry-prometheus`, `micrometer-tracing-bridge-otel` and `opentelemetry-exporter-otlp`, then:
+
+<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/resources/application.yml" region="telemetry" title="application.yml" />
+
+</Tab>
+<Tab value="Node">
+
+<RepoSnippet file="apps/egradx-devportal/examples/node/src/telemetry.ts" region="telemetry" title="src/telemetry.ts" />
+
+Start it before Express and `http` are loaded: the example's `main.ts` imports the application only after.
+
+</Tab>
+<Tab value="Python">
+
+<RepoSnippet file="apps/egradx-devportal/examples/python/telemetry.py" region="telemetry" title="telemetry.py" />
+
+</Tab>
+</Languages>
+
+What the SDK measures, with the same names everywhere (each timer tagged `egradx.outcome`):
+
+| Area | Timers | Counters and gauges |
+|---|---|---|
+| Sign-in | `egradx.auth.login`, `.refresh`, `.organization.switch`, `.sessions.revoke`, `.password.*`, `.email_change.*`, `.invitation.*`, `.cleanup` | — |
+| Audit | — | `egradx.audit.recorded`, `.suppressed`, `.write.failed` (alert on it), `.sink.failed` |
+| Notifications | `egradx.notification.send`, `.submit`, `.bulk.submit`, `.bulk.expansion`, `.delivery` | `egradx.notification.delivery.enqueued`, `.delivery.dead` (alert on it), `.delivery.discarded`, `.delivery.backlog` (gauge), `.inbox.published`, `.inbox.connections` (gauge) |
+| Events | `egradx.events.publish`, `.send`, `.handle` | — |
+
+In Prometheus they read `egradx_auth_login_seconds_count` and so on (Node leaves out `_seconds`). Your own metrics can use the same helpers: `EgradxMetrics` / `otelMetrics()` / `OtelMetrics()`. Tag names that identify a person or an id are refused, so cardinality stays bounded.
+
+## Log shipping
+
+Every log line can also leave the service as an `egradx.log.record.v1` event — with its level, logger, message, stack trace, service, trace, request, person and organization — over the [events transport](/docs/guides/events). Whatever stores your logs handles that event type.
+
+<Parity id="observability.log-shipping" />
+
+<Languages>
+<Tab value="Java">
+
+<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/resources/application.yml" region="config" title="application.yml" />
+
+Turned on by `egradx.observability.logging.shipping.enabled: true`, with `egradx-platform-events` present. Every line through SLF4J is shipped, Spring's and the libraries' included.
+
+</Tab>
+<Tab value="Node">
+
+<RepoSnippet file="apps/egradx-devportal/examples/node/src/logging.ts" region="log-shipping" title="src/logging.ts" />
+
+</Tab>
+<Tab value="Python">
+
+<RepoSnippet file="apps/egradx-devportal/examples/python/application.py" region="main" title="application.py" />
+
+`EgradxLogShipper` is a `logging.Handler`: `await shipper.start()` attaches it to the root logger.
+
+</Tab>
+</Languages>
+
+Best effort, never in the way: logging only queues the line; a background sender ships batches straight over the transport (not through the outbox). A full queue drops lines and counts them. With the in-process transport and no handler for `egradx.log.record.v1` in the same service, lines go nowhere — shipping is for a broker.
+
+| | Java (`egradx.observability.logging.shipping.*`) | Node / Python | Default |
+|---|---|---|---|
+| On | `enabled` | wire `EgradxLogShipper` | off |
+| Lowest level shipped | `minimum-level` | `minimumLevel` / `minimum_level` | INFO |
+| Queue, batch, flush | `queue-capacity`, `batch-size`, `flush-interval` | `queueCapacity`, `batchSize`, `flushIntervalMs` / `queue_capacity`, `batch_size`, `flush_interval` | 10 000, 200, 1 s |
+| Never shipped | `excluded` (logger prefixes) | `excluded` | the transports' own loggers |
+
+## Health checks
+
+The SDK has none of its own yet. Java applications use Actuator's `/actuator/health` (turn off the mail health check: an SMTP outage should only delay email). In Node and Python, serve your own.
+
+## Guarantees and limits
+
+- **The same ids in every language**: a request that crosses a Java and a Node service is one trace, and its request id follows it into event handlers.
+- **Untrusted ids are refused**: an incoming request id must be 1–64 characters of letters, digits, `.`, `_`, `-`; otherwise a new one is made.
+- **No metrics for dead events yet**: watch the outbox's `dead_at`, `<queue>.dead` and `.DLT`.
+
+## In OIM
+
+OIM runs Jaeger (`:16686`) and Prometheus (`:9090`) in its compose file; a stock change and the alert emails sent seconds later on the dispatcher are one trace, and the delivery log can be searched by trace id.
+
+<Languages>
+<Tab value="Java">
+
+<RepoSnippet file="apps/egradx-oim/backend/src/main/resources/application.yml" region="telemetry" title="application.yml" />
+
+</Tab>
+<Tab value="Node">
+
+<RepoSnippet file="apps/egradx-oim/backend-node/src/telemetry.ts" region="telemetry" title="src/telemetry.ts" />
+
+</Tab>
+<Tab value="Python">
+
+<RepoSnippet file="apps/egradx-oim/backend-python/src/egradx_oim/telemetry.py" region="telemetry" title="telemetry.py" />
+
+</Tab>
+</Languages>
+
+## See also
+
+- [Recipe: ship logs](/docs/recipes/ship-logs) · [request ids in your own log format](/docs/recipes/request-ids-in-logs)
+- [Configuration reference](/docs/reference/configuration)

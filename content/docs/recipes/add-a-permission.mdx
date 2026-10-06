@@ -1,0 +1,54 @@
+---
+title: Add a permission and give it to a role
+description: Put your application's own authority in the SDK's catalog at start-up, and on the roles of every new organization.
+---
+
+## 1. Create it once, at start-up
+
+Creating an authority that already exists fails. So list the catalog first, create what is missing, and run this on every start.
+
+## 2. Give it to the roles of each new organization
+
+The listener for *organization created* runs inside the provisioning transaction, so the new organization's roles hold your authorities before anyone signs in. It is also where you create roles of your own (Manager, Staff…) with `createSystemRole`.
+
+<Languages>
+<Tab value="Java">
+
+<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/java/com/acme/notes/Setup.java" region="seed-permission" title="Setup.java" />
+
+`@Order(100)` runs it after the SDK's own start-up seeding.
+
+</Tab>
+<Tab value="Node">
+
+<RepoSnippet file="apps/egradx-devportal/examples/node/src/setup.ts" region="seed-permission" title="src/setup.ts" />
+
+</Tab>
+<Tab value="Python">
+
+<RepoSnippet file="apps/egradx-devportal/examples/python/seeding.py" region="seed-permission" title="seeding.py" />
+
+</Tab>
+</Languages>
+
+## 3. Organizations that already exist
+
+The listener runs only when an organization is created. Organizations that already exist don't get the new authority on their own. You have two ways:
+
+- **In code, once:** for each organization, add it to a role: Java `EgradxRoleService.addAuthoritiesToRole(organizationId, "Admin", …)`, Node `egradx.auth.roles.addAuthoritiesToRole(…)`, Python `sdk.auth.roles.add_authorities_to_role(…)`.
+- **By their administrators:** on the roles screen, or `PATCH /egradx/auth/my/roles/{roleId}/permissions` (needs `egradx.role.manage`).
+
+## Check it
+
+`GET /egradx/auth/permissions` lists the catalog, yours included. Someone whose role now holds the authority gets it on their **next request**: the SDK reads a role's authorities on every call, not at sign-in. Other instances can take up to 60 seconds, because each caches a role's authorities.
+
+## Naming
+
+- Use `area.action`: `note.write`, `order.cancel`. Nothing enforces this, but it keeps the catalog readable.
+- The `egradx.` prefix belongs to the SDK.
+- Check authorities in code, never role names: administrators can rename and reshape roles.
+
+## See also
+
+- [Authorization](/docs/guides/authorization) · [Permissions reference](/docs/reference/permissions)
+- [Protect an endpoint](/docs/recipes/protect-an-endpoint)

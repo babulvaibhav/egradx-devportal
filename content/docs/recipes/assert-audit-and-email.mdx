@@ -1,0 +1,51 @@
+---
+title: Check an audit record or an email in a test
+description: After calling your endpoint, ask the SDK what it recorded and sent — the audit record, the notice, the email, the event.
+---
+
+The generated test does each of these after creating a note:
+
+<Languages>
+<Tab value="Java">
+
+<RepoSnippet file="apps/egradx-devportal/examples/java/src/test/java/com/acme/notes/NotesTests.java" region="test" title="NotesTests.java" />
+
+GreenMail is the SMTP server inside the test.
+
+</Tab>
+<Tab value="Node">
+
+<RepoSnippet file="apps/egradx-devportal/examples/node/test/notes.test.ts" region="test" title="test/notes.test.ts" />
+
+`smtp-server` with `mailparser` is the SMTP server inside the test.
+
+</Tab>
+<Tab value="Python">
+
+<RepoSnippet file="apps/egradx-devportal/examples/python/tests/test_notes.py" region="test" title="tests/test_notes.py" />
+
+`aiosmtpd` is the SMTP server inside the test.
+
+</Tab>
+</Languages>
+
+## What to ask
+
+| To check | Ask | Look at |
+|---|---|---|
+| The audit record | `GET /egradx/audit/events?action=notes.note.created&entityId=<id>` | `before`, `after`, `changedFields`, `outcome`, `actor` |
+| The notice in the bell | `GET /egradx/notifications` | the item's `notificationKey`, `title`, `body` |
+| The email | the test's SMTP server | recipient, subject, body |
+| The email's delivery | `GET /egradx/notifications/admin/deliveries?channel=email` | `SENT`, or `DEAD` with `lastError` |
+| An event handled | whatever its handler changed | — |
+| A refusal | the status and `error.code` | — |
+
+The audit record and the notice are written in the request's transaction: they are there when the response arrives. The email and events go out **after** the commit, so wait for them. Poll with a deadline, as the tests above do, rather than sleeping a fixed time.
+
+## Without HTTP
+
+In a Java test with the application context, inject `EgradxAuditor` and search for the record directly (see [read the trail](/docs/recipes/read-the-trail)). In Node and Python, use `egradx.auditor.search(...)` / `sdk.auditor.search(...)`.
+
+## See also
+
+- [Testing](/docs/guides/testing#checking-what-the-sdk-did) · [Integration test](/docs/recipes/integration-test)

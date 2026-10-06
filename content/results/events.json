@@ -1,0 +1,156 @@
+{
+  "capturedAt": "2026-10-05T14:15:41.722Z",
+  "sdkVersion": "1.0.0",
+  "languages": {
+    "java": [
+      {
+        "name": "stats-before",
+        "title": "The count the handler keeps",
+        "request": {
+          "method": "GET",
+          "path": "/api/notes/stats"
+        },
+        "response": {
+          "status": 200,
+          "body": {
+            "notesCreated": 1
+          }
+        }
+      },
+      {
+        "name": "publish",
+        "title": "A note: the event goes out with it",
+        "request": {
+          "method": "POST",
+          "path": "/api/notes",
+          "body": {
+            "title": "Order more paper"
+          }
+        },
+        "response": {
+          "status": 201,
+          "body": {
+            "id": "0c702e2a-0924-4354-a912-4369f20bed3a",
+            "organizationId": "05817b4a-7d07-4442-930e-57fdd09d4c7d",
+            "title": "Order more paper",
+            "body": null
+          }
+        }
+      },
+      {
+        "name": "stats-after",
+        "title": "A moment later: handled",
+        "request": {
+          "method": "GET",
+          "path": "/api/notes/stats"
+        },
+        "response": {
+          "status": 200,
+          "body": {
+            "notesCreated": 2
+          }
+        }
+      }
+    ],
+    "node": [
+      {
+        "name": "stats-before",
+        "title": "The count the handler keeps",
+        "request": {
+          "method": "GET",
+          "path": "/api/notes/stats"
+        },
+        "response": {
+          "status": 200,
+          "body": {
+            "notesCreated": 1
+          }
+        }
+      },
+      {
+        "name": "publish",
+        "title": "A note: the event goes out with it",
+        "request": {
+          "method": "POST",
+          "path": "/api/notes",
+          "body": {
+            "title": "Order more paper"
+          }
+        },
+        "response": {
+          "status": 201,
+          "body": {
+            "id": "7fbfd2a7-f483-4002-a186-cfdd8a22cf7a",
+            "organizationId": "8d41721e-4d59-494c-8f8c-8487d9adc1b2",
+            "title": "Order more paper",
+            "body": null
+          }
+        }
+      },
+      {
+        "name": "stats-after",
+        "title": "A moment later: handled",
+        "request": {
+          "method": "GET",
+          "path": "/api/notes/stats"
+        },
+        "response": {
+          "status": 200,
+          "body": {
+            "notesCreated": 2
+          }
+        }
+      }
+    ],
+    "python": [
+      {
+        "name": "stats-before",
+        "title": "The count the handler keeps",
+        "request": {
+          "method": "GET",
+          "path": "/api/notes/stats"
+        },
+        "response": {
+          "status": 200,
+          "body": {
+            "notesCreated": 1
+          }
+        }
+      },
+      {
+        "name": "publish",
+        "title": "A note: the event goes out with it",
+        "request": {
+          "method": "POST",
+          "path": "/api/notes",
+          "body": {
+            "title": "Order more paper"
+          }
+        },
+        "response": {
+          "status": 201,
+          "body": {
+            "id": "a610afc6-488f-4ce9-af22-d40ca10ae666",
+            "organizationId": "95602ad6-dc6e-440e-a8a5-5f01592d2c5f",
+            "title": "Order more paper",
+            "body": null
+          }
+        }
+      },
+      {
+        "name": "stats-after",
+        "title": "A moment later: handled",
+        "request": {
+          "method": "GET",
+          "path": "/api/notes/stats"
+        },
+        "response": {
+          "status": 200,
+          "body": {
+            "notesCreated": 2
+          }
+        }
+      }
+    ]
+  }
+}

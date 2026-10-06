@@ -1,0 +1,23 @@
+---
+title: Guides
+description: One guide per capability of the SDK — what it is, how it works, how to use it in Java, Node and Python, what it guarantees, and how OIM uses it.
+---
+
+Each guide follows the same order: **what it is and why**, **how it works**, **the code** (cut from the example applications, which are what [the Initializr](/start) generates), **what it answers** (recorded from those applications), **configuration**, **guarantees and limits**, and **in OIM**. The marks under each title say how far each language has it; [the parity page](/docs/reference/parity) has them all.
+
+<Cards>
+  <Card title="Sign-in & identity" href="/docs/guides/identity">Users, organizations, roles, sessions, invitations, password reset, profiles.</Card>
+  <Card title="Authorization" href="/docs/guides/authorization">Your permissions, the roles that hold them, and protecting an endpoint.</Card>
+  <Card title="Multi-tenancy" href="/docs/guides/multi-tenancy">What the SDK knows about the caller's organization, and what your queries must do with it.</Card>
+  <Card title="Audit trail" href="/docs/guides/audit">Who changed what: recorded with the change, kept, searched and exported.</Card>
+  <Card title="Notifications" href="/docs/guides/notifications">The bell, email and the other channels, templates, preferences.</Card>
+  <Card title="Events" href="/docs/guides/events">Telling other services what happened: outbox, handlers, RabbitMQ, Kafka.</Card>
+  <Card title="Observability" href="/docs/guides/observability">Request ids, traces, metrics and log shipping.</Card>
+  <Card title="Errors" href="/docs/guides/errors">One envelope and one set of codes, everywhere.</Card>
+  <Card title="Database & migrations" href="/docs/guides/database">The SDK's tables beside yours, and the order they are made in.</Card>
+  <Card title="Keys" href="/docs/guides/keys">The signing keys every instance shares.</Card>
+  <Card title="Core utilities" href="/docs/guides/core-utilities">Sealed secrets, ids, random strings, gzip, lifecycle.</Card>
+  <Card title="Web" href="/docs/guides/web">The browser client, React hooks, the Next.js backend-for-frontend, copy-in screens.</Card>
+  <Card title="Testing your application" href="/docs/guides/testing">Signing in, and checking records, mail and events in tests.</Card>
+  <Card title="Java-only modules" href="/docs/guides/java-only">gRPC, WebFlux and the older request-context modules.</Card>
+</Cards>

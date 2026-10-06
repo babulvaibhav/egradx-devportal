@@ -1,0 +1,107 @@
+---
+title: Deploy with Docker Compose
+description: Build your application's image, and run it with PostgreSQL, a mail server and a keys volume — the same in Java, Node and Python.
+---
+
+Choose **Dockerfile** in [the Initializr](/start) and the project gets a `Dockerfile` and a `.dockerignore`. The example applications were built and run exactly as below, signed in to, and called.
+
+## 1. Build the image
+
+The SDK's packages are on GitHub Packages, so the build needs your token. It is passed as a build secret, so it never ends up in a layer.
+
+<Languages>
+<Tab value="Java">
+
+<RepoSnippet file="apps/egradx-devportal/examples/java/Dockerfile" title="Dockerfile" />
+
+```sh
+docker build --secret id=maven-settings,src=$HOME/.m2/settings.xml -t notes .
+```
+
+</Tab>
+<Tab value="Node">
+
+<RepoSnippet file="apps/egradx-devportal/examples/node/Dockerfile" title="Dockerfile" />
+
+```sh
+docker build --secret id=github-token,env=GITHUB_TOKEN -t notes .
+```
+
+</Tab>
+<Tab value="Python">
+
+<RepoSnippet file="apps/egradx-devportal/examples/python/Dockerfile" title="Dockerfile" />
+
+```sh
+python scripts/get_wheels.py && docker build -t notes .
+```
+
+The wheels are fetched first, with your token, into `egradx-wheels/`; the build itself needs none. `HOST=0.0.0.0` matters: uvicorn listens on 127.0.0.1 by default, which nothing outside the container can reach.
+
+</Tab>
+</Languages>
+
+`.dockerignore` keeps `keys/`, `.env` and local build output out of the build. Never bake the keys into an image.
+
+## 2. Run it
+
+```yaml title="compose.prod.yml"
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: notes
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      retries: 10
+
+  notes:
+    image: notes
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/notes               # Java
+      DB_PASSWORD: ${DB_PASSWORD}                                 # Java
+      DATABASE_URL: postgresql://postgres:${DB_PASSWORD}@postgres:5432/notes   # Node, Python
+      EGRADX_KEY_PASSPHRASE: ${EGRADX_KEY_PASSPHRASE:?set EGRADX_KEY_PASSPHRASE}
+      SMTP_HOST: smtp.example.com
+      SMTP_PORT: "587"
+    volumes:
+      - keys:/app/keys
+    ports:
+      - "8080:8080"
+
+volumes:
+  postgres:
+  keys:
+```
+
+```sh
+DB_PASSWORD=… EGRADX_KEY_PASSPHRASE=… docker compose -f compose.prod.yml up -d
+```
+
+On the first start the application migrates the database (the SDK's tables, then yours) and creates its keys in the `keys` volume. Every start after that reuses them.
+
+## 3. Before real users
+
+- **The passphrase** comes from a secret store, not a file in the repository. Losing it, or the `keys` volume, signs everyone out.
+- **Back up** the `postgres` and `keys` volumes.
+- **The platform administrator's password:** set it before the first start (Java `EGRADX_AUTH_PLATFORM_ADMIN_PASSWORD`). Node and Python take it in code.
+- **Links in emails:** set the frontend's address (`links.base-url`), or password reset and invitations can't be sent.
+- **A reverse proxy** in front: TLS, and buffering turned off for `/egradx/notifications/stream`.
+- **Remove the demo data:** the generated `Setup` creates a demo organization with `ada@example.com`.
+
+The [production checklist](/docs/operate/production) has the full list.
+
+## More than one instance
+
+Put a load balancer in front, drop the fixed `ports` mapping from `notes`, and scale (`docker compose up -d --scale notes=2`). Do this only after the first instance has started once, so the keys exist. Every instance mounts the same `keys` volume. Then read [two instances](/docs/recipes/two-instances).
+
+## See also
+
+- [Keys](/docs/guides/keys) · [Operate](/docs/operate)

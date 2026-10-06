@@ -1,0 +1,17 @@
+{
+  "description": "A refresh token is stored as the lowercase hex SHA-256 of its UTF-8 bytes, never as itself (auth V5). Every SDK hashes a presented token this way to find its row; V5 converts tokens stored before it with the same function in SQL.",
+  "cases": [
+    {
+      "token": "opaque-refresh-token",
+      "hash": "862f58013a2bd2d34eba271c56252c0e69b4715133aea31b0d0ebbb1470c3d6e"
+    },
+    {
+      "token": "Xq3v_9zB0kLmN4pQ8rS2tU6wY1aC5eG7iK0oM3sV9xA",
+      "hash": "750993fe3285b33b27ffa755c66fd6352a0776c36881fc17111931c18ed3c2fa"
+    },
+    {
+      "token": "ünïcødé-✓",
+      "hash": "6887a30229a8ccb04a5cb70210ce1018e0338af078a04eeb4a6c97db38d61e17"
+    }
+  ]
+}

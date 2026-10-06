@@ -1,0 +1,51 @@
+---
+title: Java-only modules
+description: The Java SDK's older and partial modules — gRPC and WebFlux context, the WebService base class, the request-context interceptor — what each does, and what to use instead.
+---
+
+<Parity id="java.webservice" />
+
+`egradx-sdk` is all a Java application needs. The modules below are separate, older, or partial; most applications should not add them.
+
+| Module | What it is | Status | Use instead |
+|---|---|---|---|
+| `egradx-bom` | the versions of every EGRADX artifact | ✓ | import it, as the generated projects do |
+| `egradx-sdk-root` | a parent POM with Spring Boot 3.4.9, Java 21 and aligned Spring Cloud / gRPC versions | ✓ | optional; the BOM is enough |
+| `egradx-webservice` | `WebService` base class (`getCurrentUserId()`, `getAccessToken()`…) and an application-wide error handler | partial | `EgradxTenantContextAccessor`, and [the error advice](/docs/guides/errors#wiring-the-envelope-in) |
+| `egradx-web-context-manager` | an interceptor on `/api/**` storing the caller's token data; `EgradxWebRequestContextUtil` | partial | `EgradxTenantContextAccessor` |
+| `egradx-web-security` | token utilities, the service-token manager, a shared `RestTemplate` | ✓ (comes with `egradx-sdk`) | — |
+| `egradx-grpc-context-manager`, `egradx-grpc-service` | the caller on gRPC calls | partial | — |
+| `egradx-webflux-security` | token conversion for reactive applications | partial | — |
+| `egradx-autoconfigure` | annotations only | vestigial | nothing |
+
+## What doesn't work
+
+- **`WebService.getActiveAccountId()` and `getPrimaryAccountId()` return the user's id, not the organization.** Scoping by them scopes by person. Use `tenant.current().orElseThrow().organizationId()`.
+- **`WebService.getMessage(...)` fails:** it needs an application context that is never given to it.
+- **`EgradxWebRequestContextUtil.getTraceId()` fails** when the caller sent no `X-Trace-Id`. Use `EgradxRequestContext.currentRequestId()`, never null in a request.
+- **An expired token** reaching the `/api/**` interceptor becomes a 500 with `egradx-webservice`'s handler, not a 401.
+- **gRPC:** the token and locale are never stored, so `getAccessToken()` and `getLocale()` return null.
+- **WebFlux:** token conversion only — no caller context, no service-token manager.
+
+## Service-to-service tokens
+
+`EgradxServiceTokenManager` (in `egradx-web-security`) gets client-credentials tokens from an **outside** OAuth server, for calling a service that trusts that server:
+
+```yaml
+egradx:
+  service:
+    token:
+      enabled: true
+  security:
+    client:
+      client-id: notes
+      client-secret: ${NOTES_CLIENT_SECRET}
+      authorization-grant-type: client_credentials
+spring.security.oauth2.resourceserver.jwt.issuer-uri: https://auth.example.com/realms/acme   # its token endpoint is discovered here
+```
+
+Inject it and send `Bearer ` + `getAccessToken()` with the shared `RestTemplate`. egradx-auth does **not** issue these tokens, and it treats any non-person token as anonymous: to call another application on the SDK, forward the signed-in person's token instead (both must share the keys and the database). Node (`createServiceTokenManager` in `@babulvaibhav/egradx-security`) and Python (`egradx.security.ServiceTokenManager`) have the same client.
+
+## See also
+
+- [Parity](/docs/reference/parity)

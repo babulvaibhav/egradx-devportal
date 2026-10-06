@@ -1,0 +1,56 @@
+---
+title: Invite a user into an organization
+description: An administrator invites someone by email with a role; they follow the link, then join with a new account or the one they have.
+---
+
+The SDK handles the invitation itself: the table, the email, the link, the expiry, and joining. You supply two things: where the link points, and the two screens.
+
+## 1. Tell the SDK where your frontend is
+
+Invitation emails link to `<base url>/accept-invite?token=…`. Without a base URL, no invitation can be sent: the SDK refuses with `INVITATION_DELIVERY_UNAVAILABLE`.
+
+| Java | Node | Python |
+|---|---|---|
+| `egradx.auth.links.base-url: https://notes.example.com` | `auth: { links: { baseUrl: 'https://notes.example.com' } }` | `AuthOptions(links=LinkSettings(base_url="https://notes.example.com"))` (`from egradx.auth import LinkSettings`) |
+
+Email must work too: see [configure SMTP](/docs/recipes/configure-smtp). Locally, Mailpit shows the invitation at `http://localhost:8025`.
+
+## 2. The invite form
+
+People with `egradx.user.manage` (every organization's `Admin`) invite. They choose one of the organization's roles:
+
+<RepoSnippet file="apps/egradx-devportal/examples/web-vite/src/recipes/Invitations.tsx" region="invite-someone" title="src/recipes/Invitations.tsx" />
+
+Inviting an address again replaces its pending invitation. `GET /egradx/auth/my/invitations` lists the pending ones; `…/{id}/resend` and `DELETE …/{id}` resend and withdraw them.
+
+## 3. The page the link opens
+
+Serve `/accept-invite` in your frontend:
+
+<RepoSnippet file="apps/egradx-devportal/examples/web-vite/src/recipes/Invitations.tsx" region="accept-invitation" title="src/recipes/Invitations.tsx" />
+
+- **No account yet:** they choose a name and a password, and the account is created as they join.
+- **An account already:** they sign in as the invited address first, then join with no body. Signed in as anyone else, they get `INVITATION_EMAIL_MISMATCH`.
+- Either way the answer is a session in the new organization. `adopt` makes it the current one.
+
+With Next.js, the same component works through the backend-for-frontend.
+
+In `proxy.ts`, let signed-out people open the pages: `bff.guard(request, { signInPath: '/login', publicPaths: ['/forgot-password', '/reset-password', '/accept-invite'] })`.
+
+## What can go wrong
+
+| Code | When |
+|---|---|
+| `INVITATION_ALREADY_MEMBER` (409) | the address already belongs to the organization |
+| `INVITATION_DELIVERY_UNAVAILABLE` (400) | no base URL, or email isn't set up |
+| `INVITATION_RATE_LIMITED` (400) | the invitation was re-sent too soon after the last |
+| `INVITATION_EXPIRED` (400), `INVITATION_INVALID` (404), `INVITATION_ALREADY_ACCEPTED` (409) | an old, replaced or used link |
+| `INVITATION_SIGN_IN_REQUIRED` (403) | an existing account tried to join without signing in |
+
+## From code, or for another organization
+
+The platform administrator invites into any organization with `POST /egradx/auth/organizations/{organizationId}/invitations`. To create people without an email round trip, provision them instead: see [identity](/docs/guides/identity#organizations-and-their-first-administrator).
+
+## See also
+
+- [Sign-in & identity](/docs/guides/identity) · [HTTP: invitations](/docs/reference/http/auth#invitations)

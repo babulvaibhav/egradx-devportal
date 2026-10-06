@@ -1,0 +1,50 @@
+---
+title: The dashboard cache
+description: OIM's dashboard summary, cached per organization and evicted only after a change commits — so a concurrent read can't put stale numbers back.
+---
+
+The dashboard counts products, warehouses, stock and orders: several queries per load. OIM caches the result **per organization** for 60 seconds, and evicts it when something it counts changes.
+
+## Keyed by organization
+
+A cache shared by every organization must never answer one with another's numbers. The key carries the organization:
+
+<Languages>
+<Tab value="Java">
+
+<RepoSnippet file="apps/egradx-oim/backend/src/main/java/com/egradx/oim/dashboard/application/DashboardService.java" region="dashboard-cache" title="DashboardService.java" />
+
+The organization comes from the SDK's caller, through OIM's `CurrentTenant` bean. The cache is Redis in Docker, and in-process with the `local` profile.
+
+</Tab>
+<Tab value="Node">
+
+<RepoSnippet file="apps/egradx-oim/backend-node/src/oim.ts" region="dashboard-cache" title="src/oim.ts" />
+
+</Tab>
+<Tab value="Python">
+
+<RepoSnippet file="apps/egradx-oim/backend-python/src/egradx_oim/oim.py" region="dashboard-cache" title="oim.py" />
+
+</Tab>
+</Languages>
+
+## Evicted after the commit
+
+Every service that changes something the dashboard counts evicts the organization's entry, and the eviction waits until the change has committed. Evicting inside the transaction would leave a gap: a read in that gap misses the cache, reads the database as it was **before** the commit, and caches the old numbers again for 60 seconds.
+
+<RepoSnippet file="apps/egradx-oim/backend/src/main/java/com/egradx/oim/dashboard/application/DashboardCacheEvictor.java" title="DashboardCacheEvictor.java" />
+
+Node and Python register the eviction on the SDK's transaction (`currentTransaction().afterCommit` / `current_transaction().after_commit`), the same transaction the audit records and events join.
+
+## With several instances
+
+An in-process cache is per instance: another instance can keep showing old numbers for up to 60 seconds. OIM's Java backend uses Redis in Docker, so every instance shares one cache and one eviction. For the Node and Python backends, the 60-second expiry bounds how stale the numbers can be.
+
+## Watch out: Java takes over the SDK's cache too
+
+Declaring a `CacheManager`, as OIM does for Redis, also replaces the one the SDK uses for its role-authority cache. Size and expire it with that in mind.
+
+## See also
+
+- [Several instances](/docs/operate/multiple-instances) · [Multi-tenancy](/docs/guides/multi-tenancy#the-rules)

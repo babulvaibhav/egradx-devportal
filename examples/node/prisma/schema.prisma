@@ -1,0 +1,27 @@
+// docs:region prisma-schema
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+// docs:end
+
+// The application's own tables, created by migrations/*.sql (Prisma only maps them; the SDK's tables are not here).
+model Note {
+  id             String  @id @db.Uuid
+  organizationId String  @map("organization_id") @db.Uuid
+  title          String
+  body           String?
+
+  @@map("notes_note")
+}
+
+model NoteStats {
+  organizationId String @id @map("organization_id") @db.Uuid
+  notesCreated   BigInt @map("notes_created")
+
+  @@map("notes_note_stats")
+}

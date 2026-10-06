@@ -1,0 +1,57 @@
+---
+title: The portal
+description: How this portal is built — where its code comes from, what is generated, and the commands that refresh it after an SDK change.
+---
+
+The portal is a static Next.js site with Fumadocs, in `apps/egradx-devportal`. It has no backend. It can be built from the monorepo, or from a repository holding only the portal.
+
+## Code on a page is never pasted
+
+Every snippet is cut from a file that compiles and runs, between markers:
+
+```ts
+// docs:region note-routes
+…
+// docs:end
+```
+
+```mdx
+<RepoSnippet file="apps/egradx-devportal/examples/node/src/notes.ts" region="note-routes" title="src/notes.ts" />
+```
+
+| Source | What |
+|---|---|
+| `examples/{java,node,python,web-vite,web-next}` | the Initializr's own output (everything chosen), plus `recipes/` files for recipes the sample feature doesn't cover |
+| `apps/egradx-oim/**` | OIM, for the "In OIM" sections and the showcase |
+| `sources/` | copies of files outside the app (OIM snippets, `contracts/`, the copy-in screens), refreshed by `npm run sync` in the monorepo, so the portal also builds on its own |
+
+The markers are left out of Initializr downloads.
+
+## What is generated
+
+| What | By | When |
+|---|---|---|
+| `examples/*` | `scripts/generate-examples.mjs` (`--check` to compare) | after a template change |
+| `content/results/*.json`, the recorded runs | `scripts/capture.mjs`: runs each example, calls it, records the answers | after an example or SDK change |
+| contract references (HTTP, errors, events, database, permissions, configuration…) | `scripts/build-reference.mjs` | every build |
+| Node, web and Python API pages; the Java javadoc and configuration data | `scripts/build-api-reference.mjs` | after an SDK change (committed) |
+| screenshots | `scripts/import-screens.mjs`, from OIM's browser tests | after a screen changes |
+
+## Commands
+
+```sh
+npm run dev           # the site, with hot reload
+npm run build         # sync, references, the site, then a check of every link
+npm run types:check   # TypeScript
+npm run lint          # oxlint
+node scripts/test-initializr.mjs   # generate, build, test and start every Initializr combination
+```
+
+`npm run build` fails on any broken link or anchor.
+
+## Writing a page
+
+- Follow the guides' order: what it is, how it works, the code, what it answers, configuration, guarantees and limits, in OIM.
+- Show all three languages in `<Languages>` tabs, and use the same wording for the same thing.
+- State limits plainly, and put them in [known limitations](/docs/operate/known-limitations) as well.
+- A claim about behaviour comes from the code, a contract, or a recorded run.

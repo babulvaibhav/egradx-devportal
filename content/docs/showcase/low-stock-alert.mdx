@@ -1,0 +1,65 @@
+---
+title: The low-stock alert
+description: How OIM tells people a product is running out — a notice written with the stock change, and an alert on every channel after it commits, once per drop.
+---
+
+When a product's available stock in a warehouse drops below 10, OIM tells the organization twice:
+
+1. **A notice in the bell**, written in the stock change's transaction: it exists only if the change commits.
+2. **An alert on every channel the organization has set up** (email, Slack, SMS, WhatsApp), sent **after** the commit, each channel on its own. A failure there never affects the stock change.
+
+It fires once per drop: from 10 or more to below 10. A restock above 10 re-arms it.
+
+## The type
+
+The alert is a notification type that people can turn off, with templates per channel:
+
+<RepoSnippet file="apps/egradx-oim/backend/src/main/java/com/egradx/oim/notification/OimNotificationTypes.java" region="notification-type" title="OimNotificationTypes.java" />
+
+## The notice, then the alert
+
+<Languages>
+<Tab value="Java">
+
+<RepoSnippet file="apps/egradx-oim/backend/src/main/java/com/egradx/oim/notification/OimNotifications.java" region="low-stock-in-app" title="OimNotifications.java — the notice" />
+
+<RepoSnippet file="apps/egradx-oim/backend/src/main/java/com/egradx/oim/notification/LowStockAlerts.java" region="low-stock-alert" title="LowStockAlerts.java — the alert, after commit" />
+
+After a commit, the finished transaction is still bound to the thread. So each send runs in a `REQUIRES_NEW` transaction of its own.
+
+</Tab>
+<Tab value="Node">
+
+<RepoSnippet file="apps/egradx-oim/backend-node/src/oim.ts" region="low-stock-in-app" title="src/oim.ts — the notice, then the alert after commit" />
+
+<RepoSnippet file="apps/egradx-oim/backend-node/src/oim.ts" region="low-stock-alert" title="src/oim.ts — the alert" />
+
+</Tab>
+<Tab value="Python">
+
+<RepoSnippet file="apps/egradx-oim/backend-python/src/egradx_oim/oim.py" region="low-stock-in-app" title="oim.py — the notice, then the alert after commit" />
+
+<RepoSnippet file="apps/egradx-oim/backend-python/src/egradx_oim/oim.py" region="low-stock-alert" title="oim.py — the alert" />
+
+</Tab>
+</Languages>
+
+## Why it is split this way
+
+| | In the transaction | After the commit |
+|---|---|---|
+| The notice | ✓: it must match the stock exactly | |
+| The alert | | ✓: a channel that isn't set up, or an invalid address, must not undo a stock change |
+| If the process stops in between | the notice stays | the alert is lost |
+
+A message queued inside the transaction would be atomic with the change, but it would also make `send`'s checks (the channel is set up, the template renders) able to fail the change. For an alert on several channels, best effort is the better trade.
+
+## Who receives it
+
+Every member of the organization, on each channel at an address they have verified. For email, the address they sign in with counts. People can turn it off on their notification settings. The metric `egradx_oim_low_stock_alert_total` counts alerts queued, skipped and failed, per channel.
+
+<Screenshot name="oim-notification-bell" alt="OIM's dashboard with the bell open, showing a notice that arrived while the page was open" caption="The notice, arriving live in the bell." />
+
+## See also
+
+- [Notifications](/docs/guides/notifications#messages-that-must-not-break-the-change) · [Send an email](/docs/recipes/send-an-email)

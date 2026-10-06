@@ -1,0 +1,59 @@
+# docs:region config
+spring:
+  application:
+    name: notes
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/notes}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:postgres}
+  # The application's own mail server, used for every organization that has not stored SMTP settings of its own.
+  # Locally that is Mailpit (docker compose up): http://localhost:8025 shows what was sent.
+  mail:
+    host: ${SMTP_HOST:localhost}
+    port: ${SMTP_PORT:1025}
+    properties:
+      mail.smtp.connectiontimeout: 10000   # JavaMail waits for ever by default
+      mail.smtp.timeout: 30000
+      mail.smtp.writetimeout: 30000
+
+egradx:
+  security:
+    crypto:
+      keystorePath: ${EGRADX_KEYSTORE_PATH:./keys}   # created on first start, reused after
+      passphrase: ${EGRADX_KEY_PASSPHRASE}           # required; keep it secret
+  auth:
+    issuer-uri: ${EGRADX_ISSUER:https://notes.local}   # any stable identifier, stamped on every token
+  notification:
+    templates:
+      locations: classpath:notification-templates/   # your message templates, checked at startup
+    email:
+      from: ${EMAIL_FROM:no-reply@notes.local}
+      from-name: Notes
+  events:
+    transport: in-process            # or rabbitmq, kafka: the same code
+  observability:
+    logging:
+      shipping:
+        enabled: true          # every log line also leaves as an egradx.log.record.v1 event
+        minimum-level: INFO
+# docs:end
+
+# docs:region telemetry
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  health:
+    mail:
+      enabled: false           # an SMTP outage delays email; it must not mark the application DOWN
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLING_PROBABILITY:1.0}
+  otlp:
+    tracing:
+      endpoint: ${OTLP_TRACING_ENDPOINT:http://localhost:4318/v1/traces}
+# docs:end
+
+server:
+  port: ${PORT:8080}

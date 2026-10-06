@@ -1,0 +1,44 @@
+---
+title: Bulk-send to an organization
+description: One message to every member of an organization — accepted at once, expanded in the background, and followed until it's done.
+---
+
+<Languages>
+<Tab value="Java">
+
+<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/java/com/acme/notes/recipes/Messages.java" region="bulk-send" title="Messages.java" />
+
+</Tab>
+<Tab value="Node">
+
+<RepoSnippet file="apps/egradx-devportal/examples/node/src/recipes/messages.ts" region="bulk-send" title="src/recipes/messages.ts" />
+
+</Tab>
+<Tab value="Python">
+
+<RepoSnippet file="apps/egradx-devportal/examples/python/recipes/messages.py" region="bulk-send" title="recipes/messages.py" />
+
+</Tab>
+</Languages>
+
+## What happens
+
+1. `send` writes **one row** and returns at once with a `bulkSendId`, so a large organization doesn't make the request slow.
+2. In the background, the members are expanded **200 at a time** into deliveries, each to that person's verified address on the channel (for email, the address they sign in with).
+3. Each delivery is sent, retried and logged like any other. People who turned the type off are skipped.
+
+Follow it with `GET /egradx/notifications/admin/bulk-sends/{id}`, which shows its status and its counts.
+
+## Limits
+
+- **At most 1000 recipients** by default: Java `egradx.notification.bulk.max-recipients`, Node `bulk: { maxRecipients }`, Python `bulk_max_recipients`. A larger organization is refused rather than cut short.
+- Ready-made content (`EgradxMessageContent.of(subject, body)`) needs no template. A notification type with templates works too, and is translated per person.
+- To reach **everyone on the platform**, the platform's administrators use `/egradx/notifications/admin/platform/bulk-sends`.
+
+## In the app as well
+
+A bulk send is a message on a channel. For the bell, publish an in-app notice too: `publishToOrganization` reaches every member in one row.
+
+## See also
+
+- [Notifications](/docs/guides/notifications) · [Send to someone who isn't a user](/docs/recipes/send-to-address)

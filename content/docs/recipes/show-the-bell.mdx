@@ -1,0 +1,64 @@
+---
+title: Show the notification bell
+description: An unread count, the inbox, and notices that arrive while the page is open — in React with Vite or Next.js.
+---
+
+## 1. Publish a notice from the server
+
+<Languages>
+<Tab value="Java">
+
+<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/java/com/acme/notes/NoteService.java" region="note-service" title="NoteService.java" />
+
+</Tab>
+<Tab value="Node">
+
+<RepoSnippet file="apps/egradx-devportal/examples/node/src/notes.ts" region="note-routes" title="src/notes.ts" />
+
+</Tab>
+<Tab value="Python">
+
+<RepoSnippet file="apps/egradx-devportal/examples/python/notes.py" region="note-routes" title="notes.py" />
+
+</Tab>
+</Languages>
+
+`publishToOrganization` reaches everyone in the organization, and `publishToUser` one person. The notice is written with your change and pushed to open pages after the commit.
+
+## 2. The bell
+
+Either write it on the hook:
+
+<RepoSnippet file="apps/egradx-devportal/examples/web-vite/src/Bell.tsx" region="web-bell" title="src/Bell.tsx" />
+
+…or copy in the ready one, which also does paging and read state, and takes your shadcn theme:
+
+```sh
+npx shadcn@latest add https://<this portal>/r/notification-bell.json
+```
+
+Use `useInbox()` **once**, high in the tree, and pass its data down: each use opens its own stream.
+
+## 3. Let the stream through
+
+The live stream is `GET /egradx/notifications/stream`, server-sent events.
+
+- **Vite in development:** the generated `vite.config.ts` already proxies `/egradx` to the backend.
+- **Next.js:** the backend-for-frontend forwards it.
+- **Production:** turn buffering off for that path in your reverse proxy (nginx: `proxy_buffering off;`), and allow connections of at least five minutes: the stream reconnects every five.
+
+## What happened
+
+<RecordedRun name="notifications" steps={['inbox', 'unread-count']} />
+
+<Screenshot name="oim-notification-bell" alt="OIM's dashboard with the notification bell open" caption="OIM's bell: a notice published by the API arrives while the page is open." />
+
+## Good to know
+
+- The stream replays nothing; `useInbox` reloads the list each time it reopens, so nothing is missed.
+- It lets go of the connection while the tab is hidden.
+- With several instances, a notice reaches the streams open **on the instance that published it**. The others see it on their next load: see [two instances](/docs/recipes/two-instances).
+
+## See also
+
+- [Notifications](/docs/guides/notifications#in-app-the-bell) · [Web](/docs/guides/web)

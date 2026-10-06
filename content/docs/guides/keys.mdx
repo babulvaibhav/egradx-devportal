@@ -1,0 +1,41 @@
+---
+title: Keys
+description: The signing keys every application on the SDK makes on its first start, and shares with its other instances — in any language.
+---
+
+<Parity id="core.keys" />
+
+## What it is
+
+Every application on the SDK signs its own access tokens; there is no separate sign-in server. On its first start it creates two RSA-2048 key pairs in a folder — one to sign tokens, one to encrypt — each with a self-signed certificate, and reuses them after. The private keys are encrypted with a passphrase you give it.
+
+| File | What |
+|---|---|
+| `egradx_sig_private_key.pem`, `egradx_sig_cert.der` | the signing key (`egradx-sig-key`, RS256) and its certificate |
+| `egradx_enc_private_key.pem`, `egradx_enc_cert.der` | the encryption key (`egradx-enc-key`, RSA-OAEP) and its certificate |
+
+| | Java | Node | Python |
+|---|---|---|---|
+| The folder | `egradx.security.crypto.keystorePath` | `auth: { keys: { keystorePath } }` | `AuthOptions(keystore_path=…)` |
+| The passphrase | `egradx.security.crypto.passphrase` | `auth: { keys: { passphrase } }` | `AuthOptions(keystore_passphrase=…)` |
+
+The generated projects read them from `EGRADX_KEYSTORE_PATH` (default `./keys`) and `EGRADX_KEY_PASSPHRASE`.
+
+## Rules
+
+- **Every instance of a service shares one folder and one passphrase** — a volume mounted on each. A token signed by one instance is then accepted by all of them.
+- **Start one instance first** on an empty folder, and the others after it has made the keys. Several starting together on an empty folder can each make keys, and the last write wins; an instance still signing with a key no longer on disk issues tokens the others refuse — people see their sessions end.
+- **Keep the passphrase stable, and secret.** A changed passphrase can't read the keys. Back the folder up: losing it signs everyone out (and a new one is made).
+- **Never commit the folder.** The generated projects' `.gitignore` excludes `keys/`.
+- **Any language:** Java, Node and Python read and write the same files in the same formats. Point services in different languages at one folder, with the same passphrase and the same issuer, and they accept each other's tokens.
+
+## Guarantees and limits
+
+- **No JWKS endpoint yet:** no service publishes its public keys; tokens carry no `kid`. Services that verify each other's tokens share the folder.
+- **Java writes the private key files with the system's default permissions**; Node and Python restrict them to the owner. Restrict the folder yourself.
+- The keys don't rotate on their own.
+
+## See also
+
+- [Sign-in & identity](/docs/guides/identity)
+- [Operate: several instances](/docs/operate/multiple-instances)

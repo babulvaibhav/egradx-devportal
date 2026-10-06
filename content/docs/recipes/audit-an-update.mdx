@@ -1,0 +1,54 @@
+---
+title: Record an update with before and after
+description: One audit record per change, written in the change's transaction, with the state before, the state after, and the fields that changed.
+---
+
+## 1. Record it where the change is made
+
+Load the current state, apply the change, then record both states, inside the same transaction:
+
+<Languages>
+<Tab value="Java">
+
+<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/java/com/acme/notes/NoteService.java" region="note-update" title="NoteService.java" />
+
+Inside `@Transactional`, the record joins it. Pass plain values (records, DTOs, maps), never JPA entities: states are serialised at once, and an entity's lazy fields would be read or fail.
+
+</Tab>
+<Tab value="Node">
+
+<RepoSnippet file="apps/egradx-devportal/examples/node/src/notes.ts" region="note-update" title="src/notes.ts" />
+
+The record joins `egradxTransaction(prisma, …)`. A plain `prisma.$transaction(...)` is **not** joined: the record would be written on its own, and would survive a rollback.
+
+</Tab>
+<Tab value="Python">
+
+<RepoSnippet file="apps/egradx-devportal/examples/python/notes.py" region="note-update" title="notes.py" />
+
+The record joins `egradx_transaction(engine)`.
+
+</Tab>
+</Languages>
+
+## 2. Name the action
+
+`category.entity.verb`, lower case, past tense: `notes.note.updated`. The category is the first word, and the audit screen filters on it. Describe your actions once so the screen shows words people understand: see [the catalog](/docs/guides/audit#your-actions-on-the-audit-screen).
+
+## What it records
+
+<RecordedRun name="audit" steps={['update', 'update-record']} />
+
+- `changedFields` lists the top-level fields that differ. It is worked out before secrets are redacted, so a changed password shows as changed without its value.
+- Keys such as `password`, `token`, `secret` and `otp` are redacted wherever they appear in a state.
+- The actor, the organization, the request id and the trace id are filled in from the request.
+
+## The thing's history
+
+`GET /egradx/audit/timeline?entityType=note&entityId=…` gives one note's records, newest first. In React, `useAuditTimeline('note', id)`, or the copy-in `AuditHistoryButton`.
+
+<RecordedRun name="audit" steps={['timeline']} />
+
+## See also
+
+- [Audit trail](/docs/guides/audit) · [Record a refusal](/docs/recipes/record-a-refusal) · [Read the trail in code](/docs/recipes/read-the-trail)

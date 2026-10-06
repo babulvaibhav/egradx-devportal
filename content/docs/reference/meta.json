@@ -1,0 +1,23 @@
+{
+  "title": "Reference",
+  "pages": [
+    "index",
+    "---HTTP API---",
+    "http",
+    "---Languages---",
+    "java",
+    "node",
+    "python",
+    "web",
+    "---Contracts---",
+    "configuration",
+    "errors",
+    "events",
+    "headers-and-tokens",
+    "database",
+    "permissions",
+    "audit-actions",
+    "notification-types",
+    "parity"
+  ]
+}

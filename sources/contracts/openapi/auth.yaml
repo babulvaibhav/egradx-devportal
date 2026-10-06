@@ -1,0 +1,3625 @@
+openapi: 3.1.0
+info:
+  title: EGRADX auth API
+  version: 1.0.0
+tags:
+- description: "The signed-in person's own profile: details, contact addresses and\
+    \ communication preferences. Needs only a signed-in session. Contacts and preferences\
+    \ are those that apply everywhere plus those scoped to the organization the session\
+    \ is in."
+  name: Your profile
+- description: "The signed-in person's own account: password, sessions, organizations\
+    \ and sign-in email. Needs only a signed-in session. Changing the password and\
+    \ signing out everywhere end every session, this one included, and return a fresh\
+    \ session in its place."
+  name: Your account
+- description: "The roles of the organization your session is in, and the permissions\
+    \ each grants. Reading needs `egradx.role.read` (or `egradx.user.manage`, to fill\
+    \ a user form), changing needs `egradx.role.manage`."
+  name: "Your organization: roles"
+- description: "The people in the organization your session is in; the organization\
+    \ comes from the token, not the URL. Reading needs `egradx.user.read`, changing\
+    \ needs `egradx.user.manage`."
+  name: "Your organization: users"
+- description: "The member profile routes with the organization in the URL, for an\
+    \ administrator acting on an organization other than their session's: in practice\
+    \ the platform administrator. Each needs the usual user authority plus membership\
+    \ of that organization, or a platform session; export and erase need `egradx.organization.manage`,\
+    \ since they span every organization the person belongs to."
+  name: Member profiles (platform)
+- description: "Register, sign in, renew and end a session, read the signed-in user,\
+    \ and see which account flows this deployment offers. Public: none of these needs\
+    \ a session, except reading the signed-in user, which reads the bearer token."
+  name: Sign-in and sessions
+- description: "Inviting people into an organization by email, and the invitation\
+    \ link's own side. Opening and accepting a link is public; listing, sending, resending\
+    \ and withdrawing invitations to your organization needs `egradx.user.read` or\
+    \ `egradx.user.manage`."
+  name: Invitations
+- description: "An administrator managing the profile of someone in the organization\
+    \ their session is in. Reading needs `egradx.user.read`, changing needs `egradx.user.manage`;\
+    \ someone outside the organization answers `NOT_FOUND` (404). Contacts scoped\
+    \ to another organization the person belongs to are not visible here."
+  name: Member profiles
+- description: "Any organization by id: the organizations themselves, and their users,\
+    \ roles and invitations. The organization routes need `egradx.organization.read`\
+    \ or `egradx.organization.manage`, which only a role in the platform organization\
+    \ can hold. The users, roles and invitations routes need the usual user or role\
+    \ authority plus membership of that organization, or a platform session."
+  name: Organizations (platform)
+- description: "The permission vocabulary roles are built from: global, the same for\
+    \ every organization."
+  name: Permissions
+- description: "A forgotten password: request a reset link by email, then set a new\
+    \ password with it. Public."
+  name: Password reset
+paths:
+  /egradx/auth/account-options:
+    get:
+      description: "Whether password reset, invitations and email change can deliver\
+        \ their messages here, and the password length limits, so a sign-in page can\
+        \ hide what cannot work. Public."
+      operationId: accountOptions
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxAccountOptionsDto"
+          description: OK
+      summary: Get which account flows this deployment offers
+      tags:
+      - Sign-in and sessions
+  /egradx/auth/invitations/{token}:
+    get:
+      description: "What an invitation link is for: the organization, the address\
+        \ invited, the role, who sent it and when it expires, and whether an account\
+        \ already exists for the address (sign in to accept) or not (choose a name\
+        \ and password). Public. Refuses with `INVITATION_INVALID` (404), `INVITATION_EXPIRED`\
+        \ (400) and `INVITATION_ALREADY_ACCEPTED` (409)."
+      operationId: preview
+      parameters:
+      - in: path
+        name: token
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxInvitationPreviewDto"
+          description: OK
+      summary: Preview an invitation
+      tags:
+      - Invitations
+  /egradx/auth/invitations/{token}/accept:
+    post:
+      description: "Joins the organization and returns a session in it. If the invited\
+        \ address already has an account the caller must be signed in as it, and no\
+        \ body is needed; otherwise the body's name and password create the account.\
+        \ Refuses with `INVITATION_SIGN_IN_REQUIRED`, `INVITATION_EMAIL_MISMATCH`\
+        \ or `ORG_SUSPENDED` (403), `INVITATION_ALREADY_ACCEPTED` or `INVITATION_ALREADY_MEMBER`\
+        \ (409), `INVITATION_INVALID` (404), and `INVITATION_EXPIRED` or `PASSWORD_INVALID`\
+        \ (400)."
+      operationId: accept
+      parameters:
+      - in: path
+        name: token
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EgradxAcceptInvitationRequest"
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxAuthResult"
+          description: OK
+      summary: Accept an invitation
+      tags:
+      - Invitations
+  /egradx/auth/login:
+    post:
+      description: "Checks the username (or email) and password, and returns an access\
+        \ token and a refresh token scoped to one organization. Public. Someone in\
+        \ more than one organization must name one in `organizationId`, or is refused\
+        \ with `ORG_SELECTION_REQUIRED` (400) listing the choices in `details.organizations`;\
+        \ other refusals are `AUTH_INVALID_CREDENTIALS` (401, the same for an unknown\
+        \ user, a deactivated one and a wrong password), `AUTH_TOO_MANY_ATTEMPTS`\
+        \ (429, with `Retry-After`), and `ORG_ACCESS_DENIED` or `ORG_SUSPENDED` (403)."
+      operationId: login
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EgradxLoginRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxAuthResult"
+          description: OK
+      summary: Sign in
+      tags:
+      - Sign-in and sessions
+  /egradx/auth/logout:
+    post:
+      description: "Revokes the refresh token sent and answers 204. Public. An unknown\
+        \ or already revoked token is not an error, so the answer never says whether\
+        \ a token was valid."
+      operationId: logout
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EgradxRefreshTokenRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+      summary: Sign out
+      tags:
+      - Sign-in and sessions
+  /egradx/auth/me:
+    get:
+      description: "The user the bearer token in the `Authorization` header belongs\
+        \ to. Refuses with `SESSION_EXPIRED` (401) when the token is malformed, expired\
+        \ or fails verification, or the user was deactivated or had their sessions\
+        \ ended after it was issued."
+      operationId: me
+      parameters:
+      - in: header
+        name: Authorization
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxUserDto"
+          description: OK
+      summary: Get the signed-in user
+      tags:
+      - Sign-in and sessions
+  /egradx/auth/my/email:
+    get:
+      description: "The change of sign-in email waiting for its code, or 204 when\
+        \ there is none or it has expired. Needs a signed-in session."
+      operationId: pendingEmailChange
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxEmailChangeStartedDto"
+          description: OK
+      summary: Get the email change under way
+      tags:
+      - Your account
+    post:
+      description: "Checks the current password and sends a six-digit code to the\
+        \ new address, replacing any change under way. Needs a signed-in session.\
+        \ Refuses with `PASSWORD_INCORRECT`, `EMAIL_UNCHANGED`, `EMAIL_CHANGE_RATE_LIMITED`\
+        \ or `EMAIL_CHANGE_UNAVAILABLE` (400), `AUTH_TOO_MANY_ATTEMPTS` (429), and\
+        \ `EMAIL_IN_USE` (409)."
+      operationId: startEmailChange
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EgradxStartEmailChangeRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxEmailChangeStartedDto"
+          description: OK
+      summary: Start changing your sign-in email
+      tags:
+      - Your account
+  /egradx/auth/my/email/confirm:
+    post:
+      description: "Completes the change with the code sent to the new address and\
+        \ returns the updated user; a username that was the old address follows it.\
+        \ Needs a signed-in session. Refuses with `EMAIL_CHANGE_NOT_STARTED`, `EMAIL_CHANGE_EXPIRED`,\
+        \ `EMAIL_CHANGE_INVALID_CODE` or `EMAIL_CHANGE_TOO_MANY_ATTEMPTS` (400), and\
+        \ `EMAIL_IN_USE` (409)."
+      operationId: confirmEmailChange
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EgradxConfirmEmailChangeRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxUserDto"
+          description: OK
+      summary: Confirm your new sign-in email
+      tags:
+      - Your account
+  /egradx/auth/my/invitations:
+    get:
+      description: "Newest first, expired ones included so they can be resent. Needs\
+        \ `egradx.user.read`."
+      operationId: listInvitations_1
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EgradxInvitationDto"
+          description: OK
+      summary: List your organization's pending invitations
+      tags:
+      - Invitations
+    post:
+      description: "Emails an invitation link for the given role to the address, replacing\
+        \ any pending invitation to it. Needs `egradx.user.manage`. Refuses with `INVITATION_ALREADY_MEMBER`\
+        \ (409), `INVITATION_RATE_LIMITED` or `INVITATION_DELIVERY_UNAVAILABLE` (400),\
+        \ `ORG_SUSPENDED` (403), and an unknown role with `NOT_FOUND` (404)."
+      operationId: invite_1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EgradxCreateInvitationRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxInvitationDto"
+          description: OK
+      summary: Invite someone to your organization
+      tags:
+      - Invitations
+  /egradx/auth/my/invitations/{invitationId}:
+    delete:
+      description: Its link stops working; withdrawing one already withdrawn changes
+        nothing. Needs `egradx.user.manage`. Refuses with `INVITATION_INVALID` (404)
+        and `INVITATION_ALREADY_ACCEPTED` (409).
+      operationId: revokeInvitation_1
+      parameters:
+      - in: path
+        name: invitationId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: OK
+      summary: Withdraw an invitation
+      tags:
+      - Invitations
+  /egradx/auth/my/invitations/{invitationId}/resend:
+    post:
+      description: "Sends a pending invitation again with a new link and a fresh expiry;\
+        \ the old link stops working. Needs `egradx.user.manage`. Refuses with `INVITATION_INVALID`\
+        \ (404) when no pending invitation has that id, `INVITATION_RATE_LIMITED`\
+        \ or `INVITATION_DELIVERY_UNAVAILABLE` (400), and `ORG_SUSPENDED` (403)."
+      operationId: resendInvitation_1
+      parameters:
+      - in: path
+        name: invitationId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxInvitationDto"
+          description: OK
+      summary: Resend an invitation
+      tags:
+      - Invitations
+  /egradx/auth/my/organization:
+    get:
+      description: Needs a signed-in session; a session in no organization is refused
+        with `ORG_ACCESS_DENIED` (401).
+      operationId: getMyOrganization
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxOrganizationDto"
+          description: OK
+      summary: Get the organization you are signed in to
+      tags:
+      - Your account
+  /egradx/auth/my/organizations:
+    get:
+      description: "Every organization the signed-in person belongs to, by name, with\
+        \ their role in each; suspended ones are included and flagged, and the current\
+        \ one is marked. Needs a signed-in session."
+      operationId: organizations
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EgradxMyOrganizationDto"
+          description: OK
+      summary: List your organizations
+      tags:
+      - Your account
+  /egradx/auth/my/organizations/{organizationId}/switch:
+    post:
+      description: "Starts a session in another organization the person belongs to\
+        \ and returns its tokens; sending the current refresh token in the optional\
+        \ body revokes the session being left. Needs a signed-in session. Refuses\
+        \ with `ORG_ACCESS_DENIED` (403) when they are not a member, and `ORG_SUSPENDED`\
+        \ (403)."
+      operationId: switchOrganization
+      parameters:
+      - in: path
+        name: organizationId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EgradxSwitchOrganizationRequest"
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxAuthResult"
+          description: OK
+      summary: Switch to another organization
+      tags:
+      - Your account
+  /egradx/auth/my/password:
+    post:
+      description: "Checks the current password and sets the new one; every session\
+        \ ends, this one included, and a fresh session is returned to carry on with.\
+        \ Needs a signed-in session. Refuses with `PASSWORD_INCORRECT` or `PASSWORD_INVALID`\
+        \ (400), and `AUTH_TOO_MANY_ATTEMPTS` (429, with `Retry-After`) after too\
+        \ many wrong passwords."
+      operationId: changePassword
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EgradxChangePasswordRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxAuthResult"
+          description: OK
+      summary: Change your password
+      tags:
+      - Your account
+  /egradx/auth/my/profile:
+    delete:
+      description: "Deletes everything the profile holds (details, contact addresses,\
+        \ pending codes and preferences) but not the account. Needs a signed-in session."
+      operationId: erase_1
+      responses:
+        "200":
+          description: OK
+      summary: Erase your profile
+      tags:
+      - Your profile
+    get:
+      description: "Your details, and the contact addresses visible from the organization\
+        \ your session is in. Needs a signed-in session."
+      operationId: get_2
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxUserProfileDto"
+          description: OK
+      summary: Get your profile
+      tags:
+      - Your profile
+    put:
+      description: "Replaces every editable field; a field sent as null is cleared.\
+        \ Needs a signed-in session. An invalid field is refused with `PROFILE_INVALID`\
+        \ (400), naming it."
+      operationId: update_2
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EgradxUpdateProfileRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxUserProfileDto"
+          description: OK
+      summary: Update your profile
+      tags:
+      - Your profile
+  /egradx/auth/my/profile/contacts:
+    get:
+      description: "Those that apply everywhere, plus those scoped to the organization\
+        \ your session is in. Needs a signed-in session."
+      operationId: contacts_2
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EgradxContactDto"
+          description: OK
+      summary: List your contact addresses
+      tags:
+      - Your profile
+    post:
+      description: "The address starts unverified: you verify it by confirming a code\
+        \ sent to it. Needs a signed-in session. Refuses with `PROFILE_INVALID` (400)\
+        \ for an invalid address or for asking to mark it verified, `CONTACT_LIMIT_REACHED`\
+        \ (400), and `CONTACT_DUPLICATE` (409)."
+      operationId: addContact_2
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EgradxCreateContactRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxContactDto"
+          description: OK
+      summary: Add a contact address
+      tags:
+      - Your profile
+  /egradx/auth/my/profile/contacts/{contactId}:
+    delete:
+      description: "If it was the primary address on its channel, the oldest remaining\
+        \ one takes its place. Needs a signed-in session. An address not on your profile\
+        \ answers `NOT_FOUND` (404)."
+      operationId: deleteContact_2
+      parameters:
+      - in: path
+        name: contactId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: OK
+      summary: Remove a contact address
+      tags:
+      - Your profile
+    put:
+      description: "Changes the address or its label; a changed address becomes unverified,\
+        \ and any code on its way to the old one is cancelled. Needs a signed-in session.\
+        \ Refuses with `PROFILE_INVALID` (400), `CONTACT_DUPLICATE` (409), and `NOT_FOUND`\
+        \ (404) for an address not on your profile."
+      operationId: updateContact_2
+      parameters:
+      - in: path
+        name: contactId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EgradxUpdateContactRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxContactDto"
+          description: OK
+      summary: Change a contact address
+      tags:
+      - Your profile
+  /egradx/auth/my/profile/contacts/{contactId}/primary:
+    post:
+      description: "It becomes the primary address on its channel, and the one before\
+        \ it stops being. Needs a signed-in session."
+      operationId: makePrimary_2
+      parameters:
+      - in: path
+        name: contactId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxContactDto"
+          description: OK
+      summary: Make a contact address primary
+      tags:
+      - Your profile
+  /egradx/auth/my/profile/contacts/{contactId}/verification:
+    post:
+      description: "Sends a fresh code to the address, replacing any earlier one.\
+        \ Needs a signed-in session. Refuses with `CONTACT_VERIFICATION_UNAVAILABLE`,\
+        \ `CONTACT_VERIFICATION_RATE_LIMITED` or `CONTACT_ALREADY_VERIFIED` (400)."
+      operationId: startVerification_2
+      parameters:
+      - in: path
+        name: contactId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxContactVerificationStartedDto"
+          description: OK
+      summary: Send a verification code
+      tags:
+      - Your profile
+  /egradx/auth/my/profile/contacts/{contactId}/verification/confirm:
+    post:
+      description: "Marks the address verified when the code is right; a wrong code\
+        \ counts against a limit. Needs a signed-in session. Refuses with `CONTACT_VERIFICATION_NOT_STARTED`,\
+        \ `CONTACT_VERIFICATION_EXPIRED`, `CONTACT_VERIFICATION_INVALID_CODE` or `CONTACT_VERIFICATION_TOO_MANY_ATTEMPTS`\
+        \ (400)."
+      operationId: confirmVerification
+      parameters:
+      - in: path
+        name: contactId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EgradxConfirmContactRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxContactDto"
+          description: OK
+      summary: Confirm a verification code
+      tags:
+      - Your profile
+  /egradx/auth/my/profile/export:
+    get:
+      description: "Everything held about you, across all your organizations; credentials\
+        \ excluded. Needs a signed-in session."
+      operationId: export_1
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxProfileExportDto"
+          description: OK
+      summary: Export your profile
+      tags:
+      - Your profile
+  /egradx/auth/my/profile/options:
+    get:
+      description: "The contact channels and their address formats, the limits, and\
+        \ whether addresses can be verified by code here: what the profile forms are\
+        \ built from. Needs a signed-in session."
+      operationId: options
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxProfileOptionsDto"
+          description: OK
+      summary: Get the profile form options
+      tags:
+      - Your profile
+  /egradx/auth/my/profile/preferences:
+    get:
+      description: "Those that apply everywhere, plus those for the organization your\
+        \ session is in. Needs a signed-in session."
+      operationId: preferences_2
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EgradxCommunicationPreferenceDto"
+          description: OK
+      summary: Get your communication preferences
+      tags:
+      - Your profile
+    put:
+      description: "Replaces the preferences that apply everywhere and those for the\
+        \ organization your session is in; other organizations' stay. Needs a signed-in\
+        \ session. An unknown notification key, or a preference given twice, is refused\
+        \ with `PROFILE_INVALID` (400)."
+      operationId: replacePreferences_2
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EgradxReplacePreferencesRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EgradxCommunicationPreferenceDto"
+          description: OK
+      summary: Replace your communication preferences
+      tags:
+      - Your profile
+  /egradx/auth/my/roles:
+    get:
+      description: "Each role with the permissions it grants. Needs `egradx.role.read`\
+        \ or `egradx.user.manage`: assigning someone a role means first seeing which\
+        \ roles exist."
+      operationId: listRoles_1
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EgradxRoleDto"
+          description: OK
+      summary: List your organization's roles
+      tags:
+      - "Your organization: roles"
+    post:
+      description: "Needs `egradx.role.manage`. Refuses a name already used in the\
+        \ organization with `CONFLICT` (409), an unknown permission with `NOT_FOUND`\
+        \ (404), and a permission only the platform organization may grant with `INVALID_REQUEST`\
+        \ (400)."
+      operationId: createRole_1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EgradxCreateRoleRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxRoleDto"
+          description: OK
+      summary: Create a role in your organization
+      tags:
+      - "Your organization: roles"
+  /egradx/auth/my/roles/{roleId}:
+    delete:
+      description: "Needs `egradx.role.manage`. Refuses a system role, or one still\
+        \ assigned to someone, with `INVALID_REQUEST` (400)."
+      operationId: deleteRole_1
+      parameters:
+      - in: path
+        name: roleId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: OK
+      summary: Delete a role in your organization
+      tags:
+      - "Your organization: roles"
+    patch:
+      description: "Needs `egradx.role.manage`. Refuses renaming a system role with\
+        \ `INVALID_REQUEST` (400), and a name already used with `CONFLICT` (409)."
+      operationId: renameRole_1
+      parameters:
+      - in: path
+        name: roleId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EgradxRenameRoleRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxRoleDto"
+          description: OK
+      summary: Rename a role in your organization
+      tags:
+      - "Your organization: roles"
+  /egradx/auth/my/roles/{roleId}/permissions:
+    patch:
+      description: "Sets the role's whole permission set to the ids sent; an empty\
+        \ set grants nothing. Needs `egradx.role.manage`. Refuses an unknown role\
+        \ or permission with `NOT_FOUND` (404), and a permission only the platform\
+        \ organization may grant with `INVALID_REQUEST` (400)."
+      operationId: replaceRolePermissions_1
+      parameters:
+      - in: path
+        name: roleId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EgradxReplaceRolePermissionsRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxRoleDto"
+          description: OK
+      summary: Replace a role's permissions in your organization
+      tags:
+      - "Your organization: roles"
+  /egradx/auth/my/sessions/revoke-all:
+    post:
+      description: "Ends every session the person has, on every device, and returns\
+        \ a fresh session in the same organization in place of this one. Needs a signed-in\
+        \ session."
+      operationId: signOutEverywhere
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxAuthResult"
+          description: OK
+      summary: Sign out everywhere
+      tags:
+      - Your account
+  /egradx/auth/my/users:
+    get:
+      description: "A page of the organization's members, each with their role, sortable\
+        \ by `name`, `email` or `createdAt`. Needs `egradx.user.read`."
+      operationId: listUsers_1
+      parameters:
+      - in: query
+        name: pageable
+        required: true
+        schema:
+          $ref: "#/components/schemas/Pageable"
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/PageEgradxOrganizationUserDto"
+          description: OK
+      summary: List the people in your organization
+      tags:
+      - "Your organization: users"
+    post:
+      description: "Creates an account and makes it a member with the given role;\
+        \ the username defaults to the email. Needs `egradx.user.manage`. Refuses\
+        \ a username or email already in use with `CONFLICT` (409), an unknown role\
+        \ with `NOT_FOUND` (404), and a password outside the rule with `PASSWORD_INVALID`\
+        \ (400)."
+      operationId: createUser_1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EgradxCreateOrganizationUserRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxOrganizationUserDto"
+          description: OK
+      summary: Add a person to your organization
+      tags:
+      - "Your organization: users"
+  /egradx/auth/my/users/{userId}:
+    delete:
+      description: "The account keeps its membership and role but can no longer sign\
+        \ in, and a live session ends on its next request. Needs `egradx.user.manage`.\
+        \ Deactivating yourself is refused with `INVALID_REQUEST` (400)."
+      operationId: deactivateUser_1
+      parameters:
+      - in: path
+        name: userId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: OK
+      summary: Deactivate a person in your organization
+      tags:
+      - "Your organization: users"
+    get:
+      description: Needs `egradx.user.read`. Someone who is not a member answers `NOT_FOUND`
+        (404).
+      operationId: getUser_1
+      parameters:
+      - in: path
+        name: userId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxOrganizationUserDto"
+          description: OK
+      summary: Get a person in your organization
+      tags:
+      - "Your organization: users"
+    patch:
+      description: "Changes only the fields sent: details, password, active flag or\
+        \ role. Setting a password ends every session the person has. Needs `egradx.user.manage`.\
+        \ Refuses a username or email already in use with `CONFLICT` (409), and someone\
+        \ who is not a member with `NOT_FOUND` (404)."
+      operationId: updateUser_1
+      parameters:
+      - in: path
+        name: userId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EgradxUpdateOrganizationUserRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxOrganizationUserDto"
+          description: OK
+      summary: Update a person in your organization
+      tags:
+      - "Your organization: users"
+  /egradx/auth/my/users/{userId}/profile:
+    get:
+      description: "Their details, and the contact addresses visible from your organization.\
+        \ Needs `egradx.user.read`."
+      operationId: get_1
+      parameters:
+      - in: path
+        name: userId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxUserProfileDto"
+          description: OK
+      summary: Get a member's profile
+      tags:
+      - Member profiles
+    put:
+      description: "Replaces every editable field; a field sent as null is cleared.\
+        \ The details are shared, so the change is seen in every organization the\
+        \ person is in. Needs `egradx.user.manage`. An invalid field is refused with\
+        \ `PROFILE_INVALID` (400)."
+      operationId: update_1
+      parameters:
+      - in: path
+        name: userId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EgradxUpdateProfileRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxUserProfileDto"
+          description: OK
+      summary: Update a member's profile
+      tags:
+      - Member profiles
+  /egradx/auth/my/users/{userId}/profile/contacts:
+    get:
+      description: "Those that apply everywhere, plus those scoped to your organization.\
+        \ Needs `egradx.user.read`."
+      operationId: contacts_1
+      parameters:
+      - in: path
+        name: userId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EgradxContactDto"
+          description: OK
+      summary: List a member's contact addresses
+      tags:
+      - Member profiles
+    post:
+      description: "An administrator may vouch for the address by sending `verified:\
+        \ true`. Needs `egradx.user.manage`. Refuses with `PROFILE_INVALID` or `CONTACT_LIMIT_REACHED`\
+        \ (400), and `CONTACT_DUPLICATE` (409)."
+      operationId: addContact_1
+      parameters:
+      - in: path
+        name: userId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EgradxCreateContactRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxContactDto"
+          description: OK
+      summary: Add a contact address for a member
+      tags:
+      - Member profiles
+  /egradx/auth/my/users/{userId}/profile/contacts/{contactId}:
+    delete:
+      description: "If it was the primary address on its channel, the oldest remaining\
+        \ one takes its place. Needs `egradx.user.manage`."
+      operationId: deleteContact_1
+      parameters:
+      - in: path
+        name: userId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: path
+        name: contactId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: OK
+      summary: Remove a member's contact address
+      tags:
+      - Member profiles
+    put:
+      description: Changes the address or its label; a changed address becomes unverified.
+        Needs `egradx.user.manage`. Refuses with `PROFILE_INVALID` (400) and `CONTACT_DUPLICATE`
+        (409).
+      operationId: updateContact_1
+      parameters:
+      - in: path
+        name: userId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: path
+        name: contactId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EgradxUpdateContactRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxContactDto"
+          description: OK
+      summary: Change a member's contact address
+      tags:
+      - Member profiles
+  /egradx/auth/my/users/{userId}/profile/contacts/{contactId}/primary:
+    post:
+      description: It becomes the primary address on its channel. Needs `egradx.user.manage`.
+      operationId: makePrimary_1
+      parameters:
+      - in: path
+        name: userId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: path
+        name: contactId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxContactDto"
+          description: OK
+      summary: Make a member's contact address primary
+      tags:
+      - Member profiles
+  /egradx/auth/my/users/{userId}/profile/contacts/{contactId}/verification:
+    post:
+      description: "Sends a code to the address; the person confirms it themselves,\
+        \ on their own profile. Needs `egradx.user.manage`. Refuses with `CONTACT_VERIFICATION_UNAVAILABLE`,\
+        \ `CONTACT_VERIFICATION_RATE_LIMITED` or `CONTACT_ALREADY_VERIFIED` (400)."
+      operationId: startVerification_1
+      parameters:
+      - in: path
+        name: userId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: path
+        name: contactId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxContactVerificationStartedDto"
+          description: OK
+      summary: Send a member a verification code
+      tags:
+      - Member profiles
+  /egradx/auth/my/users/{userId}/profile/contacts/{contactId}/verified:
+    post:
+      description: Vouches for the address without a code. Needs `egradx.user.manage`.
+      operationId: markVerified_1
+      parameters:
+      - in: path
+        name: userId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: path
+        name: contactId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxContactDto"
+          description: OK
+      summary: Mark a member's contact address verified
+      tags:
+      - Member profiles
+  /egradx/auth/my/users/{userId}/profile/preferences:
+    get:
+      description: "Those that apply everywhere, plus those for your organization.\
+        \ Needs `egradx.user.read`."
+      operationId: preferences_1
+      parameters:
+      - in: path
+        name: userId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EgradxCommunicationPreferenceDto"
+          description: OK
+      summary: Get a member's communication preferences
+      tags:
+      - Member profiles
+    put:
+      description: Replaces those that apply everywhere and those for your organization;
+        other organizations' stay. Needs `egradx.user.manage`. Refuses with `PROFILE_INVALID`
+        (400).
+      operationId: replacePreferences_1
+      parameters:
+      - in: path
+        name: userId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EgradxReplacePreferencesRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EgradxCommunicationPreferenceDto"
+          description: OK
+      summary: Replace a member's communication preferences
+      tags:
+      - Member profiles
+  /egradx/auth/organizations:
+    get:
+      description: "A page of every organization, optionally narrowed by `search`\
+        \ (part of the name, any case), sortable by `name`, `status` or `createdAt`.\
+        \ Needs `egradx.organization.read`."
+      operationId: listOrganizations
+      parameters:
+      - in: query
+        name: search
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: pageable
+        required: true
+        schema:
+          $ref: "#/components/schemas/Pageable"
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/PageEgradxOrganizationDto"
+          description: OK
+      summary: List organizations
+      tags:
+      - Organizations (platform)
+    post:
+      description: "Creates the organization, its administrator role and its first\
+        \ administrator in one transaction: nothing is created if any step fails.\
+        \ Needs `egradx.organization.manage`. Refuses a name, or an administrator\
+        \ username or email, already in use with `CONFLICT` (409)."
+      operationId: createOrganization
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EgradxCreateOrganizationRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxOrganizationDto"
+          description: OK
+      summary: Create an organization
+      tags:
+      - Organizations (platform)
+  /egradx/auth/organizations/{organizationId}:
+    get:
+      description: Needs `egradx.organization.read`. An unknown id answers `NOT_FOUND`
+        (404).
+      operationId: getOrganization
+      parameters:
+      - in: path
+        name: organizationId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxOrganizationDto"
+          description: OK
+      summary: Get an organization
+      tags:
+      - Organizations (platform)
+    patch:
+      description: "Applies whichever of name and status changed; a suspended organization's\
+        \ members are refused from their next request. Needs `egradx.organization.manage`.\
+        \ Refuses a name already in use with `CONFLICT` (409), and an unknown id with\
+        \ `NOT_FOUND` (404)."
+      operationId: updateOrganization
+      parameters:
+      - in: path
+        name: organizationId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EgradxUpdateOrganizationRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxOrganizationDto"
+          description: OK
+      summary: "Rename, suspend or reactivate an organization"
+      tags:
+      - Organizations (platform)
+  /egradx/auth/organizations/{organizationId}/invitations:
+    get:
+      description: "Newest first, expired ones included so they can be resent. Needs\
+        \ `egradx.user.read` and membership of the organization (or a platform session)."
+      operationId: listInvitations
+      parameters:
+      - in: path
+        name: organizationId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EgradxInvitationDto"
+          description: OK
+      summary: List an organization's pending invitations
+      tags:
+      - Organizations (platform)
+    post:
+      description: "Emails an invitation link for the given role to the address, replacing\
+        \ any pending invitation to it. Needs `egradx.user.manage` and membership\
+        \ of the organization (or a platform session). Refuses with `INVITATION_ALREADY_MEMBER`\
+        \ (409), `INVITATION_RATE_LIMITED` or `INVITATION_DELIVERY_UNAVAILABLE` (400),\
+        \ `ORG_SUSPENDED` (403), and an unknown role with `NOT_FOUND` (404)."
+      operationId: invite
+      parameters:
+      - in: path
+        name: organizationId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EgradxCreateInvitationRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxInvitationDto"
+          description: OK
+      summary: Invite someone to an organization
+      tags:
+      - Organizations (platform)
+  /egradx/auth/organizations/{organizationId}/invitations/{invitationId}:
+    delete:
+      description: Its link stops working; withdrawing one already withdrawn changes
+        nothing. Needs `egradx.user.manage` and membership of the organization (or
+        a platform session). Refuses with `INVITATION_INVALID` (404) and `INVITATION_ALREADY_ACCEPTED`
+        (409).
+      operationId: revokeInvitation
+      parameters:
+      - in: path
+        name: organizationId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: path
+        name: invitationId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: OK
+      summary: Withdraw an organization's invitation
+      tags:
+      - Organizations (platform)
+  /egradx/auth/organizations/{organizationId}/invitations/{invitationId}/resend:
+    post:
+      description: "Sends a pending invitation again with a new link and a fresh expiry;\
+        \ the old link stops working. Needs `egradx.user.manage` and membership of\
+        \ the organization (or a platform session). Refuses with `INVITATION_INVALID`\
+        \ (404), `INVITATION_RATE_LIMITED` or `INVITATION_DELIVERY_UNAVAILABLE` (400),\
+        \ and `ORG_SUSPENDED` (403)."
+      operationId: resendInvitation
+      parameters:
+      - in: path
+        name: organizationId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: path
+        name: invitationId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxInvitationDto"
+          description: OK
+      summary: Resend an organization's invitation
+      tags:
+      - Organizations (platform)
+  /egradx/auth/organizations/{organizationId}/roles:
+    get:
+      description: Each role with the permissions it grants. Needs `egradx.role.read`
+        and membership of the organization (or a platform session).
+      operationId: listRoles
+      parameters:
+      - in: path
+        name: organizationId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EgradxRoleDto"
+          description: OK
+      summary: List an organization's roles
+      tags:
+      - Organizations (platform)
+    post:
+      description: "Needs `egradx.role.manage` and membership of the organization\
+        \ (or a platform session). Refuses a name already used in the organization\
+        \ with `CONFLICT` (409), an unknown permission with `NOT_FOUND` (404), and\
+        \ a permission only the platform organization may grant with `INVALID_REQUEST`\
+        \ (400)."
+      operationId: createRole
+      parameters:
+      - in: path
+        name: organizationId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EgradxCreateRoleRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxRoleDto"
+          description: OK
+      summary: Create a role in an organization
+      tags:
+      - Organizations (platform)
+  /egradx/auth/organizations/{organizationId}/roles/{roleId}:
+    delete:
+      description: "Needs `egradx.role.manage` and membership of the organization\
+        \ (or a platform session). Refuses a system role, or one still assigned to\
+        \ someone, with `INVALID_REQUEST` (400)."
+      operationId: deleteRole
+      parameters:
+      - in: path
+        name: organizationId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: path
+        name: roleId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: OK
+      summary: Delete a role in an organization
+      tags:
+      - Organizations (platform)
+    patch:
+      description: "Needs `egradx.role.manage` and membership of the organization\
+        \ (or a platform session). Refuses renaming a system role with `INVALID_REQUEST`\
+        \ (400), and a name already used with `CONFLICT` (409)."
+      operationId: renameRole
+      parameters:
+      - in: path
+        name: organizationId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: path
+        name: roleId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EgradxRenameRoleRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxRoleDto"
+          description: OK
+      summary: Rename a role in an organization
+      tags:
+      - Organizations (platform)
+  /egradx/auth/organizations/{organizationId}/roles/{roleId}/permissions:
+    patch:
+      description: "Sets the role's whole permission set to the ids sent; an empty\
+        \ set grants nothing. Needs `egradx.role.manage` and membership of the organization\
+        \ (or a platform session). Refuses an unknown role or permission with `NOT_FOUND`\
+        \ (404), and a permission only the platform organization may grant with `INVALID_REQUEST`\
+        \ (400)."
+      operationId: replaceRolePermissions
+      parameters:
+      - in: path
+        name: organizationId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: path
+        name: roleId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EgradxReplaceRolePermissionsRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxRoleDto"
+          description: OK
+      summary: Replace a role's permissions in an organization
+      tags:
+      - Organizations (platform)
+  /egradx/auth/organizations/{organizationId}/users:
+    get:
+      description: "A page of the organization's members, each with their role, sortable\
+        \ by `name`, `email` or `createdAt`. Needs `egradx.user.read` and membership\
+        \ of the organization (or a platform session)."
+      operationId: listUsers
+      parameters:
+      - in: path
+        name: organizationId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: query
+        name: pageable
+        required: true
+        schema:
+          $ref: "#/components/schemas/Pageable"
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/PageEgradxOrganizationUserDto"
+          description: OK
+      summary: List an organization's users
+      tags:
+      - Organizations (platform)
+    post:
+      description: "Creates an account and makes it a member with the given role;\
+        \ the username defaults to the email. Needs `egradx.user.manage` and membership\
+        \ of the organization (or a platform session). Refuses a username or email\
+        \ already in use with `CONFLICT` (409), an unknown role with `NOT_FOUND` (404),\
+        \ and a password outside the rule with `PASSWORD_INVALID` (400)."
+      operationId: createUser
+      parameters:
+      - in: path
+        name: organizationId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EgradxCreateOrganizationUserRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxOrganizationUserDto"
+          description: OK
+      summary: Add a user to an organization
+      tags:
+      - Organizations (platform)
+  /egradx/auth/organizations/{organizationId}/users/{userId}:
+    delete:
+      description: The account keeps its membership and role but can no longer sign
+        in. Needs `egradx.user.manage` and membership of the organization (or a platform
+        session). Deactivating yourself is refused with `INVALID_REQUEST` (400).
+      operationId: deactivateUser
+      parameters:
+      - in: path
+        name: organizationId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: path
+        name: userId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: OK
+      summary: Deactivate one of an organization's users
+      tags:
+      - Organizations (platform)
+    get:
+      description: Needs `egradx.user.read` and membership of the organization (or
+        a platform session). Someone who is not a member answers `NOT_FOUND` (404).
+      operationId: getUser
+      parameters:
+      - in: path
+        name: organizationId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: path
+        name: userId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxOrganizationUserDto"
+          description: OK
+      summary: Get one of an organization's users
+      tags:
+      - Organizations (platform)
+    patch:
+      description: "Changes only the fields sent: details, password, active flag or\
+        \ role. Setting a password ends every session the person has. Needs `egradx.user.manage`\
+        \ and membership of the organization (or a platform session). Refuses a username\
+        \ or email already in use with `CONFLICT` (409), and someone who is not a\
+        \ member with `NOT_FOUND` (404)."
+      operationId: updateUser
+      parameters:
+      - in: path
+        name: organizationId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: path
+        name: userId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EgradxUpdateOrganizationUserRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxOrganizationUserDto"
+          description: OK
+      summary: Update one of an organization's users
+      tags:
+      - Organizations (platform)
+  /egradx/auth/organizations/{organizationId}/users/{userId}/profile:
+    delete:
+      description: "Deletes everything the profile holds, in every organization, but\
+        \ not the account: for a data-protection request. Needs `egradx.organization.manage`."
+      operationId: erase
+      parameters:
+      - in: path
+        name: organizationId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: path
+        name: userId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: OK
+      summary: Erase a member's profile
+      tags:
+      - Member profiles (platform)
+    get:
+      description: "Their details, and the contact addresses visible from that organization.\
+        \ Needs `egradx.user.read` and membership of the organization (or a platform\
+        \ session). Someone who is not a member answers `NOT_FOUND` (404)."
+      operationId: get
+      parameters:
+      - in: path
+        name: organizationId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: path
+        name: userId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxUserProfileDto"
+          description: OK
+      summary: Get a member's profile in an organization
+      tags:
+      - Member profiles (platform)
+    put:
+      description: Replaces every editable field; a field sent as null is cleared.
+        Needs `egradx.user.manage` and membership of the organization (or a platform
+        session). An invalid field is refused with `PROFILE_INVALID` (400).
+      operationId: update
+      parameters:
+      - in: path
+        name: organizationId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: path
+        name: userId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EgradxUpdateProfileRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxUserProfileDto"
+          description: OK
+      summary: Update a member's profile in an organization
+      tags:
+      - Member profiles (platform)
+  /egradx/auth/organizations/{organizationId}/users/{userId}/profile/contacts:
+    get:
+      description: "Those that apply everywhere, plus those scoped to that organization.\
+        \ Needs `egradx.user.read` and membership of the organization (or a platform\
+        \ session)."
+      operationId: contacts
+      parameters:
+      - in: path
+        name: organizationId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: path
+        name: userId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EgradxContactDto"
+          description: OK
+      summary: List a member's contact addresses in an organization
+      tags:
+      - Member profiles (platform)
+    post:
+      description: "An administrator may vouch for the address by sending `verified:\
+        \ true`. Needs `egradx.user.manage` and membership of the organization (or\
+        \ a platform session). Refuses with `PROFILE_INVALID` or `CONTACT_LIMIT_REACHED`\
+        \ (400), and `CONTACT_DUPLICATE` (409)."
+      operationId: addContact
+      parameters:
+      - in: path
+        name: organizationId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: path
+        name: userId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EgradxCreateContactRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxContactDto"
+          description: OK
+      summary: Add a contact address for a member of an organization
+      tags:
+      - Member profiles (platform)
+  /egradx/auth/organizations/{organizationId}/users/{userId}/profile/contacts/{contactId}:
+    delete:
+      description: "If it was the primary address on its channel, the oldest remaining\
+        \ one takes its place. Needs `egradx.user.manage` and membership of the organization\
+        \ (or a platform session)."
+      operationId: deleteContact
+      parameters:
+      - in: path
+        name: organizationId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: path
+        name: userId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: path
+        name: contactId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: OK
+      summary: Remove a member's contact address in an organization
+      tags:
+      - Member profiles (platform)
+    put:
+      description: Changes the address or its label; a changed address becomes unverified.
+        Needs `egradx.user.manage` and membership of the organization (or a platform
+        session). Refuses with `PROFILE_INVALID` (400) and `CONTACT_DUPLICATE` (409).
+      operationId: updateContact
+      parameters:
+      - in: path
+        name: organizationId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: path
+        name: userId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: path
+        name: contactId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EgradxUpdateContactRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxContactDto"
+          description: OK
+      summary: Change a member's contact address in an organization
+      tags:
+      - Member profiles (platform)
+  /egradx/auth/organizations/{organizationId}/users/{userId}/profile/contacts/{contactId}/primary:
+    post:
+      description: It becomes the primary address on its channel. Needs `egradx.user.manage`
+        and membership of the organization (or a platform session).
+      operationId: makePrimary
+      parameters:
+      - in: path
+        name: organizationId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: path
+        name: userId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: path
+        name: contactId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxContactDto"
+          description: OK
+      summary: Make a member's contact address primary in an organization
+      tags:
+      - Member profiles (platform)
+  /egradx/auth/organizations/{organizationId}/users/{userId}/profile/contacts/{contactId}/verification:
+    post:
+      description: "Sends a code to the address; the person confirms it themselves,\
+        \ on their own profile. Needs `egradx.user.manage` and membership of the organization\
+        \ (or a platform session). Refuses with `CONTACT_VERIFICATION_UNAVAILABLE`,\
+        \ `CONTACT_VERIFICATION_RATE_LIMITED` or `CONTACT_ALREADY_VERIFIED` (400)."
+      operationId: startVerification
+      parameters:
+      - in: path
+        name: organizationId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: path
+        name: userId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: path
+        name: contactId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxContactVerificationStartedDto"
+          description: OK
+      summary: Send a member of an organization a verification code
+      tags:
+      - Member profiles (platform)
+  /egradx/auth/organizations/{organizationId}/users/{userId}/profile/contacts/{contactId}/verified:
+    post:
+      description: Vouches for the address without a code. Needs `egradx.user.manage`
+        and membership of the organization (or a platform session).
+      operationId: markVerified
+      parameters:
+      - in: path
+        name: organizationId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: path
+        name: userId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: path
+        name: contactId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxContactDto"
+          description: OK
+      summary: Mark a member's contact address verified in an organization
+      tags:
+      - Member profiles (platform)
+  /egradx/auth/organizations/{organizationId}/users/{userId}/profile/export:
+    get:
+      description: "Everything held about the person, across all their organizations;\
+        \ credentials excluded. Needs `egradx.organization.manage`."
+      operationId: export
+      parameters:
+      - in: path
+        name: organizationId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: path
+        name: userId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxProfileExportDto"
+          description: OK
+      summary: Export a member's profile
+      tags:
+      - Member profiles (platform)
+  /egradx/auth/organizations/{organizationId}/users/{userId}/profile/preferences:
+    get:
+      description: "Those that apply everywhere, plus those for that organization.\
+        \ Needs `egradx.user.read` and membership of the organization (or a platform\
+        \ session)."
+      operationId: preferences
+      parameters:
+      - in: path
+        name: organizationId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: path
+        name: userId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EgradxCommunicationPreferenceDto"
+          description: OK
+      summary: Get a member's communication preferences in an organization
+      tags:
+      - Member profiles (platform)
+    put:
+      description: Replaces those that apply everywhere and those for that organization;
+        other organizations' stay. Needs `egradx.user.manage` and membership of the
+        organization (or a platform session). Refuses with `PROFILE_INVALID` (400).
+      operationId: replacePreferences
+      parameters:
+      - in: path
+        name: organizationId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: path
+        name: userId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EgradxReplacePreferencesRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EgradxCommunicationPreferenceDto"
+          description: OK
+      summary: Replace a member's communication preferences in an organization
+      tags:
+      - Member profiles (platform)
+  /egradx/auth/password/forgot:
+    post:
+      description: "Emails a reset link to the active account with this address, if\
+        \ there is one, replacing any earlier link. Public. Always answers 202, whatever\
+        \ happened, so it never reveals which addresses have accounts."
+      operationId: forgot
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EgradxForgotPasswordRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+      summary: Request a password reset link
+      tags:
+      - Password reset
+  /egradx/auth/password/reset:
+    post:
+      description: "Sets the password with the token from the reset link; the link\
+        \ works once, and every session the person has ends. Public. Refuses with\
+        \ `PASSWORD_RESET_INVALID` (400) for an unknown, used or replaced link, `PASSWORD_RESET_EXPIRED`\
+        \ (400), or `PASSWORD_INVALID` (400)."
+      operationId: reset
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EgradxResetPasswordRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+      summary: Set a new password from a reset link
+      tags:
+      - Password reset
+  /egradx/auth/permissions:
+    get:
+      description: "Every permission that exists, for a role editor's checkboxes;\
+        \ it says nothing about who holds them. Needs a signed-in session."
+      operationId: listPermissions
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EgradxAuthorityDto"
+          description: OK
+      summary: List the permissions
+      tags:
+      - Permissions
+    post:
+      description: "Adds a permission to the vocabulary; an application normally seeds\
+        \ its own at startup instead. Needs `egradx.organization.manage`, which only\
+        \ a role in the platform organization can hold. Refuses a name that exists\
+        \ with `CONFLICT` (409)."
+      operationId: createPermission
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EgradxCreateAuthorityRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxAuthorityDto"
+          description: OK
+      summary: Add a permission
+      tags:
+      - Permissions
+  /egradx/auth/refresh:
+    post:
+      description: "Exchanges a refresh token for a new access token in the same organization;\
+        \ the refresh token itself comes back unchanged. Public. Refuses with `AUTH_REFRESH_TOKEN_INVALID`\
+        \ (401) for an unknown, expired or revoked token or a deactivated user, `SESSION_REVOKED`\
+        \ (401) when the person's sessions were ended by a password change or sign-out\
+        \ everywhere, and `ORG_SUSPENDED` (403)."
+      operationId: refresh
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EgradxRefreshTokenRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxAuthResult"
+          description: OK
+      summary: Renew the access token
+      tags:
+      - Sign-in and sessions
+  /egradx/auth/register:
+    post:
+      description: "Creates an account that belongs to no organization yet; an administrator\
+        \ adds it to one afterwards. Public. Refuses a password outside the length\
+        \ rule with `PASSWORD_INVALID` (400), and a username or email already in use\
+        \ with `CONFLICT` (409)."
+      operationId: register
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EgradxSignupRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxUserDto"
+          description: OK
+      summary: Register a new user
+      tags:
+      - Sign-in and sessions
+components:
+  schemas:
+    Account:
+      type: object
+      properties:
+        active:
+          type:
+          - boolean
+          - "null"
+        createdAt:
+          type:
+          - string
+          - "null"
+          format: date-time
+        displayName:
+          type:
+          - string
+          - "null"
+        email:
+          type:
+          - string
+          - "null"
+        id:
+          type:
+          - string
+          - "null"
+          format: uuid
+        username:
+          type:
+          - string
+          - "null"
+    Admin:
+      type: object
+      properties:
+        email:
+          type: string
+          minLength: 1
+        name:
+          type: string
+          minLength: 1
+        password:
+          type: string
+          maxLength: 128
+          minLength: 8
+        username:
+          type:
+          - string
+          - "null"
+      required:
+      - email
+      - name
+      - password
+    Channel:
+      type: object
+      properties:
+        addressFormat:
+          type:
+          - string
+          - "null"
+        id:
+          type:
+          - string
+          - "null"
+    EgradxAcceptInvitationRequest:
+      type: object
+      properties:
+        name:
+          type:
+          - string
+          - "null"
+          maxLength: 255
+          minLength: 0
+        password:
+          type:
+          - string
+          - "null"
+          maxLength: 128
+          minLength: 0
+    EgradxAccountOptionsDto:
+      type: object
+      properties:
+        emailChangeAvailable:
+          type:
+          - boolean
+          - "null"
+        invitationsAvailable:
+          type:
+          - boolean
+          - "null"
+        passwordMaxLength:
+          type:
+          - integer
+          - "null"
+          format: int32
+        passwordMinLength:
+          type:
+          - integer
+          - "null"
+          format: int32
+        passwordResetAvailable:
+          type:
+          - boolean
+          - "null"
+    EgradxAuthResult:
+      type: object
+      properties:
+        accessToken:
+          type:
+          - string
+          - "null"
+        authorities:
+          type:
+          - array
+          - "null"
+          items:
+            type: string
+          uniqueItems: true
+        expiresAt:
+          type:
+          - string
+          - "null"
+          format: date-time
+        organizationId:
+          type:
+          - string
+          - "null"
+          format: uuid
+        organizationName:
+          type:
+          - string
+          - "null"
+        platformOrganization:
+          type:
+          - boolean
+          - "null"
+        refreshToken:
+          type:
+          - string
+          - "null"
+        roleId:
+          type:
+          - string
+          - "null"
+          format: uuid
+        roleName:
+          type:
+          - string
+          - "null"
+        tokenType:
+          type:
+          - string
+          - "null"
+        user:
+          anyOf:
+          - $ref: "#/components/schemas/EgradxUserDto"
+          - type: "null"
+    EgradxAuthorityDto:
+      type: object
+      properties:
+        category:
+          type:
+          - string
+          - "null"
+        description:
+          type:
+          - string
+          - "null"
+        id:
+          type:
+          - string
+          - "null"
+          format: uuid
+        name:
+          type:
+          - string
+          - "null"
+    EgradxChangePasswordRequest:
+      type: object
+      properties:
+        currentPassword:
+          type: string
+          maxLength: 128
+          minLength: 0
+        newPassword:
+          type: string
+          maxLength: 128
+          minLength: 8
+      required:
+      - currentPassword
+      - newPassword
+    EgradxCommunicationPreferenceDto:
+      type: object
+      properties:
+        channel:
+          type: string
+          maxLength: 50
+          minLength: 0
+        enabled:
+          type:
+          - boolean
+          - "null"
+        notificationKey:
+          type:
+          - string
+          - "null"
+          maxLength: 150
+          minLength: 0
+        organizationScoped:
+          type:
+          - boolean
+          - "null"
+      required:
+      - channel
+    EgradxConfirmContactRequest:
+      type: object
+      properties:
+        code:
+          type: string
+          maxLength: 20
+          minLength: 0
+      required:
+      - code
+    EgradxConfirmEmailChangeRequest:
+      type: object
+      properties:
+        code:
+          type: string
+          maxLength: 20
+          minLength: 0
+      required:
+      - code
+    EgradxContactDto:
+      type: object
+      properties:
+        address:
+          type:
+          - string
+          - "null"
+        channel:
+          type:
+          - string
+          - "null"
+        createdAt:
+          type:
+          - string
+          - "null"
+          format: date-time
+        id:
+          type:
+          - string
+          - "null"
+          format: uuid
+        label:
+          type:
+          - string
+          - "null"
+        organizationId:
+          type:
+          - string
+          - "null"
+          format: uuid
+        primary:
+          type:
+          - boolean
+          - "null"
+        updatedAt:
+          type:
+          - string
+          - "null"
+          format: date-time
+        verified:
+          type:
+          - boolean
+          - "null"
+        verifiedAt:
+          type:
+          - string
+          - "null"
+          format: date-time
+    EgradxContactVerificationStartedDto:
+      type: object
+      properties:
+        address:
+          type:
+          - string
+          - "null"
+        channel:
+          type:
+          - string
+          - "null"
+        contactId:
+          type:
+          - string
+          - "null"
+          format: uuid
+        expiresAt:
+          type:
+          - string
+          - "null"
+          format: date-time
+        resendAvailableAt:
+          type:
+          - string
+          - "null"
+          format: date-time
+    EgradxCreateAuthorityRequest:
+      type: object
+      properties:
+        category:
+          type:
+          - string
+          - "null"
+        description:
+          type:
+          - string
+          - "null"
+        name:
+          type: string
+          minLength: 1
+      required:
+      - name
+    EgradxCreateContactRequest:
+      type: object
+      properties:
+        address:
+          type: string
+          maxLength: 512
+          minLength: 0
+        channel:
+          type: string
+          maxLength: 50
+          minLength: 0
+        label:
+          type:
+          - string
+          - "null"
+          maxLength: 100
+          minLength: 0
+        organizationScoped:
+          type:
+          - boolean
+          - "null"
+        primary:
+          type:
+          - boolean
+          - "null"
+        verified:
+          type:
+          - boolean
+          - "null"
+      required:
+      - address
+      - channel
+    EgradxCreateInvitationRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          maxLength: 255
+          minLength: 0
+        roleId:
+          type: string
+          format: uuid
+      required:
+      - email
+      - roleId
+    EgradxCreateOrganizationRequest:
+      type: object
+      properties:
+        admin:
+          $ref: "#/components/schemas/Admin"
+        name:
+          type: string
+          minLength: 1
+      required:
+      - admin
+      - name
+    EgradxCreateOrganizationUserRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          minLength: 1
+        name:
+          type: string
+          minLength: 1
+        password:
+          type: string
+          maxLength: 128
+          minLength: 8
+        roleId:
+          type: string
+          format: uuid
+        username:
+          type:
+          - string
+          - "null"
+      required:
+      - email
+      - name
+      - password
+      - roleId
+    EgradxCreateRoleRequest:
+      type: object
+      properties:
+        authorityNames:
+          type:
+          - array
+          - "null"
+          items:
+            type: string
+          uniqueItems: true
+        description:
+          type:
+          - string
+          - "null"
+        name:
+          type: string
+          minLength: 1
+      required:
+      - name
+    EgradxEmailChangeStartedDto:
+      type: object
+      properties:
+        expiresAt:
+          type:
+          - string
+          - "null"
+          format: date-time
+        newEmail:
+          type:
+          - string
+          - "null"
+        resendAvailableAt:
+          type:
+          - string
+          - "null"
+          format: date-time
+    EgradxForgotPasswordRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          maxLength: 255
+          minLength: 0
+      required:
+      - email
+    EgradxInvitationDto:
+      type: object
+      properties:
+        acceptedAt:
+          type:
+          - string
+          - "null"
+          format: date-time
+        createdAt:
+          type:
+          - string
+          - "null"
+          format: date-time
+        email:
+          type:
+          - string
+          - "null"
+        expiresAt:
+          type:
+          - string
+          - "null"
+          format: date-time
+        id:
+          type:
+          - string
+          - "null"
+          format: uuid
+        invitedByName:
+          type:
+          - string
+          - "null"
+        invitedByUserId:
+          type:
+          - string
+          - "null"
+          format: uuid
+        lastSentAt:
+          type:
+          - string
+          - "null"
+          format: date-time
+        organizationId:
+          type:
+          - string
+          - "null"
+          format: uuid
+        resendAvailableAt:
+          type:
+          - string
+          - "null"
+          format: date-time
+        roleId:
+          type:
+          - string
+          - "null"
+          format: uuid
+        roleName:
+          type:
+          - string
+          - "null"
+        status:
+          type:
+          - string
+          - "null"
+    EgradxInvitationPreviewDto:
+      type: object
+      properties:
+        accountExists:
+          type:
+          - boolean
+          - "null"
+        email:
+          type:
+          - string
+          - "null"
+        expiresAt:
+          type:
+          - string
+          - "null"
+          format: date-time
+        inviterName:
+          type:
+          - string
+          - "null"
+        organizationId:
+          type:
+          - string
+          - "null"
+          format: uuid
+        organizationName:
+          type:
+          - string
+          - "null"
+        roleName:
+          type:
+          - string
+          - "null"
+    EgradxLoginRequest:
+      type: object
+      properties:
+        organizationId:
+          type:
+          - string
+          - "null"
+          format: uuid
+        password:
+          type: string
+          minLength: 1
+        username:
+          type: string
+          minLength: 1
+      required:
+      - password
+      - username
+    EgradxMyOrganizationDto:
+      type: object
+      properties:
+        current:
+          type:
+          - boolean
+          - "null"
+        name:
+          type:
+          - string
+          - "null"
+        organizationId:
+          type:
+          - string
+          - "null"
+          format: uuid
+        platformOrganization:
+          type:
+          - boolean
+          - "null"
+        roleId:
+          type:
+          - string
+          - "null"
+          format: uuid
+        roleName:
+          type:
+          - string
+          - "null"
+        status:
+          type:
+          - string
+          - "null"
+    EgradxOrganizationDto:
+      type: object
+      properties:
+        createdAt:
+          type:
+          - string
+          - "null"
+          format: date-time
+        id:
+          type:
+          - string
+          - "null"
+          format: uuid
+        name:
+          type:
+          - string
+          - "null"
+        status:
+          type:
+          - string
+          - "null"
+          enum:
+          - ACTIVE
+          - SUSPENDED
+        updatedAt:
+          type:
+          - string
+          - "null"
+          format: date-time
+    EgradxOrganizationUserDto:
+      type: object
+      properties:
+        active:
+          type:
+          - boolean
+          - "null"
+        createdAt:
+          type:
+          - string
+          - "null"
+          format: date-time
+        email:
+          type:
+          - string
+          - "null"
+        id:
+          type:
+          - string
+          - "null"
+          format: uuid
+        name:
+          type:
+          - string
+          - "null"
+        organizationId:
+          type:
+          - string
+          - "null"
+          format: uuid
+        roleId:
+          type:
+          - string
+          - "null"
+          format: uuid
+        roleName:
+          type:
+          - string
+          - "null"
+        updatedAt:
+          type:
+          - string
+          - "null"
+          format: date-time
+        username:
+          type:
+          - string
+          - "null"
+    EgradxPostalAddressDto:
+      type: object
+      properties:
+        city:
+          type:
+          - string
+          - "null"
+          maxLength: 120
+          minLength: 0
+        countryCode:
+          type:
+          - string
+          - "null"
+          maxLength: 2
+          minLength: 0
+        line1:
+          type:
+          - string
+          - "null"
+          maxLength: 255
+          minLength: 0
+        line2:
+          type:
+          - string
+          - "null"
+          maxLength: 255
+          minLength: 0
+        postalCode:
+          type:
+          - string
+          - "null"
+          maxLength: 32
+          minLength: 0
+        region:
+          type:
+          - string
+          - "null"
+          maxLength: 120
+          minLength: 0
+    EgradxProfileExportDto:
+      type: object
+      properties:
+        account:
+          anyOf:
+          - $ref: "#/components/schemas/Account"
+          - type: "null"
+        contacts:
+          type:
+          - array
+          - "null"
+          items:
+            $ref: "#/components/schemas/EgradxContactDto"
+        exportedAt:
+          type:
+          - string
+          - "null"
+          format: date-time
+        memberships:
+          type:
+          - array
+          - "null"
+          items:
+            $ref: "#/components/schemas/Membership"
+        preferences:
+          type:
+          - array
+          - "null"
+          items:
+            $ref: "#/components/schemas/Preference"
+        profile:
+          anyOf:
+          - $ref: "#/components/schemas/EgradxUserProfileDto"
+          - type: "null"
+    EgradxProfileOptionsDto:
+      type: object
+      properties:
+        channels:
+          type:
+          - array
+          - "null"
+          items:
+            $ref: "#/components/schemas/Channel"
+        maxAttributeValueLength:
+          type:
+          - integer
+          - "null"
+          format: int32
+        maxAttributes:
+          type:
+          - integer
+          - "null"
+          format: int32
+        maxContacts:
+          type:
+          - integer
+          - "null"
+          format: int32
+        verificationAvailable:
+          type:
+          - boolean
+          - "null"
+        verificationCodeTtlSeconds:
+          type:
+          - integer
+          - "null"
+          format: int64
+        verificationResendIntervalSeconds:
+          type:
+          - integer
+          - "null"
+          format: int64
+    EgradxRefreshTokenRequest:
+      type: object
+      properties:
+        refreshToken:
+          type: string
+          minLength: 1
+      required:
+      - refreshToken
+    EgradxRenameRoleRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+      required:
+      - name
+    EgradxReplacePreferencesRequest:
+      type: object
+      properties:
+        preferences:
+          type: array
+          items:
+            $ref: "#/components/schemas/EgradxCommunicationPreferenceDto"
+          maxItems: 200
+          minItems: 0
+      required:
+      - preferences
+    EgradxReplaceRolePermissionsRequest:
+      type: object
+      properties:
+        permissionIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+          uniqueItems: true
+      required:
+      - permissionIds
+    EgradxResetPasswordRequest:
+      type: object
+      properties:
+        newPassword:
+          type: string
+          maxLength: 128
+          minLength: 8
+        token:
+          type: string
+          maxLength: 200
+          minLength: 0
+      required:
+      - newPassword
+      - token
+    EgradxRoleDto:
+      type: object
+      properties:
+        description:
+          type:
+          - string
+          - "null"
+        id:
+          type:
+          - string
+          - "null"
+          format: uuid
+        isSystem:
+          type:
+          - boolean
+          - "null"
+        name:
+          type:
+          - string
+          - "null"
+        organizationId:
+          type:
+          - string
+          - "null"
+          format: uuid
+        permissions:
+          type:
+          - array
+          - "null"
+          items:
+            $ref: "#/components/schemas/EgradxAuthorityDto"
+    EgradxSignupRequest:
+      type: object
+      properties:
+        displayName:
+          type:
+          - string
+          - "null"
+        email:
+          type: string
+          minLength: 1
+        password:
+          type: string
+          maxLength: 128
+          minLength: 8
+        username:
+          type: string
+          minLength: 1
+      required:
+      - email
+      - password
+      - username
+    EgradxStartEmailChangeRequest:
+      type: object
+      properties:
+        currentPassword:
+          type: string
+          maxLength: 128
+          minLength: 0
+        newEmail:
+          type: string
+          maxLength: 255
+          minLength: 0
+      required:
+      - currentPassword
+      - newEmail
+    EgradxSwitchOrganizationRequest:
+      type: object
+      properties:
+        refreshToken:
+          type:
+          - string
+          - "null"
+    EgradxUpdateContactRequest:
+      type: object
+      properties:
+        address:
+          type: string
+          maxLength: 512
+          minLength: 0
+        label:
+          type:
+          - string
+          - "null"
+          maxLength: 100
+          minLength: 0
+      required:
+      - address
+    EgradxUpdateOrganizationRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+        status:
+          type: string
+          enum:
+          - ACTIVE
+          - SUSPENDED
+      required:
+      - name
+      - status
+    EgradxUpdateOrganizationUserRequest:
+      type: object
+      properties:
+        active:
+          type:
+          - boolean
+          - "null"
+        email:
+          type:
+          - string
+          - "null"
+        name:
+          type:
+          - string
+          - "null"
+        password:
+          type:
+          - string
+          - "null"
+        roleId:
+          type:
+          - string
+          - "null"
+          format: uuid
+        username:
+          type:
+          - string
+          - "null"
+    EgradxUpdateProfileRequest:
+      type: object
+      properties:
+        address:
+          anyOf:
+          - $ref: "#/components/schemas/EgradxPostalAddressDto"
+          - type: "null"
+        attributes:
+          type:
+          - object
+          - "null"
+          additionalProperties: {}
+        displayName:
+          type:
+          - string
+          - "null"
+          maxLength: 255
+          minLength: 0
+        firstName:
+          type:
+          - string
+          - "null"
+          maxLength: 100
+          minLength: 0
+        jobTitle:
+          type:
+          - string
+          - "null"
+          maxLength: 150
+          minLength: 0
+        lastName:
+          type:
+          - string
+          - "null"
+          maxLength: 100
+          minLength: 0
+        locale:
+          type:
+          - string
+          - "null"
+          maxLength: 35
+          minLength: 0
+        photoUrl:
+          type:
+          - string
+          - "null"
+          maxLength: 1024
+          minLength: 0
+        timeZone:
+          type:
+          - string
+          - "null"
+          maxLength: 64
+          minLength: 0
+    EgradxUserDto:
+      type: object
+      properties:
+        active:
+          type:
+          - boolean
+          - "null"
+        createdAt:
+          type:
+          - string
+          - "null"
+          format: date-time
+        displayName:
+          type:
+          - string
+          - "null"
+        email:
+          type:
+          - string
+          - "null"
+        id:
+          type:
+          - string
+          - "null"
+          format: uuid
+        username:
+          type:
+          - string
+          - "null"
+    EgradxUserProfileDto:
+      type: object
+      properties:
+        address:
+          anyOf:
+          - $ref: "#/components/schemas/EgradxPostalAddressDto"
+          - type: "null"
+        attributes:
+          type:
+          - object
+          - "null"
+          additionalProperties: {}
+        contacts:
+          type:
+          - array
+          - "null"
+          items:
+            $ref: "#/components/schemas/EgradxContactDto"
+        displayName:
+          type:
+          - string
+          - "null"
+        email:
+          type:
+          - string
+          - "null"
+        firstName:
+          type:
+          - string
+          - "null"
+        jobTitle:
+          type:
+          - string
+          - "null"
+        lastName:
+          type:
+          - string
+          - "null"
+        locale:
+          type:
+          - string
+          - "null"
+        photoUrl:
+          type:
+          - string
+          - "null"
+        timeZone:
+          type:
+          - string
+          - "null"
+        updatedAt:
+          type:
+          - string
+          - "null"
+          format: date-time
+        userId:
+          type:
+          - string
+          - "null"
+          format: uuid
+        username:
+          type:
+          - string
+          - "null"
+    Membership:
+      type: object
+      properties:
+        joinedAt:
+          type:
+          - string
+          - "null"
+          format: date-time
+        organizationId:
+          type:
+          - string
+          - "null"
+          format: uuid
+        organizationName:
+          type:
+          - string
+          - "null"
+        roleName:
+          type:
+          - string
+          - "null"
+    PageEgradxOrganizationDto:
+      type: object
+      properties:
+        content:
+          type:
+          - array
+          - "null"
+          items:
+            $ref: "#/components/schemas/EgradxOrganizationDto"
+        empty:
+          type:
+          - boolean
+          - "null"
+        first:
+          type:
+          - boolean
+          - "null"
+        last:
+          type:
+          - boolean
+          - "null"
+        number:
+          type:
+          - integer
+          - "null"
+          format: int32
+        numberOfElements:
+          type:
+          - integer
+          - "null"
+          format: int32
+        pageable:
+          anyOf:
+          - $ref: "#/components/schemas/PageableObject"
+          - type: "null"
+        size:
+          type:
+          - integer
+          - "null"
+          format: int32
+        sort:
+          anyOf:
+          - $ref: "#/components/schemas/SortObject"
+          - type: "null"
+        totalElements:
+          type:
+          - integer
+          - "null"
+          format: int64
+        totalPages:
+          type:
+          - integer
+          - "null"
+          format: int32
+    PageEgradxOrganizationUserDto:
+      type: object
+      properties:
+        content:
+          type:
+          - array
+          - "null"
+          items:
+            $ref: "#/components/schemas/EgradxOrganizationUserDto"
+        empty:
+          type:
+          - boolean
+          - "null"
+        first:
+          type:
+          - boolean
+          - "null"
+        last:
+          type:
+          - boolean
+          - "null"
+        number:
+          type:
+          - integer
+          - "null"
+          format: int32
+        numberOfElements:
+          type:
+          - integer
+          - "null"
+          format: int32
+        pageable:
+          anyOf:
+          - $ref: "#/components/schemas/PageableObject"
+          - type: "null"
+        size:
+          type:
+          - integer
+          - "null"
+          format: int32
+        sort:
+          anyOf:
+          - $ref: "#/components/schemas/SortObject"
+          - type: "null"
+        totalElements:
+          type:
+          - integer
+          - "null"
+          format: int64
+        totalPages:
+          type:
+          - integer
+          - "null"
+          format: int32
+    Pageable:
+      type: object
+      properties:
+        page:
+          type:
+          - integer
+          - "null"
+          format: int32
+          minimum: 0
+        size:
+          type:
+          - integer
+          - "null"
+          format: int32
+          minimum: 1
+        sort:
+          type:
+          - array
+          - "null"
+          items:
+            type: string
+    PageableObject:
+      type: object
+      properties:
+        offset:
+          type:
+          - integer
+          - "null"
+          format: int64
+        pageNumber:
+          type:
+          - integer
+          - "null"
+          format: int32
+        pageSize:
+          type:
+          - integer
+          - "null"
+          format: int32
+        paged:
+          type:
+          - boolean
+          - "null"
+        sort:
+          anyOf:
+          - $ref: "#/components/schemas/SortObject"
+          - type: "null"
+        unpaged:
+          type:
+          - boolean
+          - "null"
+    Preference:
+      type: object
+      properties:
+        channel:
+          type:
+          - string
+          - "null"
+        enabled:
+          type:
+          - boolean
+          - "null"
+        notificationKey:
+          type:
+          - string
+          - "null"
+        organizationId:
+          type:
+          - string
+          - "null"
+          format: uuid
+    SortObject:
+      type: object
+      properties:
+        empty:
+          type:
+          - boolean
+          - "null"
+        sorted:
+          type:
+          - boolean
+          - "null"
+        unsorted:
+          type:
+          - boolean
+          - "null"

@@ -1,0 +1,24 @@
+{
+  "title": "Guides",
+  "pages": [
+    "index",
+    "---Identity and access---",
+    "identity",
+    "authorization",
+    "multi-tenancy",
+    "---Records and messages---",
+    "audit",
+    "notifications",
+    "events",
+    "---Running it---",
+    "observability",
+    "errors",
+    "database",
+    "keys",
+    "core-utilities",
+    "---Building on it---",
+    "web",
+    "testing",
+    "java-only"
+  ]
+}

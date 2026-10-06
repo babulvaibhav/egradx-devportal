@@ -1,0 +1,1 @@
+Your password was changed on {{changedAt}} and every session was ended. If this was not you, reset your password now.

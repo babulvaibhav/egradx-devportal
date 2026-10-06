@@ -1,0 +1,46 @@
+---
+title: Several instances
+description: Every behaviour of the SDK across instances — coordinated through PostgreSQL, or per instance — and the settings that tune it.
+---
+
+The SDK keeps no state that instances must share, except the keys folder. Everything else either goes through the database, where it is coordinated, or is a per-instance cache or connection.
+
+## Before the second instance
+
+1. One keys folder and passphrase for every instance; the same issuer.
+2. The first instance has started once, so the keys exist.
+3. The load balancer: no sticky sessions; buffering off and long idle timeouts for `/egradx/notifications/stream`.
+
+The [two-instances recipe](/docs/recipes/two-instances) walks through it.
+
+## Coordinated through the database
+
+| Behaviour | How | Tune |
+|---|---|---|
+| Sessions, revocation, deactivation, suspension | read on every request | — |
+| Migrations | advisory lock: one instance migrates, the others wait | — |
+| Notification delivery | every instance dispatches; deliveries are leased | `dispatcher.enabled: false` on instances that shouldn't send |
+| Bulk-send expansion | done by the dispatchers, 200 recipients a page | — |
+| Event relay | every instance relays; outbox rows are leased (`SKIP LOCKED`) | `egradx.events.relay.*` |
+| Event handling | the inbox makes each handler run once per event and database | — |
+| Audit retention purge | one instance at a time | `retention.enabled: false` on the others |
+| Expired sign-in data clean-up | every hour, idempotent | `egradx.auth.cleanup.*` |
+
+## Per instance
+
+| Behaviour | Effect | What to do |
+|---|---|---|
+| Role authorities cache | a change to what a role holds takes up to 60 s on other instances | `role-authorities-cache-ttl-seconds` |
+| Live notification streams | a notice reaches streams open on the instance that published it; others see it on their next load | a broadcaster of your own (Redis pub/sub) |
+| Streams per person | five per person per instance | — |
+| Sign-in attempt limit | counted per instance | a limit at the load balancer as well |
+| Log shipping queue | per instance, best effort | `queue-capacity` |
+| Your own caches | — | key by organization; share them (OIM uses Redis) |
+
+## Different services, one database
+
+Services in different languages can share the database, the keys and the issuer: they read and write the same tables and accept each other's tokens. A message queued by Java can be delivered by a Node instance. Two **different** services on one database need a broker for events: with the in-process transport, one can relay an event that only the other handles.
+
+## See also
+
+- [Keys](/docs/guides/keys) · [Events](/docs/guides/events#choosing-a-transport) · [Production checklist](/docs/operate/production)

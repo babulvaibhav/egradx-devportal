@@ -1,0 +1,22 @@
+# The EGRADX Developer Portal, deployed to Netlify from GitHub: a static site (`next build` with output 'export' writes
+# it to out/), with no functions and no server.
+#
+# This file sits in the portal's folder so the same settings work in both places it lives:
+#   - in the portal's own repository: nothing to set on Netlify;
+#   - in the monorepo (egradx-v1-workspace): set the site's Base directory to apps/egradx-devportal on Netlify, which
+#     then reads this file from there.
+[build]
+  command = "npm run build"
+  publish = "out"
+
+[build.environment]
+  NODE_VERSION = "24"
+  # The site is a static export: Netlify's Next.js runtime (for server rendering) is not needed.
+  NETLIFY_NEXT_PLUGIN_SKIP = "true"
+
+# The AI context pack and the Initializr's projects download as files.
+[[headers]]
+  for = "/downloads/*"
+  [headers.values]
+    Content-Disposition = "attachment"
+    Cache-Control = "public, max-age=3600"

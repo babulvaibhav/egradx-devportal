@@ -1,0 +1,43 @@
+---
+title: Contribute
+description: How the SDK's repository is laid out, the rules that keep three languages alike, and how to build and test each part.
+---
+
+## The repository
+
+| Folder | What |
+|---|---|
+| `contracts/` | the language-neutral source of truth: HTTP API, database migrations, events, schemas, test vectors. When an SDK and this folder disagree, the SDK is wrong. |
+| `sdks/java/` | the Java SDK: a Maven reactor, the reference implementation |
+| `sdks/node/packages/` | the Node SDK (pnpm workspace) |
+| `sdks/python/packages/` | the Python SDK (uv workspace), imported as `egradx.*` |
+| `sdks/web/packages/` | the browser packages: client, React, Next.js, copy-in screens |
+| `conformance/` | black-box HTTP tests every application on an SDK must pass, plus the cross-language events test |
+| `apps/egradx-oim/` | OIM: the reference application, one backend per language, two frontends |
+| `apps/egradx-devportal/` | this portal |
+
+## The rules
+
+1. **Contract first.** A new capability starts as a change in `contracts/`.
+2. **Java first, then Node, then Python.** Java is the reference. Where it settles a behaviour, the others match it; where it doesn't, the decision is reviewed first.
+3. **Every SDK is complete on its own.** Each language has every library, and no SDK's tests read another SDK's files.
+4. **Shared behaviour is pinned by test vectors** in `contracts/`, which each SDK tests its own code against.
+5. **Parity is measured.** A capability is marked done for a language only when conformance passes against that language's application.
+6. **Same names everywhere:** the same classes and functions, config keys, endpoints, error codes, event types and metric names.
+
+## Building and testing
+
+| | Build and test |
+|---|---|
+| Java | `mvn -f sdks/java/pom.xml clean verify` (always `clean`: an IDE writing `target/classes` makes Maven skip compiling). Needs a local PostgreSQL. |
+| Node | `pnpm install && pnpm -r build && pnpm -r test` |
+| Python | `uv sync`, then `uv run pytest` in each package |
+| Web | `pnpm -r build`, the packages' own tests |
+| Applications | `conformance/`: `npm run test:oim`, `test:oim-node`, `test:oim-python` |
+| Browser | `apps/egradx-oim/e2e/run-e2e.sh <backend> <frontend>`: `java`, `node` or `python`; `vite` or `next` |
+
+<Cards>
+  <Card title="Add a capability" href="/docs/contribute/add-a-capability">From the contract to three SDKs, step by step.</Card>
+  <Card title="Contracts and conformance" href="/docs/contribute/contracts-and-conformance">What lives in contracts/, and how parity is checked.</Card>
+  <Card title="The portal" href="/docs/contribute/the-portal">Changing a page, a snippet, an example or a reference.</Card>
+</Cards>

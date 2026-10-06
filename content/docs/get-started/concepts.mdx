@@ -1,0 +1,42 @@
+---
+title: Concepts
+description: What the SDK is, what it owns, and what it expects of your application.
+---
+
+## Libraries, not a platform service
+
+Each capability is a library your application includes. It creates its own tables in **your** PostgreSQL database, serves its own endpoints under `/egradx/**` from **your** application, and runs its background work (sending email, relaying events, purging old records) inside **your** process.
+
+So there is nothing extra to deploy or keep running, and the SDK's work joins your transactions:
+
+- an audit record is written **in the same transaction** as the change it records, so there is never a record of a change that rolled back, nor a change without its record;
+- an in-app notification is stored with the change and pushed to the browser **after** the commit;
+- an event is written to an outbox **with** the change and sent after the commit, so other services hear of exactly what was committed.
+
+## What the SDK owns, and what you own
+
+| The SDK owns | Your application owns |
+|---|---|
+| Users, organizations, roles, permissions, sessions, invitations, profiles — tables and endpoints | Your domain: entities, rules, use cases |
+| Checking who is calling, on every request | Deciding **which permission** each of your endpoints needs |
+| Knowing the caller's organization | **Filtering your own queries** by that organization |
+| The audit trail's storage, security, retention and endpoints | Calling `record(...)` for the changes worth auditing |
+| Delivering notifications, their templates and people's preferences | Deciding **what** to tell people, and when |
+| The outbox, relay, inbox and transports for events | Publishing your business events, and handling the ones you care about |
+| The error envelope and codes | Throwing the SDK's exceptions |
+
+<Callout type="warn" title="Tenant isolation in your own tables is yours">
+  The SDK tells you which organization the caller is acting in. Every query on your application's own tables must filter by it.
+</Callout>
+
+## One database
+
+The SDK runs on **PostgreSQL**. Each library migrates its own tables, recorded in its own history table, so they live beside your application's migrations without clashing. Your tables can reference the SDK's (for example a foreign key to `egradx_organization`).
+
+## Same behaviour in every language
+
+Java is the reference implementation; Node and Python follow it. Shared behaviour is pinned down by **contracts** — the HTTP API (OpenAPI), the error codes, the token claims, the event format, the database migrations and test vectors — and every language is checked against them. A capability is marked ready in a language only when an application on that language's SDK passes the same conformance tests.
+
+## One version
+
+Every package, in every language, is **1.0.0**, and stays 1.0.0 while the SDK is being completed. The portal shows the build date and commit, so you can tell which edition you are reading.

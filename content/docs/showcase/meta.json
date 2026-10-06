@@ -1,0 +1,10 @@
+{
+  "title": "Showcase: OIM",
+  "pages": [
+    "oim",
+    "running-oim",
+    "low-stock-alert",
+    "inventory-concurrency",
+    "dashboard-cache"
+  ]
+}

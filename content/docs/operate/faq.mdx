@@ -1,0 +1,52 @@
+---
+title: FAQ
+description: Short answers to the questions teams ask in their first weeks on the SDK.
+---
+
+### Is there an EGRADX server to run?
+
+No. The SDK is libraries that run inside your application, on your PostgreSQL database. Sign-in, audit and notifications are endpoints and tables of your application.
+
+### Can a Java service and a Node service share users?
+
+Yes. Point them at the same database, keys folder, passphrase and issuer. They share the tables, and accept each other's tokens.
+
+### Do I need RabbitMQ or Kafka?
+
+Not to start. Events are in-process by default. Add a broker when a second service must handle your events ([move to RabbitMQ](/docs/recipes/move-to-rabbitmq)). Notifications never need one.
+
+### Can I use MySQL?
+
+No: PostgreSQL only, for now.
+
+### Can I use my ORM?
+
+Yes, for your own tables: JPA, Prisma, SQLAlchemy. The SDK's tables are created by its own migrations; don't map or alter them. In Node, run your work in `egradxTransaction` so the audit records and events join it.
+
+### Where do I check permissions: roles or authorities?
+
+Authorities, always (`note.write`). Roles belong to each organization's administrators and can change.
+
+### Why does another organization's record give 404, not 403?
+
+So ids can't be probed. An id from another organization looks exactly like one that doesn't exist.
+
+### How do I make someone an administrator of the whole platform?
+
+The platform organization's `Admin` role. The `platform-admin` account is created on the first start.
+
+### Does the SDK send emails synchronously?
+
+No. Sends are queued in your transaction and delivered after the commit by a dispatcher inside your application, with retries.
+
+### What does the browser need?
+
+`@babulvaibhav/egradx-client`, plus `@babulvaibhav/egradx-react` for React, or `@babulvaibhav/egradx-next` for a backend-for-frontend in Next.js. [The Initializr](/start) generates either.
+
+### The packages need a token even to install?
+
+Yes, while they are private on GitHub Packages: see [access](/docs/get-started/access).
+
+### Where do I report a problem?
+
+Every page has a link at the bottom to open an issue about that page.

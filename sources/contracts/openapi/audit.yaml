@@ -1,0 +1,541 @@
+openapi: 3.1.0
+info:
+  title: EGRADX audit API
+  version: 1.0.0
+tags:
+- description: The audit trail of the organization your session is in. Needs `egradx.audit.read`;
+    a record outside your organization answers `NOT_FOUND` (404).
+  name: Audit trail
+- description: "Every organization's audit trail, and the records that belong to none.\
+    \ Needs `egradx.audit.platform.read`. `organizationId` narrows a search to one\
+    \ organization, `platformOnly=true` to the records of none."
+  name: Audit trail (platform)
+paths:
+  /egradx/audit/actions:
+    get:
+      description: "The actions that can be recorded, with their category and description,\
+        \ for an audit screen's filters and labels. Needs `egradx.audit.read` on `/egradx/audit`,\
+        \ or `egradx.audit.platform.read` on `/egradx/audit/platform`."
+      operationId: actions_1
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ActionView"
+          description: OK
+      summary: List the audit actions
+      tags:
+      - Audit trail
+  /egradx/audit/events:
+    get:
+      description: "Records, newest first, a page at a time by `cursor`; the filters\
+        \ combine. Needs `egradx.audit.read` on `/egradx/audit`, or `egradx.audit.platform.read`\
+        \ on `/egradx/audit/platform`. Only the platform route honours `organizationId`\
+        \ and `platformOnly`."
+      operationId: events_1
+      parameters:
+      - in: query
+        name: filter
+        required: true
+        schema:
+          $ref: "#/components/schemas/EgradxAuditFilter"
+      - in: query
+        name: cursor
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: size
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxAuditPage"
+          description: OK
+      summary: Search audit records
+      tags:
+      - Audit trail
+  /egradx/audit/events/export:
+    get:
+      description: "The matching records as CSV, newest first, at most `egradx.audit.export.max-rows`;\
+        \ `X-Egradx-Audit-Truncated: true` says there were more. The export is itself\
+        \ recorded. Needs `egradx.audit.read` on `/egradx/audit`, or `egradx.audit.platform.read`\
+        \ on `/egradx/audit/platform`."
+      operationId: export_1
+      parameters:
+      - in: query
+        name: filter
+        required: true
+        schema:
+          $ref: "#/components/schemas/EgradxAuditFilter"
+      responses:
+        "200":
+          description: OK
+      summary: Export audit records as CSV
+      tags:
+      - Audit trail
+  /egradx/audit/events/{id}:
+    get:
+      description: "Needs `egradx.audit.read` on `/egradx/audit`, or `egradx.audit.platform.read`\
+        \ on `/egradx/audit/platform`. A record outside the caller's scope answers\
+        \ `NOT_FOUND` (404), so its existence is not revealed."
+      operationId: event_1
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxAuditRecord"
+          description: OK
+      summary: Get an audit record
+      tags:
+      - Audit trail
+  /egradx/audit/platform/actions:
+    get:
+      description: "The actions that can be recorded, with their category and description,\
+        \ for an audit screen's filters and labels. Needs `egradx.audit.read` on `/egradx/audit`,\
+        \ or `egradx.audit.platform.read` on `/egradx/audit/platform`."
+      operationId: actions
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ActionView"
+          description: OK
+      summary: List the audit actions
+      tags:
+      - Audit trail (platform)
+  /egradx/audit/platform/events:
+    get:
+      description: "Records, newest first, a page at a time by `cursor`; the filters\
+        \ combine. Needs `egradx.audit.read` on `/egradx/audit`, or `egradx.audit.platform.read`\
+        \ on `/egradx/audit/platform`. Only the platform route honours `organizationId`\
+        \ and `platformOnly`."
+      operationId: events
+      parameters:
+      - in: query
+        name: filter
+        required: true
+        schema:
+          $ref: "#/components/schemas/EgradxAuditFilter"
+      - in: query
+        name: cursor
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: size
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxAuditPage"
+          description: OK
+      summary: Search audit records
+      tags:
+      - Audit trail (platform)
+  /egradx/audit/platform/events/export:
+    get:
+      description: "The matching records as CSV, newest first, at most `egradx.audit.export.max-rows`;\
+        \ `X-Egradx-Audit-Truncated: true` says there were more. The export is itself\
+        \ recorded. Needs `egradx.audit.read` on `/egradx/audit`, or `egradx.audit.platform.read`\
+        \ on `/egradx/audit/platform`."
+      operationId: export
+      parameters:
+      - in: query
+        name: filter
+        required: true
+        schema:
+          $ref: "#/components/schemas/EgradxAuditFilter"
+      responses:
+        "200":
+          description: OK
+      summary: Export audit records as CSV
+      tags:
+      - Audit trail (platform)
+  /egradx/audit/platform/events/{id}:
+    get:
+      description: "Needs `egradx.audit.read` on `/egradx/audit`, or `egradx.audit.platform.read`\
+        \ on `/egradx/audit/platform`. A record outside the caller's scope answers\
+        \ `NOT_FOUND` (404), so its existence is not revealed."
+      operationId: event
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxAuditRecord"
+          description: OK
+      summary: Get an audit record
+      tags:
+      - Audit trail (platform)
+  /egradx/audit/platform/timeline:
+    get:
+      description: "Everything recorded about one thing, by `entityType` and `entityId`,\
+        \ newest first. Needs `egradx.audit.read` on `/egradx/audit`, or `egradx.audit.platform.read`\
+        \ on `/egradx/audit/platform`."
+      operationId: timeline_1
+      parameters:
+      - in: query
+        name: entityType
+        required: true
+        schema:
+          type: string
+      - in: query
+        name: entityId
+        required: true
+        schema:
+          type: string
+      - in: query
+        name: cursor
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: size
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxAuditPage"
+          description: OK
+      summary: Get the history of one entity
+      tags:
+      - Audit trail (platform)
+  /egradx/audit/timeline:
+    get:
+      description: "Everything recorded about one thing, by `entityType` and `entityId`,\
+        \ newest first. Needs `egradx.audit.read` on `/egradx/audit`, or `egradx.audit.platform.read`\
+        \ on `/egradx/audit/platform`."
+      operationId: timeline
+      parameters:
+      - in: query
+        name: entityType
+        required: true
+        schema:
+          type: string
+      - in: query
+        name: entityId
+        required: true
+        schema:
+          type: string
+      - in: query
+        name: cursor
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: size
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxAuditPage"
+          description: OK
+      summary: Get the history of one entity
+      tags:
+      - Audit trail
+components:
+  schemas:
+    ActionView:
+      type: object
+      properties:
+        action:
+          type:
+          - string
+          - "null"
+        category:
+          type:
+          - string
+          - "null"
+        description:
+          type:
+          - string
+          - "null"
+        entityType:
+          type:
+          - string
+          - "null"
+    Actor:
+      type: object
+      properties:
+        id:
+          type:
+          - string
+          - "null"
+          format: uuid
+        label:
+          type:
+          - string
+          - "null"
+        name:
+          type:
+          - string
+          - "null"
+        organizationId:
+          type:
+          - string
+          - "null"
+          format: uuid
+        type:
+          type:
+          - string
+          - "null"
+          enum:
+          - USER
+          - ANONYMOUS
+          - SYSTEM
+          - UNKNOWN
+    EgradxAuditFilter:
+      type: object
+      properties:
+        action:
+          type:
+          - array
+          - "null"
+          items:
+            type: string
+        actionPrefix:
+          type:
+          - string
+          - "null"
+        actorId:
+          type:
+          - array
+          - "null"
+          items:
+            type: string
+            format: uuid
+        actorType:
+          type:
+          - array
+          - "null"
+          items:
+            type: string
+            enum:
+            - USER
+            - ANONYMOUS
+            - SYSTEM
+            - UNKNOWN
+        category:
+          type:
+          - array
+          - "null"
+          items:
+            type: string
+        changedField:
+          type:
+          - string
+          - "null"
+        correlationId:
+          type:
+          - string
+          - "null"
+        entityId:
+          type:
+          - string
+          - "null"
+        entityType:
+          type:
+          - string
+          - "null"
+        from:
+          type:
+          - string
+          - "null"
+          format: date-time
+        organizationId:
+          type:
+          - string
+          - "null"
+          format: uuid
+        outcome:
+          type:
+          - array
+          - "null"
+          items:
+            type: string
+            enum:
+            - SUCCESS
+            - FAILURE
+            - DENIED
+        platformOnly:
+          type:
+          - boolean
+          - "null"
+        q:
+          type:
+          - string
+          - "null"
+        to:
+          type:
+          - string
+          - "null"
+          format: date-time
+    EgradxAuditPage:
+      type: object
+      properties:
+        items:
+          type:
+          - array
+          - "null"
+          items:
+            $ref: "#/components/schemas/EgradxAuditRecord"
+        nextCursor:
+          type:
+          - string
+          - "null"
+    EgradxAuditRecord:
+      type: object
+      properties:
+        action:
+          type:
+          - string
+          - "null"
+        actor:
+          anyOf:
+          - $ref: "#/components/schemas/Actor"
+          - type: "null"
+        after:
+          anyOf:
+          - $ref: "#/components/schemas/JsonNode"
+          - type: "null"
+        before:
+          anyOf:
+          - $ref: "#/components/schemas/JsonNode"
+          - type: "null"
+        category:
+          type:
+          - string
+          - "null"
+        changedFields:
+          type:
+          - array
+          - "null"
+          items:
+            type: string
+        clientAddress:
+          type:
+          - string
+          - "null"
+        details:
+          anyOf:
+          - $ref: "#/components/schemas/JsonNode"
+          - type: "null"
+        entity:
+          anyOf:
+          - $ref: "#/components/schemas/Entity"
+          - type: "null"
+        id:
+          type:
+          - string
+          - "null"
+          format: uuid
+        occurredAt:
+          type:
+          - string
+          - "null"
+          format: date-time
+        organizationId:
+          type:
+          - string
+          - "null"
+          format: uuid
+        organizationName:
+          type:
+          - string
+          - "null"
+        outcome:
+          type:
+          - string
+          - "null"
+          enum:
+          - SUCCESS
+          - FAILURE
+          - DENIED
+        reason:
+          type:
+          - string
+          - "null"
+        recordedAt:
+          type:
+          - string
+          - "null"
+          format: date-time
+        requestId:
+          type:
+          - string
+          - "null"
+        seq:
+          type:
+          - integer
+          - "null"
+          format: int64
+        traceId:
+          type:
+          - string
+          - "null"
+        userAgent:
+          type:
+          - string
+          - "null"
+    Entity:
+      type: object
+      properties:
+        id:
+          type:
+          - string
+          - "null"
+        label:
+          type:
+          - string
+          - "null"
+        type:
+          type:
+          - string
+          - "null"
+    JsonNode: {}

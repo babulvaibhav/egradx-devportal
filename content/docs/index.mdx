@@ -1,0 +1,42 @@
+---
+title: EGRADX SDK
+description: Libraries that give a Java, Node or Python application its sign-in, permissions, audit trail, notifications, events and observability, so the application holds business logic only.
+---
+
+The EGRADX SDK is a set of **libraries that run inside your application**. There is no separate EGRADX server to deploy: your application adds a dependency, points it at its PostgreSQL database, and gets the cross-cutting features every business application needs.
+
+<Cards>
+  <Card title="Get started" href="/docs/get-started">Access to the packages, a quickstart in your language, your first protected and audited endpoint.</Card>
+  <Card title="AI context pack" href="/docs/ai-assistants">Markdown for Claude Code, Copilot or Cursor, so they build on the SDK instead of re-writing it.</Card>
+</Cards>
+
+## What it gives an application
+
+| Capability | What you get |
+|---|---|
+| **Sign-in & identity** | Users, organizations, roles and permissions, invitations, password reset, email change, profiles, sessions, switching organization — with its endpoints and tables |
+| **Authorization** | The caller's permissions resolved on every request; one annotation or one middleware to protect an endpoint |
+| **Audit trail** | An append-only record of who changed what, written in the same transaction as the change, with filters, history, CSV export and retention |
+| **Notifications** | An in-app inbox with a live bell, email, Slack, SMS, WhatsApp and webhooks, templates, people's preferences, bulk sends |
+| **Events** | Business events as CloudEvents, through a transactional outbox, handled once per handler; in-process, RabbitMQ or Kafka by configuration |
+| **Observability** | Request ids on every log line, traces, metrics, and log shipping, with the same names in every language |
+| **Errors** | One error envelope and one set of codes, across every endpoint and every language |
+| **Web** | A browser client, React hooks, a Next.js backend-for-frontend, and copy-in screens |
+
+## Three languages, one behaviour
+
+The SDK exists for **Java** (Spring Boot), **Node** (Express, TypeScript) and **Python** (FastAPI). The three share their database tables, their HTTP API, their error codes and their event format. They are checked against the same language-neutral contracts and the same conformance tests, so a service in one language and a service in another work together, and can even share one database.
+
+<Callout title="Pick your language once">
+  Code on this portal comes in a tab per language. Choose yours once; every page follows it.
+</Callout>
+
+## See it in a real application
+
+**OIM**, an order and inventory application, is built on the SDK three times — a Java, a Node and a Python backend with identical behaviour — behind a Vite and a Next.js frontend. Pages here show how OIM does each thing, cut from OIM's actual code.
+
+Its sign-in, its notification bell and its audit log are the SDK's: the web packages talk to the SDK's endpoints in whichever backend runs.
+
+<Screenshot name="oim-notification-bell" alt="OIM's dashboard with the notification bell open, showing a notification that arrived while the page was open" caption="A notification arriving live in OIM's bell, captured by OIM's browser tests." />
+
+<Screenshot name="oim-sign-in" alt="OIM's sign-in page" caption="OIM's sign-in page: signing in calls the SDK's login endpoint, and the browser client keeps the session." />

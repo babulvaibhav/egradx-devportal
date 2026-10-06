@@ -1,0 +1,25 @@
+---
+title: Java API
+description: The Java SDK's javadoc, every module in one place, built from the SDK's source.
+---
+
+The Java SDK's API is its javadoc, built from the source of every module with `mvn javadoc:aggregate`.
+
+<Cards>
+  <Card title="Open the javadoc" href="/reference/java/index.html">Every package and class of every module, searchable.</Card>
+</Cards>
+
+## Where to start
+
+| Package | What is in it |
+|---|---|
+| `com.egradx.auth` | `EgradxRoleService`, `EgradxOrganizationProvisioningService`, `EgradxUserService` |
+| `com.egradx.auth.security` | the caller: `EgradxTenantContextAccessor`, `EgradxAuthenticatedPrincipal` |
+| `com.egradx.audit`, `com.egradx.core.audit` | `EgradxAuditor`; `EgradxAuditEvent` and its builder |
+| `com.egradx.notification.messenger` | `EgradxMessenger`, `EgradxMessageRequest` |
+| `com.egradx.notification.template`, `.inbox`, `.spi` | `EgradxNotificationType`; `EgradxInAppMessage`; `EgradxNotificationChannel` for channels of your own |
+| `com.egradx.events` | `EgradxEventPublisher`, `EgradxEventHandler`, `EgradxEvent` |
+| `com.egradx.core.exception` | the exceptions every endpoint answers with the error envelope |
+| `com.egradx.observability` | request ids, `EgradxMetrics`, log shipping |
+
+Most applications depend on `egradx-sdk` alone, which brings the others, plus `egradx-platform-events` when they publish events. Configuration keys are listed in [configuration](/docs/reference/configuration).

@@ -1,0 +1,8 @@
+# Never sent to the image build: secrets and local state.
+keys/
+.env
+*.log
+.git/
+.venv/
+__pycache__/
+.pytest_cache/

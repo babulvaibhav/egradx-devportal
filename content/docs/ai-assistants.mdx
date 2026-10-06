@@ -1,0 +1,59 @@
+---
+title: AI context pack
+description: A zip of Markdown you keep in your project, so Claude Code, Copilot, Cursor or any other assistant builds on the EGRADX SDK instead of re-implementing it.
+---
+
+An AI assistant that has never seen the EGRADX SDK will happily write its own login, its own audit table and its own error handler. The **AI context pack** stops that: it is the SDK's rules and this portal's documentation as Markdown, in a folder you keep in your project.
+
+<AiContextDownload />
+
+## What is inside
+
+| Path | What it is |
+|---|---|
+| `egradx-sdk-docs/AGENTS.md` | The rules: what the SDK already does, what your application must never write, and how each language does each task |
+| `egradx-sdk-docs/docs/` | Every page of this portal, as Markdown |
+| `egradx-sdk-docs/contracts/` | The SDK's API (OpenAPI), error envelope and codes, token claims, headers and events (AsyncAPI) |
+| `egradx-sdk-docs/README.md` | These instructions |
+
+It is built with the portal, so it always matches what you read here. The footer of `AGENTS.md` says which build it came from.
+
+<Steps>
+<Step>
+
+### Unzip it into your project
+
+Put `egradx-sdk-docs/` at the root of your application, and commit it, so everyone's assistant follows the same rules.
+
+</Step>
+<Step>
+
+### Point your assistant at it
+
+Add these lines to the file your assistant reads — create it if there is none:
+
+| Assistant | File |
+|---|---|
+| Claude Code | `CLAUDE.md` |
+| Codex and others | `AGENTS.md` |
+| Cursor | `.cursor/rules/egradx.md` |
+| GitHub Copilot | `.github/copilot-instructions.md` |
+
+```md
+This application is built on the EGRADX SDK. Before writing code, read egradx-sdk-docs/AGENTS.md and follow it.
+Use egradx-sdk-docs/docs/ for how to use the SDK, and egradx-sdk-docs/contracts/ for its API, errors and events.
+```
+
+</Step>
+<Step>
+
+### Refresh it now and then
+
+Download the pack again when the portal changes, and replace the folder.
+
+</Step>
+</Steps>
+
+## Single pages, too
+
+Every page here is also available as Markdown — the **Copy Markdown** button on each page, or the whole site at once at [`/llms.txt`](/llms.txt) (an index) and [`/llms-full.txt`](/llms-full.txt) (everything), the convention many assistants and tools look for.

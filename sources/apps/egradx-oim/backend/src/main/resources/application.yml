@@ -1,0 +1,174 @@
+spring:
+  application:
+    name: egradx-oim
+
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5433/egradx_oim}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      # Schema is owned by Flyway (src/main/resources/db/migration); Hibernate only validates
+      # that the entities match what's already there.
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+    open-in-view: false
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    # V1, V5, V6 and V9 created egradx-auth's tables until the library migrated them itself (into
+    # egradx_auth_schema_history). Databases created before that still list them in this app's history.
+    ignore-migration-patterns: "*:missing"
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+    web:
+      pageable:
+        # No cap here previously meant a client could request size=100000 and force one query to
+        # load the whole table. See KNOWN_LIMITATIONS.md "Addressed in this pass".
+        max-page-size: 100
+        default-page-size: 20
+
+  # No spring.mail.* here on purpose. Setting spring.mail.host — even to an empty value — makes Boot
+  # create a mail sender, and without a reachable server the application would have one that can
+  # never send. The local profile and docker-compose set it; without it, email is "not configured"
+  # until an organization stores its own SMTP settings on the Notification channels screen.
+
+# ======================================================================================
+# Metrics and tracing. Prometheus scrapes /api/actuator/prometheus; traces go over OTLP to
+# Jaeger (docker-compose). Every log line shows [traceId,spanId,requestId] — that pattern comes
+# from egradx-observability. The `local` profile keeps tracing but sends traces nowhere.
+# ======================================================================================
+# docs:region telemetry
+management:
+  health:
+    mail:
+      # An SMTP outage delays email (deliveries retry); it must not mark the application DOWN.
+      enabled: false
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  observations:
+    key-values:
+      # On every metric and span, so several applications can share one Prometheus and one Jaeger.
+      application: ${spring.application.name}
+  tracing:
+    sampling:
+      # Every request, for the demo. A busy production service samples a fraction, e.g. 0.1.
+      probability: ${MANAGEMENT_TRACING_SAMPLING_PROBABILITY:1.0}
+  otlp:
+    tracing:
+      endpoint: ${MANAGEMENT_OTLP_TRACING_ENDPOINT:http://localhost:4318/v1/traces}
+# docs:end
+
+# ======================================================================================
+# egradx-sdk configuration. This replaces the application's former spring.security.jwt.*
+# and jwt.* blocks entirely — token issuance, verification, key management, refresh-token
+# lifetime and permission caching are all the SDK's concern now.
+# ======================================================================================
+# docs:region sdk-config
+egradx:
+  security:
+    crypto:
+      # egradx-tls-provider generates an encrypted RSA keypair here on first boot (and reuses it
+      # afterwards); egradx-auth signs and verifies access tokens with it. Both properties are
+      # mandatory — the application will not start without them.
+      keystorePath: ${EGRADX_KEYSTORE_PATH:./keys}
+      passphrase: ${EGRADX_KEY_PASSPHRASE:changeit}
+  auth:
+    # The `iss` claim stamped on every token and required when verifying one. Since this app both
+    # issues and verifies (no external authorization server), any stable identifier works — it
+    # does not need to resolve.
+    issuer-uri: ${EGRADX_ISSUER_URI:https://egradx-oim.local}
+    access-token-ttl-minutes: ${EGRADX_ACCESS_TOKEN_TTL_MINUTES:1440}
+    refresh-token-ttl-days: ${EGRADX_REFRESH_TOKEN_TTL_DAYS:7}
+    # How long a role's resolved authorities stay cached in-process before the database is
+    # consulted again. A role edit evicts this immediately on the instance that made the change;
+    # this TTL is the ceiling for other instances in a scaled-out deployment.
+    role-authorities-cache-ttl-seconds: ${EGRADX_ROLE_CACHE_TTL_SECONDS:60}
+    # Where the password-reset and invitation links in emails point: the frontend's public origin.
+    # The pages are /reset-password and /accept-invite. Locally that is the Vite dev server; behind
+    # docker-compose's nginx it is port 3000.
+    links:
+      base-url: ${APP_PUBLIC_URL:http://localhost:5173}
+  notification:
+    # Stored channel secrets (SMTP passwords, Slack and Twilio tokens) are encrypted with
+    # egradx.security.crypto.passphrase above. Changing that passphrase makes them unreadable:
+    # administrators would have to enter them again.
+    templates:
+      # This application's message templates (notification-templates/<key>/<channel>.*), searched
+      # before the library's own. Checked at startup against the types in OimNotificationTypes.
+      locations: classpath:notification-templates/
+    email:
+      # The sender used with the application's own mail server (spring.mail.*), for organizations
+      # that have not stored SMTP settings of their own.
+      from: ${NOTIFICATION_EMAIL_FROM:no-reply@egradx-oim.local}
+      from-name: ${NOTIFICATION_EMAIL_FROM_NAME:Egradx OIM}
+  audit:
+    retention:
+      # SRS §6.5: audit records are kept for seven years, then purged (the library's default is to
+      # keep them forever). A Spring period: 7y, 18m, 90d.
+      default-period: ${AUDIT_RETENTION:7y}
+# docs:end
+
+app:
+  audit:
+    # The zone the old audit_logs timestamps (local times, no zone) are read in when they are moved
+    # into the audit trail on the first start after the upgrade. Empty: this server's zone, the one
+    # they were written in unless the server has moved since.
+    legacy-import-zone: ${AUDIT_LEGACY_IMPORT_ZONE:}
+  notifications:
+    low-stock:
+      # Channels the low-stock alert is sent on, each only once the organization has it configured.
+      channels: ${LOW_STOCK_CHANNELS:email,slack,whatsapp,sms}
+  seed:
+    # Demo credentials created on first boot by DataSeeder. Change or disable before this is
+    # anywhere that matters.
+    admin-password: ${SEED_ADMIN_PASSWORD:adminPassword}
+    owner-password: ${SEED_OWNER_PASSWORD:ownerPassword}
+  cors:
+    # Comma-separated allowed origins, or "*" for any (not recommended past a demo). Defaults to
+    # the frontend's Vite dev server and its Docker-mapped port. Override with CORS_ALLOWED_ORIGINS
+    # for a real deployment's actual frontend origin(s).
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:3000}
+
+server:
+  port: ${SERVER_PORT:8080}
+  servlet:
+    context-path: /api
+  # Behind the frontend's nginx, every request arrives from nginx's address. This makes Tomcat take
+  # the client's from X-Forwarded-For — but only when the request came from a private-network proxy,
+  # so a caller cannot pick its own address by sending the header. egradx-auth's limit on password
+  # guesses counts per client address, and without this everyone would share nginx's.
+  forward-headers-strategy: native
+
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+
+logging:
+  level:
+    com.egradx.oim: DEBUG
+
+    # Previously TRACE on both of these: org.springframework.security TRACE logs full
+    # authentication objects (bcrypt hashes included), and BasicBinder TRACE logs every bound SQL
+    # parameter verbatim — including raw refresh-token strings and passwords on the way in. Neither
+    # is safe to leave on by default, in a container's stdout or anywhere else. See
+    # KNOWN_LIMITATIONS.md "Addressed in this pass". Override per-environment if needed for
+    # troubleshooting, but don't leave it on in anything that ships.
+    org.springframework.security: INFO
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: WARN

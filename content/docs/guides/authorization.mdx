@@ -1,0 +1,142 @@
+---
+title: Authorization
+description: Your application's own permissions, the roles that hold them, and protecting each endpoint — checked against what the caller holds right now.
+---
+
+<Parity id="authz.endpoints" />
+
+## What it is
+
+The SDK decides **who** is calling and **what they hold**; your application decides **what each endpoint needs**. A permission is an *authority*: a string such as `note.write` that your code names, an administrator puts on roles, and the SDK resolves for every request.
+
+- Check **authorities, never role names.** Roles belong to each organization's administrators; they can be renamed or reshaped at any time.
+- **Every endpoint states what it needs.** The SDK lets every request through to your code — signed in or not — so an endpoint without a check is public.
+- A frontend can hide a button for those who lack an authority, but only the server's check counts.
+
+## Protecting an endpoint
+
+<Languages>
+<Tab value="Java">
+
+<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/java/com/acme/notes/NoteController.java" region="note-controller" title="NoteController.java" />
+
+`hasAuthority('note.write')` names the authority exactly as stored — no `ROLE_` prefix. `hasAnyAuthority(...)`, `and` and `or` work as in any Spring Security expression; `hasRole(...)` does not apply, since roles are not authorities. Method security is already on.
+
+</Tab>
+<Tab value="Node">
+
+<RepoSnippet file="apps/egradx-devportal/examples/node/src/notes.ts" region="note-routes" title="src/notes.ts" />
+
+`requireAuthority('a', 'b')` needs **every** authority named. For "any of", check in the handler: `currentCaller()!.authorities.has(...)`.
+
+</Tab>
+<Tab value="Python">
+
+<RepoSnippet file="apps/egradx-devportal/examples/python/notes.py" region="note-routes" title="notes.py" />
+
+`require_authority("a", "b")` needs **every** authority named; it is already a `Depends`. For "any of", use `authorize(lambda caller: ...)` inside the route.
+
+</Tab>
+</Languages>
+
+## What callers get
+
+<RecordedRun name="first-endpoint" steps={['without-token', 'without-permission', 'created']} />
+
+| Situation | Answer |
+|---|---|
+| No token | 401 `NOT_AUTHENTICATED` |
+| A token sent but refused (expired, sessions ended, organization suspended) | 401 `SESSION_EXPIRED`: renew it, or sign in again |
+| Signed in, without the authority | 403 `ACCESS_DENIED` |
+
+The browser client renews the token on a 401 by itself and gives up on a refusal of the renewal (`SESSION_REVOKED`); a coded 403 is a decision, never retried.
+
+## Your application's permissions
+
+Authorities live in a catalog in the SDK's tables. Your application adds its own once, at start-up — creating one that exists fails, hence "list, then create what is missing" — and gives them to roles.
+
+<Languages>
+<Tab value="Java">
+
+<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/java/com/acme/notes/Setup.java" region="seed-permission" title="Setup.java" />
+
+`@Order(100)` makes it run after the SDK's own start-up seeding.
+
+</Tab>
+<Tab value="Node">
+
+<RepoSnippet file="apps/egradx-devportal/examples/node/src/setup.ts" region="seed-permission" title="src/setup.ts" />
+
+</Tab>
+<Tab value="Python">
+
+<RepoSnippet file="apps/egradx-devportal/examples/python/seeding.py" region="seed-permission" title="seeding.py" />
+
+</Tab>
+</Languages>
+
+- **Names:** nothing is enforced; the name stored is the one you pass. Keep them `area.action` (`note.write`, `order.cancel`). The `egradx.` prefix is the SDK's own.
+- **Who holds them:** the listener on *organization created* runs in the provisioning transaction, so a new organization's roles hold your authorities before anyone signs in.
+- **Organizations that already exist** when you add a new authority are not given it automatically: add it to their roles yourself (`addAuthoritiesToRole` for each organization), or let their administrators do it.
+- **Roles of your own** (Manager, Staff…): create them in the same listener — `createSystemRole(organizationId, name, description, authorities)` makes one its administrators cannot delete or rename.
+
+## Checking in code
+
+Some decisions depend on the request — "cancelling needs `order.cancel`, other status changes `order.create`". Check the caller's authorities where you decide:
+
+| | Java | Node | Python |
+|---|---|---|---|
+| The caller's authorities | `tenant.current().orElseThrow().hasAuthority("order.cancel")` | `currentCaller()!.authorities.has('order.cancel')` | `"order.cancel" in current_caller().authorities` |
+| Refuse | `throw new AuthorizationException("…")` → 403 `ACCESS_DENIED` | same | same |
+
+## The SDK's own authorities
+
+| Authority | Lets its holder | In every organization's `Admin` |
+|---|---|---|
+| `egradx.user.read`, `egradx.user.manage` | see, and manage, the organization's people and invitations | yes |
+| `egradx.role.read`, `egradx.role.manage` | see, and manage, its roles | yes |
+| `egradx.audit.read` | read and export its audit trail | yes |
+| `egradx.notification.read`, `egradx.notification.manage` | see, and set up, its channels, templates and delivery log | yes |
+| `egradx.organization.read`, `.manage`, `egradx.audit.platform.read`, `egradx.notification.broadcast` | the same across every organization | no: the platform organization only |
+
+[The permissions reference](/docs/reference/permissions) lists them with their descriptions.
+
+## Guarantees and limits
+
+- **Checked against now:** the role a person holds and what it contains are read on every request, so a change applies to their next request (up to 60 seconds later on other instances, where a role's authorities are cached).
+- **Someone removed from an organization** keeps a session there, holding nothing, until it ends. Gate every route on an authority, not on "signed in".
+- **The platform administrator** holds none of your authorities.
+- **The frontend:** `<Can authority="note.write">` and `hasAuthority(...)` decide what to show from the session's snapshot. They are never the check.
+
+## In OIM
+
+OIM has eleven permissions of its own, and gives each new organization a Manager and a Staff role beside the SDK's Admin:
+
+<Languages>
+<Tab value="Java">
+
+<RepoSnippet file="apps/egradx-oim/backend/src/main/java/com/egradx/oim/common/security/PermissionCodes.java" region="permission-catalog" title="PermissionCodes.java" />
+
+<RepoSnippet file="apps/egradx-oim/backend/src/main/java/com/egradx/oim/organization/application/OimOrganizationDefaults.java" region="organization-defaults" title="OimOrganizationDefaults.java" />
+
+</Tab>
+<Tab value="Node">
+
+<RepoSnippet file="apps/egradx-oim/backend-node/src/oim.ts" region="permission-catalog" title="src/oim.ts" />
+
+<RepoSnippet file="apps/egradx-oim/backend-node/src/oim.ts" region="organization-defaults" title="src/oim.ts" />
+
+</Tab>
+<Tab value="Python">
+
+<RepoSnippet file="apps/egradx-oim/backend-python/src/egradx_oim/oim.py" region="permission-catalog" title="oim.py" />
+
+<RepoSnippet file="apps/egradx-oim/backend-python/src/egradx_oim/oim.py" region="organization-defaults" title="oim.py" />
+
+</Tab>
+</Languages>
+
+## See also
+
+- [Multi-tenancy](/docs/guides/multi-tenancy): an authority is per organization; your data must be too.
+- [Recipe: add a permission and give it to a role](/docs/recipes/add-a-permission).

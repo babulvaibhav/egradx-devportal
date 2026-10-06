@@ -1,0 +1,92 @@
+---
+title: Your first endpoint
+description: An endpoint of your own, protected by a permission, scoped to the caller's organization, and audited in the same transaction — with what it answers, and the same thing in OIM.
+---
+
+The pattern every business endpoint follows:
+
+1. **Check a permission** — the SDK resolves the caller's permissions on every request.
+2. **Take the caller's organization** from the SDK, and scope every query on your own tables to it.
+3. **Make the change and record it in the audit trail in the same transaction**, so the record exists exactly when the change does.
+
+The example creates a *note* in a table of the application's own, `acme_note (id, organization_id, title)`. The code is the portal's example applications (`examples/java`, `examples/node`, `examples/python`).
+
+## The endpoint
+
+<Languages>
+<Tab value="Java">
+
+<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/java/com/acme/notes/NoteController.java" region="note-controller" title="NoteController.java" />
+
+<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/java/com/acme/notes/NoteService.java" region="note-service" title="NoteService.java" />
+
+</Tab>
+<Tab value="Node">
+
+<RepoSnippet file="apps/egradx-devportal/examples/node/src/notes.ts" region="note-routes" title="src/notes.ts" />
+
+</Tab>
+<Tab value="Python">
+
+<RepoSnippet file="apps/egradx-devportal/examples/python/notes.py" region="note-routes" title="notes.py" />
+
+</Tab>
+</Languages>
+
+## Your permission, and who holds it
+
+`note.write` is the application's own permission. It goes into the SDK's authority catalog once, at startup, and onto the roles that should hold it — here, every organization's Admin role, through a listener the SDK calls whenever it creates an organization. The example also creates a demo organization, *Demo*, whose administrator is `ada@example.com` (password: `DEMO_PASSWORD`, `demo-password` unless set).
+
+<Languages>
+<Tab value="Java">
+
+<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/java/com/acme/notes/Setup.java" region="seed-permission" title="Setup.java" />
+
+</Tab>
+<Tab value="Node">
+
+<RepoSnippet file="apps/egradx-devportal/examples/node/src/setup.ts" region="seed-permission" title="src/setup.ts" />
+
+</Tab>
+<Tab value="Python">
+
+<RepoSnippet file="apps/egradx-devportal/examples/python/seeding.py" region="seed-permission" title="seeding.py" />
+
+</Tab>
+</Languages>
+
+## What it answers
+
+These are the actual answers of the three example applications, captured by running them:
+
+<RecordedRun name="first-endpoint" />
+
+If the transaction rolls back, neither the note nor its audit record exists.
+
+## The same thing in OIM
+
+OIM creates products exactly this way. The code below is cut from OIM's three backends when this site is built.
+
+<Languages>
+<Tab value="Java">
+
+<RepoSnippet file="apps/egradx-oim/backend/src/main/java/com/egradx/oim/product/api/ProductController.java" region="create-product-endpoint" />
+
+<RepoSnippet file="apps/egradx-oim/backend/src/main/java/com/egradx/oim/product/application/ProductService.java" region="create-product-audit" />
+
+</Tab>
+<Tab value="Node">
+
+<RepoSnippet file="apps/egradx-oim/backend-node/src/products.ts" region="create-product" />
+
+</Tab>
+<Tab value="Python">
+
+<RepoSnippet file="apps/egradx-oim/backend-python/src/egradx_oim/products.py" region="create-product" />
+
+</Tab>
+</Languages>
+
+Those audit records are what OIM's audit screen shows: it reads them through the SDK's audit endpoints, with no audit code of its own.
+
+<Screenshot name="oim-audit-trail" alt="OIM's audit log: a table of who did what and when, with filters by area, action, outcome and date" caption="OIM's audit log, captured by OIM's browser tests." />

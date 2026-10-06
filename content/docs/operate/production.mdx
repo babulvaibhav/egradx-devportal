@@ -1,0 +1,59 @@
+---
+title: Production checklist
+description: Everything to set, turn off and watch before an application on the SDK serves real users.
+---
+
+## Secrets and keys
+
+- [ ] **The keys passphrase** (`EGRADX_KEY_PASSPHRASE`) comes from a secret store. Keep it stable: a changed passphrase can't read the keys, and everyone is signed out.
+- [ ] **The keys folder** is a volume shared by every instance, backed up, and readable only by the application. Java writes the private keys with the system's default permissions, so restrict the folder yourself.
+- [ ] **The first instance starts alone** on an empty keys folder, and the others after it. See [keys](/docs/guides/keys#rules).
+- [ ] **The notification secrets passphrase** is set, so administrators can store SMTP, Slack and Twilio credentials. Java falls back to the keys passphrase. Node and Python fall back only to the environment variables `EGRADX_NOTIFICATION_SECRETS_PASSPHRASE` and `EGRADX_SECURITY_CRYPTO_PASSPHRASE`, not to the passphrase you pass in code. Without one, saving credentials fails.
+- [ ] **The issuer** is a stable identifier, the same on every instance (`egradx.auth.issuer-uri`, `issuer`).
+
+## Accounts
+
+- [ ] **The platform administrator's password** is set before the **first** start (Java `EGRADX_AUTH_PLATFORM_ADMIN_PASSWORD`; Node `auth: { platform: { adminPassword } }`; Python `AuthOptions(platform=PlatformSettings(admin_password=…))`). It is only used when the account is created. Afterwards, change it from the account itself.
+- [ ] **The demo data is gone.** The generated `Setup` creates a demo organization with `ada@example.com` and `DEMO_PASSWORD`. Remove that part, or set a strong password and remove the account after the first start.
+- [ ] **Links in emails** point at the frontend's public HTTPS address (`links.base-url`). Without it, password reset and invitations can't be sent.
+
+## Email
+
+- [ ] A real mail server, a `from` address on a domain with SPF and DKIM for that server, and timeouts (Java: the `mail.smtp.*timeout` properties; JavaMail waits for ever by default).
+- [ ] Java: `management.health.mail.enabled: false`, so a mail outage only delays email and doesn't mark the application down.
+
+## Database
+
+- [ ] Backups, and a restore you have tried.
+- [ ] The application's database user may create tables. Migrations run at start-up, the SDK's and yours, under an advisory lock.
+- [ ] **Retention** is set: the audit trail is kept for ever by default (`retention.default-period`). Notifications keep sent messages 30 days, dead ones 90, in-app notices 365.
+
+## In front of the application
+
+- [ ] TLS at the load balancer or reverse proxy.
+- [ ] Buffering off for `/egradx/notifications/stream`, and idle timeouts of at least five minutes.
+- [ ] A rate limit on `/egradx/auth/login` too. The SDK's own limit counts per instance.
+- [ ] Java: Actuator's endpoints (`/actuator/prometheus`, `/actuator/metrics`) aren't public. Expose them on a management port, or protect them.
+
+## Your code
+
+- [ ] Every endpoint names the authority it needs. An endpoint without a check is public.
+- [ ] Every query of yours filters by the caller's organization.
+- [ ] Java: the error advice is present (the generated `ApiExceptionHandler`). If you declared your own `SecurityFilterChain`, it adds the SDK's filter.
+- [ ] Frontend: a strict Content-Security-Policy if tokens are in `localStorage` (Vite), or the Next.js backend-for-frontend, which keeps them out of the browser.
+
+## Watch
+
+| Signal | Means |
+|---|---|
+| `egradx.audit.write.failed` > 0 | audit records are failing to write: alert |
+| `egradx.notification.delivery.dead` rising | messages are being given up on: read `lastError` in the delivery log |
+| `egradx.notification.delivery.backlog` growing | the dispatcher can't keep up, or a channel is down |
+| `egradx_event_outbox.dead_at`, `*.dead` queues, `*.DLT` topics | events a handler keeps failing on ([dead letters](/docs/recipes/dead-letters)) |
+| 5xx with a request id | the log line with that `requestId` has the stack trace |
+
+Lower the tracing sample rate from the generated `1.0` once traffic is real.
+
+## See also
+
+- [Security checklist](/docs/operate/security) · [Several instances](/docs/operate/multiple-instances) · [Configuration](/docs/reference/configuration)

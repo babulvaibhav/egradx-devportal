@@ -1,0 +1,61 @@
+---
+title: Upgrading
+description: Picking up a new build of the SDK while every package is still published as 1.0.0 — per build tool — and what an upgrade does to your database.
+---
+
+## The version stays 1.0.0 for now
+
+Until the whole SDK is complete, every package in every language is published as **1.0.0**, and a fix is published again under the same number. [What's new](/docs/whats-new) says what changed, and when. Build tools treat a version they have already downloaded as final, so picking up a republished 1.0.0 means removing your local copy first.
+
+<Languages>
+<Tab value="Java">
+
+Maven never downloads a release twice. Delete the cached copies, then build:
+
+```sh
+rm -rf ~/.m2/repository/com/egradx
+./mvnw clean verify
+```
+
+</Tab>
+<Tab value="Node">
+
+The lockfile pins each package's checksum, so a republished 1.0.0 fails with `EINTEGRITY`. Install again without the old pins:
+
+```sh
+rm -rf node_modules package-lock.json
+npm install
+```
+
+</Tab>
+<Tab value="Python">
+
+Download the wheels again, then refresh the lock:
+
+```sh
+python scripts/get_wheels.py
+uv lock --refresh
+uv sync
+```
+
+</Tab>
+</Languages>
+
+Upgrade every service that shares a database together. All three languages ship the same migrations, and a service on an older build may not understand what a newer one has migrated.
+
+## What an upgrade does on start
+
+- **The SDK's migrations run** on the first start of the new build, under an advisory lock, before your application serves requests.
+- **Your migrations** run as before, in their place in the order.
+- **Data written by an older build** stays readable: tokens, sealed secrets, audit records, queued messages and outbox events keep their formats, which test vectors in the SDK's contracts pin.
+
+## Before upgrading production
+
+1. Read [what's new](/docs/whats-new) since your last upgrade.
+2. Back up the database.
+3. Start one instance of the new build, and let it migrate. Then roll the others.
+4. Watch the start-up log: a refused migration names the file and the reason.
+
+## See also
+
+- [Database & migrations](/docs/guides/database) · [Troubleshooting](/docs/operate/troubleshooting)

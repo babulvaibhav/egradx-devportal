@@ -1,0 +1,57 @@
+{
+  "description": "Events every SDK must read, and write back the same. 'json' is the event as it travels; 'fields' are what reading it gives (trace keys by the SDK's own names: traceparent, tracestate, requestId). Writing 'fields' must give 'json', key order aside. 'invalidTypes' must be refused.",
+  "events": [
+    {
+      "name": "everything set",
+      "json": {
+        "specversion": "1.0",
+        "id": "01928c6e-7a3b-7c2d-9e4f-1a2b3c4d5e6f",
+        "type": "egradx.auth.user.deactivated.v1",
+        "source": "egradx-oim",
+        "subject": "0f8fad5b-d9cb-469f-a165-70867728950e",
+        "time": "2026-10-03T09:15:30.123Z",
+        "datacontenttype": "application/json",
+        "organizationid": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+        "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+        "tracestate": "egradx=1",
+        "requestid": "req-42",
+        "data": { "userId": "0f8fad5b-d9cb-469f-a165-70867728950e", "reason": "left", "nested": { "n": 1, "list": [true, null] } }
+      },
+      "fields": {
+        "id": "01928c6e-7a3b-7c2d-9e4f-1a2b3c4d5e6f",
+        "type": "egradx.auth.user.deactivated.v1",
+        "source": "egradx-oim",
+        "subject": "0f8fad5b-d9cb-469f-a165-70867728950e",
+        "time": "2026-10-03T09:15:30.123Z",
+        "organizationId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+        "trace": {
+          "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+          "tracestate": "egradx=1",
+          "requestId": "req-42"
+        }
+      }
+    },
+    {
+      "name": "only what is required",
+      "json": {
+        "specversion": "1.0",
+        "id": "01928c6e-7a3b-7c2d-9e4f-000000000001",
+        "type": "egradx.log.record.v1",
+        "source": "billing",
+        "time": "2026-10-03T09:15:30Z",
+        "datacontenttype": "application/json",
+        "data": {}
+      },
+      "fields": {
+        "id": "01928c6e-7a3b-7c2d-9e4f-000000000001",
+        "type": "egradx.log.record.v1",
+        "source": "billing",
+        "subject": null,
+        "time": "2026-10-03T09:15:30Z",
+        "organizationId": null,
+        "trace": {}
+      }
+    }
+  ],
+  "invalidTypes": ["", "UserDeactivated", "egradx.auth.user.deactivated", "egradx.Auth.user.v1", "egradx.v1", "egradx.auth.user.deactivated.v0", "egradx..user.v1"]
+}

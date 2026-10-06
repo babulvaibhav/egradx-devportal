@@ -1,0 +1,44 @@
+---
+title: Record a refused or failed attempt
+description: Keep a record of what someone tried and was refused — written on its own, so it stays when the work around it rolls back.
+---
+
+A successful change is recorded with the change. A refused or failed attempt is different: the work usually rolls back, but the attempt must stay on record. Mark it `denied(reason)` or `failure(reason)`, and the SDK writes it in a transaction of its own.
+
+<Languages>
+<Tab value="Java">
+
+<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/java/com/acme/notes/recipes/AuditExtras.java" region="record-a-refusal" title="AuditExtras.java" />
+
+</Tab>
+<Tab value="Node">
+
+<RepoSnippet file="apps/egradx-devportal/examples/node/src/recipes/audit-extras.ts" region="record-a-refusal" title="src/recipes/audit-extras.ts" />
+
+</Tab>
+<Tab value="Python">
+
+<RepoSnippet file="apps/egradx-devportal/examples/python/recipes/audit_extras.py" region="record-a-refusal" title="recipes/audit_extras.py" />
+
+</Tab>
+</Languages>
+
+| | Outcome | Written |
+|---|---|---|
+| (neither) | `SUCCESS` | with your transaction: kept only if it commits |
+| `.denied(code)` | `DENIED`: a rule said no | on its own: kept even on rollback |
+| `.failure(code)` | `FAILURE`: it went wrong | on its own: kept even on rollback |
+
+Record the refusal, then throw as usual (for example an `AuthorizationException`), so the caller gets the error envelope.
+
+## Repeats are throttled
+
+Identical refusals in a burst (a password guessed many times) are kept once a minute, so an attacker can't flood the trail. `egradx.audit.suppressed` counts the ones dropped.
+
+## The SDK's own
+
+The SDK already records its own refusals: failed sign-ins, refused role changes and so on. [Audit actions](/docs/reference/audit-actions) lists them.
+
+## See also
+
+- [Audit trail](/docs/guides/audit) · [Record an update](/docs/recipes/audit-an-update)

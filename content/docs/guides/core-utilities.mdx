@@ -1,0 +1,80 @@
+---
+title: Core utilities
+description: Sealed secrets, time-ordered ids, random strings, gzip, lifecycle and application properties — the same in Java, Node and Python, so you don't copy utility code.
+---
+
+<Parity id="core.utilities" />
+
+## Sealed secrets
+
+A secret your application must store — an API key, a partner's password — kept in **one text column**, readable by Java, Node and Python alike: `v1:<salt>:<wrapped key>:<ciphertext>`. AES-256-GCM, with its key wrapped under a key derived from your passphrase (PBKDF2-SHA256, 210 000 rounds).
+
+<Languages>
+<Tab value="Java">
+
+<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/java/com/acme/notes/recipes/SmallUtilities.java" region="seal-a-secret" title="SmallUtilities.java" />
+
+</Tab>
+<Tab value="Node">
+
+<RepoSnippet file="apps/egradx-devportal/examples/node/src/recipes/small-utilities.ts" region="seal-a-secret" title="small-utilities.ts" />
+
+</Tab>
+<Tab value="Python">
+
+<RepoSnippet file="apps/egradx-devportal/examples/python/recipes/small_utilities.py" region="seal-a-secret" title="small_utilities.py" />
+
+</Tab>
+</Languages>
+
+- Keep the passphrase out of the code and the database (an environment variable, a secret store). Changing it means opening every value with the old one and sealing it again.
+- Java's `CommonUtils.encrypt`/`decrypt` (single DES) are deprecated: read an old value with `decrypt` once, and seal it again.
+
+## Ids, random strings, gzip
+
+<Languages>
+<Tab value="Java">
+
+<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/java/com/acme/notes/recipes/SmallUtilities.java" region="small-utilities" title="SmallUtilities.java" />
+
+</Tab>
+<Tab value="Node">
+
+<RepoSnippet file="apps/egradx-devportal/examples/node/src/recipes/small-utilities.ts" region="small-utilities" title="small-utilities.ts" />
+
+</Tab>
+<Tab value="Python">
+
+<RepoSnippet file="apps/egradx-devportal/examples/python/recipes/small_utilities.py" region="small-utilities" title="small_utilities.py" />
+
+</Tab>
+</Languages>
+
+| | Java | Node | Python |
+|---|---|---|---|
+| Random string | `RandomStringGeneratorUtil.generateRandomString(n)` | `generateRandomString(n)` | `generate_random_string(n)` |
+| Time-ordered id | `EgradxIds.uuidV7()` | `uuidV7()` | `uuid_v7()` |
+| gzip | `CommonUtils.getZippedContent` / `getUnzippedContent` | `getZippedContent` / `getUnzippedContent` | `get_zipped_content` / `get_unzipped_content` |
+| Sealed secret | `EncryptionUtil.sealText` / `openText` | `sealSecretText` / `openSecretText` (async) | `seal_secret_text` / `open_secret_text` (async) |
+
+Test vectors in the SDK's contracts pin all of them, so the three write and read the same bytes.
+
+## Lifecycle
+
+A component that starts when the application is ready and stops when it closes, in the order registered:
+
+| Java | Node | Python |
+|---|---|---|
+| a bean extending `Control` (`start()`, `stop()`), run by `ControlManager` on Spring's refresh and close | `new ControlManager()`, `register(control)`; call `start()` once ready and `stop()` at shutdown | `ControlManager()`, `register(control)`; `await start()` / `await stop()` in FastAPI's lifespan |
+
+## Application properties
+
+`egradx.app.software-id`, `software-name`, `software-version`, `software-repository-name` — Java `EgradxApplicationProperties`; Node `applicationProperties()` and Python `load_application_properties()` read the same as `EGRADX_APP_SOFTWAREID`, `…SOFTWARENAME`, `…SOFTWAREVERSION`, `…SOFTWAREREPOSITORYNAME`.
+
+## Shared enums
+
+`UserType`, `OtpMedium`, `SmsType`, `RequestStatus`, `SoftwareStatus`, `SoftwareAccessibility`, `UserBillingActions`, `ProbeClusterType`, `EgradxEventType`: one definition in the contracts, generated into Node and Python (Python's member names are upper-cased: `UserType.HUMAN == "Human"`). Reuse them; never redeclare them.
+
+## See also
+
+- [Recipe: store a secret field encrypted](/docs/recipes/store-a-secret)

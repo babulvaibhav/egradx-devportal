@@ -1,0 +1,79 @@
+---
+title: Call another service
+description: Forward the signed-in person's token to another application on the SDK, or get a client-credentials token from an outside OAuth server.
+---
+
+<Parity id="identity.service-tokens" />
+
+There are two cases, and the SDK's own sign-in covers only the first.
+
+## Another application on the SDK, as the same person
+
+Forward the caller's own token. The other application accepts it when the two share:
+
+- the **keys folder and passphrase**, so the signature verifies (see [keys](/docs/guides/keys));
+- the **issuer** (`issuer-uri` / `issuer`);
+- the **database**, so the SDK can check the session, the organization and the role on every request.
+
+The call then runs as that person, in their organization, with their authorities. Their audit records and request id carry across too: send `X-Request-ID` along.
+
+| | Read the caller's token |
+|---|---|
+| Java | the request's `Authorization` header (`@RequestHeader(HttpHeaders.AUTHORIZATION)`) |
+| Node | `request.headers.authorization` |
+| Python | `request.headers["authorization"]` |
+
+## A service calling as itself
+
+That needs a token from the OAuth client-credentials grant. **The SDK's sign-in does not issue these**, and it treats any token that isn't a person's as anonymous. So this works only for calling a service that trusts an outside OAuth server (Keycloak, Auth0, Entra ID…):
+
+<Languages>
+<Tab value="Java">
+
+```yaml title="application.yml"
+egradx:
+  service:
+    token:
+      enabled: true
+  security:
+    client:
+      client-id: notes
+      client-secret: ${NOTES_CLIENT_SECRET}
+      authorization-grant-type: client_credentials
+spring.security.oauth2.resourceserver.jwt.issuer-uri: https://auth.example.com/realms/acme
+```
+
+Inject `EgradxServiceTokenManager` and send `"Bearer " + tokens.getAccessToken()` with the shared `RestTemplate`. It comes with `egradx-sdk` (in `egradx-web-security`).
+
+</Tab>
+<Tab value="Node">
+
+```ts
+import { createServiceTokenManager } from '@babulvaibhav/egradx-security';
+
+const tokens = createServiceTokenManager({
+  issuer: 'https://auth.example.com/realms/acme', // or tokenEndpoint
+  clientId: 'notes',
+  clientSecret: process.env.NOTES_CLIENT_SECRET!,
+});
+await fetch(url, { headers: { Authorization: `Bearer ${await tokens.getAccessToken()}` } });
+```
+
+</Tab>
+<Tab value="Python">
+
+```python
+from egradx.security import ServiceTokenManager
+
+tokens = ServiceTokenManager("notes", os.environ["NOTES_CLIENT_SECRET"], issuer="https://auth.example.com/realms/acme")
+await http.get(url, headers={"Authorization": f"Bearer {await tokens.get_access_token()}"})
+```
+
+</Tab>
+</Languages>
+
+Tokens are cached and renewed shortly before they expire, and concurrent callers share one request. The token endpoint is found at `<issuer>/.well-known/openid-configuration`.
+
+## See also
+
+- [Java-only modules](/docs/guides/java-only#service-to-service-tokens) · [Keys](/docs/guides/keys)

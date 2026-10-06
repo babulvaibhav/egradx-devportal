@@ -1,0 +1,1 @@
+Test message: {{#if organizationName}}{{organizationName}}{{else}}this channel{{/if}} is configured correctly.{{#if requestedBy}} Sent at the request of {{requestedBy}}.{{/if}}

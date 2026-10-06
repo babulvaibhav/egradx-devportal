@@ -1,0 +1,8 @@
+<!DOCTYPE html>
+<html>
+<body style="font-family: sans-serif; line-height: 1.5;">
+  <p>This is a test message.</p>
+  <p>If you are reading it, email delivery{{#if organizationName}} for <strong>{{organizationName}}</strong>{{/if}} is configured correctly.</p>
+  {{#if requestedBy}}<p style="color: #666;">Sent at the request of {{requestedBy}}.</p>{{/if}}
+</body>
+</html>

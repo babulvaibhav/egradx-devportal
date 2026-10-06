@@ -1,0 +1,40 @@
+---
+title: Run two instances behind a load balancer
+description: What changes when a second instance starts — what is shared through the database, what is per instance, and the one thing to do first.
+---
+
+Most of the SDK coordinates through PostgreSQL, so a second instance needs little. Here is all of it.
+
+## Do this
+
+1. **One keys folder for every instance**, with the same passphrase: a volume or share mounted on each. A token signed by one instance must verify on the others.
+2. **Start one instance first** on an empty keys folder, and the others once it is up. Instances starting together on an empty folder can each make keys; the last write wins, and sessions signed with the losing key start failing.
+3. **The same issuer** on every instance.
+4. **The load balancer:** no sticky sessions needed. Turn buffering off for `/egradx/notifications/stream`, and allow idle connections of at least five minutes.
+
+## Shared safely, through the database
+
+| | How |
+|---|---|
+| Sessions, revocation, roles | read from the database on every request |
+| Notification delivery | every instance runs a dispatcher; deliveries are claimed with leases, so none is sent twice at once |
+| Event relay | the same: leases on the outbox |
+| Audit retention purge | one instance at a time; or turn it off on all but one (`retention.enabled: false`) |
+| Migrations | an advisory lock: the first instance migrates, the others wait |
+
+## Per instance
+
+| | What it means | What to do |
+|---|---|---|
+| **Role cache** | a change to a role's authorities applies at once on the instance that made it, and within 60 seconds on the others | usually nothing; lower `role-authorities-cache-ttl-seconds` if 60 s is too long |
+| **Live notices** | a notice reaches the streams open **on the instance that published it**; people connected elsewhere see it on their next load | a broadcaster of your own (Redis pub/sub) to make it live everywhere |
+| **Sign-in attempt limit** | counted on each instance separately: with *n* instances, up to *n* × the limit | a limit at the load balancer as well |
+| **Your own caches** | — | key them by organization, and expire them, or share them (OIM uses Redis) |
+
+## Different services, one database
+
+Java, Node and Python services can share the database, the keys and the issuer, and accept each other's tokens. With the in-process event transport, two **different** services on one database can lose events: one relays an event the other should handle. Use a broker once services differ ([RabbitMQ](/docs/recipes/move-to-rabbitmq)).
+
+## See also
+
+- [Keys](/docs/guides/keys) · [Deploy with Docker Compose](/docs/recipes/deploy-with-docker-compose) · [Operate: several instances](/docs/operate/multiple-instances)

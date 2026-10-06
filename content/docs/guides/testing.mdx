@@ -1,0 +1,74 @@
+---
+title: Testing your application
+description: Test an application on the SDK as a client sees it — signed in, against PostgreSQL — and check the audit record, the notice, the email and the event its change produced.
+---
+
+<Parity id="testing.kit" />
+
+## The approach
+
+The SDK runs inside your application, so the most useful test runs the application: start it against a real PostgreSQL, sign in as a real person, call your endpoint, then ask the SDK's own endpoints what happened. Every [generated project](/start) has such a test, and the matrix that guards the Initializr runs it for every combination.
+
+- **A database of its own:** `<app>_test`, made by the compose file (`TEST_DB_URL` / `TEST_DATABASE_URL` points elsewhere). The SDK's migrations and yours run as in production.
+- **A keys folder of its own:** a temporary directory per run.
+- **Signed in as a seeded person:** the demo administrator the application creates at start-up.
+- **An SMTP server inside the test** when the application sends email: GreenMail (Java), `smtp-server` (Node), `aiosmtpd` (Python).
+
+## The test
+
+<Languages>
+<Tab value="Java">
+
+<RepoSnippet file="apps/egradx-devportal/examples/java/src/test/java/com/acme/notes/NotesTests.java" region="test" title="src/test/java/…/NotesTests.java" />
+
+`@SpringBootTest(webEnvironment = RANDOM_PORT)` starts the whole application; the dispatcher and the event relay run as in production, so the test waits for what happens after the commit.
+
+</Tab>
+<Tab value="Node">
+
+<RepoSnippet file="apps/egradx-devportal/examples/node/test/notes.test.ts" region="test" title="test/notes.test.ts" />
+
+`startApplication(config)` — the same function `main.ts` calls — gives the Express app and a `close()`.
+
+</Tab>
+<Tab value="Python">
+
+<RepoSnippet file="apps/egradx-devportal/examples/python/tests/test_notes.py" region="test" title="tests/test_notes.py" />
+
+The application runs in the test's event loop, called through `httpx.ASGITransport`. On Windows, psycopg needs a selector event loop: `tests/conftest.py` provides it.
+
+</Tab>
+</Languages>
+
+## Checking what the SDK did
+
+| What | Ask |
+|---|---|
+| The audit record | `GET /egradx/audit/events?action=<action>&entityId=<id>` — `after`, `before`, `changedFields` |
+| The notice | `GET /egradx/notifications` — the item's `body` and `notificationKey` |
+| The email | the test's SMTP server; it arrives after the commit, so wait for it |
+| A message's delivery | `GET /egradx/notifications/admin/deliveries?channel=email` — `SENT`, or `DEAD` with `lastError` |
+| An event handled | what its handler changed; with the in-process transport, events are handled in the same application |
+| A refusal | the status and `error.code` |
+
+Wait for what happens after the commit (email, events) by polling with a deadline, as the tests above do, rather than sleeping.
+
+## Unit tests without a server
+
+For a service on its own, give it the SDK's beans or fakes:
+
+- **Java:** set the caller with `EgradxTenantContextAccessor` (replaceable: `@ConditionalOnMissingBean`), or use the default and call `set(new EgradxTenantContext(userId, organizationId, false, Set.of("note.write")))` — clear it after. Worker threads need it set too. `EgradxMetrics.noop()` for metrics.
+- **Node / Python:** run the code inside `runWithContext(...)` / `request_context(...)` with a caller, or pass the organization explicitly.
+- Let the database be real: the audit trail and the outbox join your transaction, and that is what you want to test.
+
+## Not yet: a test kit
+
+A test kit — a signed-in client, captured mail and events, audit assertions — is planned for each language. Until then, the generated tests above are the pattern to copy.
+
+## In OIM
+
+OIM's Node and Python backends test the same way: a fresh database, the application in-process, sign-in as its demo administrator, then the audit trail (`?category=oim`) and the inbox. Its Java backend tests concurrency on the services directly, with the caller set on the tenant context — 100 threads reserving 10 units leave exactly 0 available and 10 reserved. Its browser tests (Playwright) read the emails from Mailpit.
+
+## See also
+
+- [Recipe: write an integration test with a signed-in user](/docs/recipes/integration-test) · [check an audit record or an email in a test](/docs/recipes/assert-audit-and-email)

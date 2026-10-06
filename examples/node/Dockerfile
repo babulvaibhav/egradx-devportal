@@ -1,0 +1,16 @@
+# syntax=docker/dockerfile:1
+# Build: docker build --secret id=github-token,env=GITHUB_TOKEN -t notes .
+FROM node:24-slim
+WORKDIR /app
+COPY package.json .npmrc tsconfig.json ./
+RUN --mount=type=secret,id=github-token,env=GITHUB_TOKEN npm install --no-audit --no-fund
+COPY prisma prisma
+RUN npx prisma generate
+COPY src src
+COPY migrations migrations
+COPY notification-templates notification-templates
+# The signing keys live here: mount one volume shared by every instance, and start one instance first.
+VOLUME /app/keys
+ENV EGRADX_KEYSTORE_PATH=/app/keys
+EXPOSE 8080
+CMD ["npm", "start"]

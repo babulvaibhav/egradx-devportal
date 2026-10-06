@@ -1,0 +1,694 @@
+{
+  "$comment": "Test vectors for notification template rendering: every SDK's renderer must produce exactly this. See README.md in contracts/.",
+  "description": "Each case renders `subject` (when not null) and `body` with `model`, in `format` (HTML: values HTML-escaped into the body; TEXT: inserted as they are; subjects are never escaped and have line breaks collapsed to spaces). `expect` is the output, or the kind of failure: missing-variable (a name the model's root lacks, named), does-not-compile (refused when the template is compiled), cannot-render (refused when rendered, e.g. a partial). A number written with a fraction is an exact decimal: 1.50 renders 1.50. An SDK whose language has no decimal type passes such a number as its text when a plain number would lose digits (1.50 as \"1.50\"), and as a number otherwise (0.0 as 0). Seeded on 2026-10-02 from what the Java SDK's EgradxHandlebarsRenderer (jknack Handlebars 4.3) produced.",
+  "cases": [
+    {
+      "id": "basic",
+      "subject": "Order {{orderNumber}}",
+      "body": "Hi {{name}}",
+      "format": "TEXT",
+      "model": {
+        "orderNumber": 42,
+        "name": "Asha"
+      },
+      "expect": {
+        "subject": "Order 42",
+        "body": "Hi Asha"
+      }
+    },
+    {
+      "id": "html-escape",
+      "subject": null,
+      "body": "{{v}}",
+      "format": "HTML",
+      "model": {
+        "v": "<b>Tom & Jerry</b> \"q\" 'a' `b` x=y"
+      },
+      "expect": {
+        "subject": null,
+        "body": "&lt;b&gt;Tom &amp; Jerry&lt;/b&gt; &quot;q&quot; &#x27;a&#x27; &#x60;b&#x60; x&#x3D;y"
+      }
+    },
+    {
+      "id": "text-no-escape",
+      "subject": null,
+      "body": "{{v}}",
+      "format": "TEXT",
+      "model": {
+        "v": "<b>Tom & Jerry</b> \"q\" 'a' `b` x=y"
+      },
+      "expect": {
+        "subject": null,
+        "body": "<b>Tom & Jerry</b> \"q\" 'a' `b` x=y"
+      }
+    },
+    {
+      "id": "subject-one-line",
+      "subject": "{{title}}",
+      "body": "x",
+      "format": "HTML",
+      "model": {
+        "title": "Tom & Jerry\r\nBcc: attacker@example.test"
+      },
+      "expect": {
+        "subject": "Tom & Jerry Bcc: attacker@example.test",
+        "body": "x"
+      }
+    },
+    {
+      "id": "subject-not-escaped",
+      "subject": "<{{t}}>",
+      "body": "x",
+      "format": "HTML",
+      "model": {
+        "t": "a&b"
+      },
+      "expect": {
+        "subject": "<a&b>",
+        "body": "x"
+      }
+    },
+    {
+      "id": "missing",
+      "subject": null,
+      "body": "Hi {{nmae}}",
+      "format": "TEXT",
+      "model": {
+        "name": "Asha"
+      },
+      "expect": {
+        "error": "missing-variable",
+        "part": "body",
+        "variable": "nmae"
+      }
+    },
+    {
+      "id": "null-falsy",
+      "subject": null,
+      "body": "[{{trackingUrl}}]{{#if trackingUrl}}track{{else}}none{{/if}}",
+      "format": "TEXT",
+      "model": {
+        "trackingUrl": null
+      },
+      "expect": {
+        "subject": null,
+        "body": "[]none"
+      }
+    },
+    {
+      "id": "each-outer",
+      "subject": null,
+      "body": "{{#each items}}{{@index}}:{{name}} {{price}} {{currency}};{{/each}}",
+      "format": "TEXT",
+      "model": {
+        "currency": "EUR",
+        "items": [
+          {
+            "name": "Pen",
+            "price": 1.50
+          },
+          {
+            "name": "Ink",
+            "price": 3
+          }
+        ]
+      },
+      "expect": {
+        "subject": null,
+        "body": "0:Pen 1.50 EUR;1:Ink 3 EUR;"
+      }
+    },
+    {
+      "id": "each-missing",
+      "subject": null,
+      "body": "{{#each items}}{{colour}}{{/each}}",
+      "format": "TEXT",
+      "model": {
+        "items": [
+          {
+            "name": "Pen"
+          }
+        ]
+      },
+      "expect": {
+        "error": "missing-variable",
+        "part": "body",
+        "variable": "colour"
+      }
+    },
+    {
+      "id": "nested-missing-field",
+      "subject": null,
+      "body": "[{{order.numbr}}][{{order.number}}][{{order.customer.name}}][{{order.customer.age}}]",
+      "format": "TEXT",
+      "model": {
+        "order": {
+          "number": "A-1",
+          "customer": {
+            "name": "Asha"
+          }
+        }
+      },
+      "expect": {
+        "subject": null,
+        "body": "[][A-1][Asha][]"
+      }
+    },
+    {
+      "id": "partial",
+      "subject": null,
+      "body": "{{> secrets}}",
+      "format": "TEXT",
+      "model": {},
+      "expect": {
+        "error": "cannot-render",
+        "part": "body"
+      }
+    },
+    {
+      "id": "unclosed",
+      "subject": null,
+      "body": "{{#if x}}unclosed",
+      "format": "TEXT",
+      "model": {
+        "x": true
+      },
+      "expect": {
+        "error": "does-not-compile",
+        "part": "body"
+      }
+    },
+    {
+      "id": "mismatched-close",
+      "subject": null,
+      "body": "{{#if x}}a{{/each}}",
+      "format": "TEXT",
+      "model": {
+        "x": true
+      },
+      "expect": {
+        "error": "does-not-compile",
+        "part": "body"
+      }
+    },
+    {
+      "id": "standalone-if",
+      "subject": null,
+      "body": "Hello {{name}}\n{{#if vip}}\nVIP!\n{{/if}}\nBye\n",
+      "format": "TEXT",
+      "model": {
+        "name": "Asha",
+        "vip": true
+      },
+      "expect": {
+        "subject": null,
+        "body": "Hello Asha\n\nVIP!\n\nBye\n"
+      }
+    },
+    {
+      "id": "standalone-if-false",
+      "subject": null,
+      "body": "Hello {{name}}\n{{#if vip}}\nVIP!\n{{/if}}\nBye\n",
+      "format": "TEXT",
+      "model": {
+        "name": "Asha",
+        "vip": false
+      },
+      "expect": {
+        "subject": null,
+        "body": "Hello Asha\n\nBye\n"
+      }
+    },
+    {
+      "id": "standalone-each-indented",
+      "subject": null,
+      "body": "Items:\n  {{#each items}}\n  - {{this}}\n  {{/each}}\nEnd",
+      "format": "TEXT",
+      "model": {
+        "items": [
+          "a",
+          "b"
+        ]
+      },
+      "expect": {
+        "subject": null,
+        "body": "Items:\n  \n  - a\n  \n  - b\n  \nEnd"
+      }
+    },
+    {
+      "id": "standalone-else",
+      "subject": null,
+      "body": "{{#if a}}\nyes\n{{else}}\nno\n{{/if}}\n",
+      "format": "TEXT",
+      "model": {
+        "a": false
+      },
+      "expect": {
+        "subject": null,
+        "body": "\nno\n\n"
+      }
+    },
+    {
+      "id": "standalone-comment",
+      "subject": null,
+      "body": "x\n{{! a note }}\ny",
+      "format": "TEXT",
+      "model": {},
+      "expect": {
+        "subject": null,
+        "body": "x\n\ny"
+      }
+    },
+    {
+      "id": "standalone-crlf",
+      "subject": null,
+      "body": "a\r\n{{#if x}}\r\nb\r\n{{/if}}\r\nc",
+      "format": "TEXT",
+      "model": {
+        "x": true
+      },
+      "expect": {
+        "subject": null,
+        "body": "a\r\n\r\nb\r\n\r\nc"
+      }
+    },
+    {
+      "id": "standalone-at-end",
+      "subject": null,
+      "body": "a\n{{#if x}}\nb\n{{/if}}",
+      "format": "TEXT",
+      "model": {
+        "x": true
+      },
+      "expect": {
+        "subject": null,
+        "body": "a\n\nb\n"
+      }
+    },
+    {
+      "id": "not-standalone-inline",
+      "subject": null,
+      "body": "a {{#if x}}b{{/if}} c\n",
+      "format": "TEXT",
+      "model": {
+        "x": true
+      },
+      "expect": {
+        "subject": null,
+        "body": "a b c\n"
+      }
+    },
+    {
+      "id": "not-standalone-two-tags",
+      "subject": null,
+      "body": "{{#if x}}{{#if y}}\nz\n{{/if}}{{/if}}\n",
+      "format": "TEXT",
+      "model": {
+        "x": true,
+        "y": true
+      },
+      "expect": {
+        "subject": null,
+        "body": "\nz\n\n"
+      }
+    },
+    {
+      "id": "variable-line-not-standalone",
+      "subject": null,
+      "body": "a\n  {{v}}\nb",
+      "format": "TEXT",
+      "model": {
+        "v": ""
+      },
+      "expect": {
+        "subject": null,
+        "body": "a\n  \nb"
+      }
+    },
+    {
+      "id": "tilde",
+      "subject": null,
+      "body": "A  {{~name~}}  B\n {{~#if x~}} C {{~/if~}} \nD",
+      "format": "TEXT",
+      "model": {
+        "name": "n",
+        "x": true
+      },
+      "expect": {
+        "subject": null,
+        "body": "AnBCD"
+      }
+    },
+    {
+      "id": "long-comment",
+      "subject": null,
+      "body": "a{{!-- {{x}} }} --}}b",
+      "format": "TEXT",
+      "model": {},
+      "expect": {
+        "subject": null,
+        "body": "ab"
+      }
+    },
+    {
+      "id": "triple",
+      "subject": null,
+      "body": "{{{html}}}|{{& html}}|{{html}}",
+      "format": "HTML",
+      "model": {
+        "html": "<i>x</i>"
+      },
+      "expect": {
+        "subject": null,
+        "body": "<i>x</i>|<i>x</i>|&lt;i&gt;x&lt;/i&gt;"
+      }
+    },
+    {
+      "id": "unless",
+      "subject": null,
+      "body": "{{#unless done}}todo{{else}}done{{/unless}}",
+      "format": "TEXT",
+      "model": {
+        "done": false
+      },
+      "expect": {
+        "subject": null,
+        "body": "todo"
+      }
+    },
+    {
+      "id": "with-parent",
+      "subject": null,
+      "body": "{{#with order}}{{number}} for {{../name}} {{name}}{{/with}}",
+      "format": "TEXT",
+      "model": {
+        "name": "Asha",
+        "order": {
+          "number": "A-1"
+        }
+      },
+      "expect": {
+        "subject": null,
+        "body": "A-1 for Asha Asha"
+      }
+    },
+    {
+      "id": "with-falsy",
+      "subject": null,
+      "body": "{{#with order}}x{{else}}none{{/with}}",
+      "format": "TEXT",
+      "model": {
+        "order": null
+      },
+      "expect": {
+        "subject": null,
+        "body": "none"
+      }
+    },
+    {
+      "id": "each-map",
+      "subject": null,
+      "body": "{{#each prices}}{{@key}}={{this}};{{/each}}",
+      "format": "TEXT",
+      "model": {
+        "prices": {
+          "pen": 2,
+          "ink": 3
+        }
+      },
+      "expect": {
+        "subject": null,
+        "body": "pen=2;ink=3;"
+      }
+    },
+    {
+      "id": "each-first-last",
+      "subject": null,
+      "body": "{{#each items}}{{#if @first}}[{{/if}}{{this}}{{#if @last}}]{{else}},{{/if}}{{/each}}",
+      "format": "TEXT",
+      "model": {
+        "items": [
+          "a",
+          "b",
+          "c"
+        ]
+      },
+      "expect": {
+        "subject": null,
+        "body": "[a,b,c]"
+      }
+    },
+    {
+      "id": "each-empty-else",
+      "subject": null,
+      "body": "{{#each items}}x{{else}}empty{{/each}}",
+      "format": "TEXT",
+      "model": {
+        "items": []
+      },
+      "expect": {
+        "subject": null,
+        "body": "empty"
+      }
+    },
+    {
+      "id": "section",
+      "subject": null,
+      "body": "{{#items}}{{name}},{{/items}}|{{^items}}none{{/items}}|{{^empty}}none{{/empty}}|{{#flag}}on{{/flag}}",
+      "format": "TEXT",
+      "model": {
+        "items": [
+          {
+            "name": "a"
+          },
+          {
+            "name": "b"
+          }
+        ],
+        "empty": [],
+        "flag": true
+      },
+      "expect": {
+        "subject": null,
+        "body": "a,b,||none|on"
+      }
+    },
+    {
+      "id": "section-map",
+      "subject": null,
+      "body": "{{#order}}{{number}}{{/order}}",
+      "format": "TEXT",
+      "model": {
+        "order": {
+          "number": "A-1"
+        }
+      },
+      "expect": {
+        "subject": null,
+        "body": "A-1"
+      }
+    },
+    {
+      "id": "scalars",
+      "subject": null,
+      "body": "{{n}}|{{f}}|{{d}}|{{b}}|{{z}}|{{neg}}|{{big}}",
+      "format": "TEXT",
+      "model": {
+        "n": 3,
+        "f": 1.5,
+        "d": 2.50,
+        "b": true,
+        "z": 0,
+        "neg": -7,
+        "big": 12345678901234
+      },
+      "expect": {
+        "subject": null,
+        "body": "3|1.5|2.50|true|0|-7|12345678901234"
+      }
+    },
+    {
+      "id": "truthiness",
+      "subject": null,
+      "body": "{{#if zero}}z{{/if}}|{{#if empty}}e{{/if}}|{{#if map}}m{{/if}}|{{#if text}}t{{/if}}|{{#if blank}}b{{/if}}|{{#if f}}f{{/if}}|{{#if dec}}d{{/if}}",
+      "format": "TEXT",
+      "model": {
+        "zero": 0,
+        "empty": [],
+        "map": {},
+        "text": "0",
+        "blank": "",
+        "f": false,
+        "dec": 0.0
+      },
+      "expect": {
+        "subject": null,
+        "body": "||m|t|||"
+      }
+    },
+    {
+      "id": "else-if",
+      "subject": null,
+      "body": "{{#if a}}A{{else if b}}B{{else}}C{{/if}}",
+      "format": "TEXT",
+      "model": {
+        "a": false,
+        "b": true
+      },
+      "expect": {
+        "subject": null,
+        "body": "B"
+      }
+    },
+    {
+      "id": "escaped-mustache",
+      "subject": null,
+      "body": "\\{{name}} {{name}}",
+      "format": "TEXT",
+      "model": {
+        "name": "Asha"
+      },
+      "expect": {
+        "subject": null,
+        "body": "{{name}} Asha"
+      }
+    },
+    {
+      "id": "this-in-each",
+      "subject": null,
+      "body": "{{#each tags}}<{{this}}>{{/each}}",
+      "format": "HTML",
+      "model": {
+        "tags": [
+          "a&b",
+          "c"
+        ]
+      },
+      "expect": {
+        "subject": null,
+        "body": "<a&amp;b><c>"
+      }
+    },
+    {
+      "id": "literal-if",
+      "subject": null,
+      "body": "{{#if \"x\"}}yes{{/if}}",
+      "format": "TEXT",
+      "model": {},
+      "expect": {
+        "subject": null,
+        "body": "yes"
+      }
+    },
+    {
+      "id": "unknown-helper",
+      "subject": null,
+      "body": "{{upper name}}",
+      "format": "TEXT",
+      "model": {
+        "name": "a"
+      },
+      "expect": {
+        "error": "does-not-compile",
+        "part": "body"
+      }
+    },
+    {
+      "id": "list-output",
+      "subject": null,
+      "body": "{{items}}|{{map}}",
+      "format": "TEXT",
+      "model": {
+        "items": [
+          "a",
+          "b"
+        ],
+        "map": {
+          "k": "v",
+          "n": 1
+        }
+      },
+      "expect": {
+        "subject": null,
+        "body": "[a, b]|{k=v, n=1}"
+      }
+    },
+    {
+      "id": "root-in-each",
+      "subject": null,
+      "body": "{{#each items}}{{@root.name}}:{{this}};{{/each}}",
+      "format": "TEXT",
+      "model": {
+        "name": "Asha",
+        "items": [
+          1,
+          2
+        ]
+      },
+      "expect": {
+        "subject": null,
+        "body": "Asha:1;Asha:2;"
+      }
+    },
+    {
+      "id": "deep-null",
+      "subject": null,
+      "body": "[{{a.b.c}}]",
+      "format": "TEXT",
+      "model": {
+        "a": {
+          "b": null
+        }
+      },
+      "expect": {
+        "subject": null,
+        "body": "[]"
+      }
+    },
+    {
+      "id": "this-dot",
+      "subject": null,
+      "body": "{{#with order}}{{this.number}}|{{./number}}|{{this.missing}}{{/with}}",
+      "format": "TEXT",
+      "model": {
+        "order": {
+          "number": "A-1"
+        }
+      },
+      "expect": {
+        "subject": null,
+        "body": "A-1|A-1|"
+      }
+    },
+    {
+      "id": "unicode",
+      "subject": "Héllo {{n}}",
+      "body": "{{n}} — ünïcode 🔑",
+      "format": "HTML",
+      "model": {
+        "n": "Zoë & 🍕"
+      },
+      "expect": {
+        "subject": "Héllo Zoë & 🍕",
+        "body": "Zoë &amp; 🍕 — ünïcode 🔑"
+      }
+    },
+    {
+      "id": "inviter-real",
+      "subject": null,
+      "body": "{{#if inviterName}}{{inviterName}} invited you{{else}}You were invited{{/if}} to join {{organizationName}} as {{roleName}}: {{link}} (expires in {{expiresInDays}} days).",
+      "format": "TEXT",
+      "model": {
+        "inviterName": null,
+        "organizationName": "Acme",
+        "roleName": "Admin",
+        "link": "https://x.test/accept?token=a=b&c",
+        "expiresInDays": 7
+      },
+      "expect": {
+        "subject": null,
+        "body": "You were invited to join Acme as Admin: https://x.test/accept?token=a=b&c (expires in 7 days)."
+      }
+    }
+  ]
+}

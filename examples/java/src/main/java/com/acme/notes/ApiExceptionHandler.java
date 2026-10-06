@@ -1,0 +1,50 @@
+package com.acme.notes;
+
+import jakarta.servlet.http.HttpServletRequest;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+import com.egradx.auth.security.EgradxAuthenticationFilter;
+import com.egradx.core.error.EgradxErrorResponse;
+import com.egradx.core.error.EgradxErrors;
+import com.egradx.core.web.EgradxExceptionHandlerSupport;
+
+// docs:region error-advice
+/**
+ * This application's own endpoints answer failures in the SDK's error envelope, by the SDK's rules: its exceptions
+ * (NotFoundException → 404 NOT_FOUND, or the code you give it), malformed requests (400), and a logged 500 that
+ * reveals nothing for the rest. The SDK's own endpoints already answer this way; this advice does it for yours.
+ */
+@RestControllerAdvice
+class ApiExceptionHandler extends EgradxExceptionHandlerSupport {
+
+    /**
+     * A refused @PreAuthorize, answered as the SDK answers its own: 403 for someone signed in, 401 for no one, and 401
+     * SESSION_EXPIRED when a token was sent and refused (expired, signed out everywhere), so a client renews it.
+     */
+    @ExceptionHandler(AccessDeniedException.class)
+    ResponseEntity<EgradxErrorResponse> handleAccessDenied(AccessDeniedException ex, HttpServletRequest request) {
+        Authentication caller = SecurityContextHolder.getContext().getAuthentication();
+        boolean signedIn = caller != null && caller.isAuthenticated() && !(caller instanceof AnonymousAuthenticationToken);
+        if (signedIn) {
+            return respond(HttpStatus.FORBIDDEN, EgradxErrors.ACCESS_DENIED, "You do not have permission to perform this action");
+        }
+        return Boolean.TRUE.equals(request.getAttribute(EgradxAuthenticationFilter.REJECTED_TOKEN))
+            ? respond(HttpStatus.UNAUTHORIZED, "SESSION_EXPIRED", "Your session has ended — sign in again")
+            : respond(HttpStatus.UNAUTHORIZED, EgradxErrors.NOT_AUTHENTICATED, "Sign in to continue");
+    }
+
+    /** Everything else: Spring's own refusals keep their status (404 for no such path); anything unexpected is a 500. */
+    @ExceptionHandler(Exception.class)
+    ResponseEntity<EgradxErrorResponse> handleUnexpected(Exception ex) {
+        return answer(answerFor(ex), ex);
+    }
+}
+// docs:end

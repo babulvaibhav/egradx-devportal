@@ -1,0 +1,414 @@
+{
+  "capturedAt": "2026-10-05T14:15:41.717Z",
+  "sdkVersion": "1.0.0",
+  "languages": {
+    "java": [
+      {
+        "name": "not-found",
+        "title": "Another organization's note, or none: the application's own code",
+        "request": {
+          "method": "GET",
+          "path": "/api/notes/00000000-0000-4000-8000-000000000000"
+        },
+        "response": {
+          "status": 404,
+          "body": {
+            "success": false,
+            "error": {
+              "code": "NOTE_NOT_FOUND",
+              "message": "There is no note 00000000-0000-4000-8000-000000000000",
+              "timestamp": "2026-10-05T14:15:24.983430700Z",
+              "requestId": "fdb12ab1-8c60-43b1-b29f-665680eb9d11",
+              "traceId": "437f2a3173aeb8b86a69cf8efa18601d"
+            }
+          }
+        }
+      },
+      {
+        "name": "validation",
+        "title": "A rule of the application broken",
+        "request": {
+          "method": "POST",
+          "path": "/api/notes",
+          "body": {
+            "title": ""
+          }
+        },
+        "response": {
+          "status": 400,
+          "body": {
+            "success": false,
+            "error": {
+              "code": "NOTE_TITLE_REQUIRED",
+              "message": "A note needs a title",
+              "timestamp": "2026-10-05T14:15:25.006974900Z",
+              "requestId": "a7f1f6ac-3523-47f0-8086-e8eb3b82bd93",
+              "traceId": "747be96996ce03f696c8f0123f393d48"
+            }
+          }
+        }
+      },
+      {
+        "name": "malformed",
+        "title": "A malformed request",
+        "request": {
+          "method": "GET",
+          "path": "/api/notes/not-an-id"
+        },
+        "response": {
+          "status": 400,
+          "body": {
+            "success": false,
+            "error": {
+              "code": "INVALID_REQUEST",
+              "message": "Invalid value for 'id': not-an-id",
+              "timestamp": "2026-10-05T14:15:25.039124800Z",
+              "requestId": "539da13c-d415-4b46-bd07-5e77b096c9a2",
+              "traceId": "fe42993403fef78293ad26cbc71e16f7"
+            }
+          }
+        }
+      },
+      {
+        "name": "no-endpoint",
+        "title": "No such endpoint",
+        "request": {
+          "method": "GET",
+          "path": "/api/nothing-here"
+        },
+        "response": {
+          "status": 404,
+          "body": {
+            "success": false,
+            "error": {
+              "code": "NOT_FOUND",
+              "message": "No endpoint GET /api/nothing-here",
+              "timestamp": "2026-10-05T14:15:25.063724300Z",
+              "requestId": "9e9234c9-89ee-4a22-a556-db2fe76e9b71",
+              "traceId": "8deb509fb6e2c115351c3969086a1bf9"
+            }
+          }
+        }
+      },
+      {
+        "name": "refused-token",
+        "title": "A token sent and refused: renew it, or sign in again",
+        "request": {
+          "method": "GET",
+          "path": "/api/notes",
+          "as": "Bearer not-a-token"
+        },
+        "response": {
+          "status": 401,
+          "body": {
+            "success": false,
+            "error": {
+              "code": "SESSION_EXPIRED",
+              "message": "Your session has ended — sign in again",
+              "timestamp": "2026-10-05T14:15:25.074730800Z",
+              "requestId": "d55e7ee3-9e78-4f1d-bdbe-4eaae7d172eb",
+              "traceId": "2a6839fede84b9860e968f72d96ceca2"
+            }
+          }
+        }
+      },
+      {
+        "name": "wrong-password",
+        "title": "One of the SDK's own codes",
+        "request": {
+          "method": "POST",
+          "path": "/egradx/auth/login",
+          "body": {
+            "username": "ada@example.com",
+            "password": "…"
+          }
+        },
+        "response": {
+          "status": 401,
+          "body": {
+            "success": false,
+            "error": {
+              "code": "AUTH_INVALID_CREDENTIALS",
+              "message": "Invalid username or password",
+              "timestamp": "2026-10-05T14:15:25.130051100Z",
+              "requestId": "e87f935a-bb62-446d-8356-262368fdba33",
+              "traceId": "c93f01c7c0168c5f64eff9e49a2cef62"
+            }
+          }
+        }
+      }
+    ],
+    "node": [
+      {
+        "name": "not-found",
+        "title": "Another organization's note, or none: the application's own code",
+        "request": {
+          "method": "GET",
+          "path": "/api/notes/00000000-0000-4000-8000-000000000000"
+        },
+        "response": {
+          "status": 404,
+          "body": {
+            "success": false,
+            "error": {
+              "code": "NOTE_NOT_FOUND",
+              "message": "There is no note 00000000-0000-4000-8000-000000000000",
+              "timestamp": "2026-10-05T14:15:32.965Z",
+              "requestId": "6982bab6-ffb5-4d72-9a51-51e6c530fba3",
+              "traceId": "85e7316d6d8f7d4de773301e9435e23d"
+            }
+          }
+        }
+      },
+      {
+        "name": "validation",
+        "title": "A rule of the application broken",
+        "request": {
+          "method": "POST",
+          "path": "/api/notes",
+          "body": {
+            "title": ""
+          }
+        },
+        "response": {
+          "status": 400,
+          "body": {
+            "success": false,
+            "error": {
+              "code": "NOTE_TITLE_REQUIRED",
+              "message": "A note needs a title",
+              "timestamp": "2026-10-05T14:15:32.972Z",
+              "requestId": "d7c2fd4e-7539-4f6c-b40b-d63260cd3966",
+              "traceId": "ee529531c83566eab7d8a523c92af76d"
+            }
+          }
+        }
+      },
+      {
+        "name": "malformed",
+        "title": "A malformed request",
+        "request": {
+          "method": "GET",
+          "path": "/api/notes/not-an-id"
+        },
+        "response": {
+          "status": 400,
+          "body": {
+            "success": false,
+            "error": {
+              "code": "INVALID_REQUEST",
+              "message": "Invalid value for 'id': not-an-id",
+              "timestamp": "2026-10-05T14:15:32.982Z",
+              "requestId": "3df28bcf-0b06-4beb-b69e-6257f337d02a",
+              "traceId": "0c31275fbdcb54d4146a054b5a6015e7"
+            }
+          }
+        }
+      },
+      {
+        "name": "no-endpoint",
+        "title": "No such endpoint",
+        "request": {
+          "method": "GET",
+          "path": "/api/nothing-here"
+        },
+        "response": {
+          "status": 404,
+          "body": {
+            "success": false,
+            "error": {
+              "code": "NOT_FOUND",
+              "message": "No endpoint GET /api/nothing-here",
+              "timestamp": "2026-10-05T14:15:32.988Z",
+              "requestId": "bd50a411-3657-4ad2-a98b-01f6715cad1f",
+              "traceId": "6b5428ea29290a50342ba0ecfa71e5ce"
+            }
+          }
+        }
+      },
+      {
+        "name": "refused-token",
+        "title": "A token sent and refused: renew it, or sign in again",
+        "request": {
+          "method": "GET",
+          "path": "/api/notes",
+          "as": "Bearer not-a-token"
+        },
+        "response": {
+          "status": 401,
+          "body": {
+            "success": false,
+            "error": {
+              "code": "SESSION_EXPIRED",
+              "message": "Your session has ended — sign in again",
+              "timestamp": "2026-10-05T14:15:32.990Z",
+              "requestId": "a1bd260e-24ed-4df8-bcdb-b4c9233763d4",
+              "traceId": "08eac2579a0cf29a1c41391da8a7b05d"
+            }
+          }
+        }
+      },
+      {
+        "name": "wrong-password",
+        "title": "One of the SDK's own codes",
+        "request": {
+          "method": "POST",
+          "path": "/egradx/auth/login",
+          "body": {
+            "username": "ada@example.com",
+            "password": "…"
+          }
+        },
+        "response": {
+          "status": 401,
+          "body": {
+            "success": false,
+            "error": {
+              "code": "AUTH_INVALID_CREDENTIALS",
+              "message": "Invalid username or password",
+              "timestamp": "2026-10-05T14:15:33.078Z",
+              "requestId": "33f3b766-0e8a-4da2-a42f-c19d304b8c3c",
+              "traceId": "defe3c95791d20149c0c3877a520f680"
+            }
+          }
+        }
+      }
+    ],
+    "python": [
+      {
+        "name": "not-found",
+        "title": "Another organization's note, or none: the application's own code",
+        "request": {
+          "method": "GET",
+          "path": "/api/notes/00000000-0000-4000-8000-000000000000"
+        },
+        "response": {
+          "status": 404,
+          "body": {
+            "success": false,
+            "error": {
+              "code": "NOTE_NOT_FOUND",
+              "message": "There is no note 00000000-0000-4000-8000-000000000000",
+              "timestamp": "2026-10-05T14:15:41.022Z",
+              "requestId": "4f44fadc-486c-4006-b952-2583c1b73c6d",
+              "traceId": "fe49abede04502693ac5ff9a2ceff1b8"
+            }
+          }
+        }
+      },
+      {
+        "name": "validation",
+        "title": "A rule of the application broken",
+        "request": {
+          "method": "POST",
+          "path": "/api/notes",
+          "body": {
+            "title": ""
+          }
+        },
+        "response": {
+          "status": 400,
+          "body": {
+            "success": false,
+            "error": {
+              "code": "NOTE_TITLE_REQUIRED",
+              "message": "A note needs a title",
+              "timestamp": "2026-10-05T14:15:41.030Z",
+              "requestId": "cc0f1863-81ce-4ead-9f4c-8a86962ea3d0",
+              "traceId": "9725993ee0f7e71ff75000907475ed78"
+            }
+          }
+        }
+      },
+      {
+        "name": "malformed",
+        "title": "A malformed request",
+        "request": {
+          "method": "GET",
+          "path": "/api/notes/not-an-id"
+        },
+        "response": {
+          "status": 400,
+          "body": {
+            "success": false,
+            "error": {
+              "code": "INVALID_REQUEST",
+              "message": "id Input should be a valid UUID, invalid character: found `n` at 1",
+              "timestamp": "2026-10-05T14:15:41.039Z",
+              "requestId": "ed895f47-7fa9-49f0-8568-503d463ae40b",
+              "traceId": "60460d09cdbad9c7e69ec0d615473fa5"
+            }
+          }
+        }
+      },
+      {
+        "name": "no-endpoint",
+        "title": "No such endpoint",
+        "request": {
+          "method": "GET",
+          "path": "/api/nothing-here"
+        },
+        "response": {
+          "status": 404,
+          "body": {
+            "success": false,
+            "error": {
+              "code": "NOT_FOUND",
+              "message": "No endpoint GET /api/nothing-here",
+              "timestamp": "2026-10-05T14:15:41.049Z",
+              "requestId": "8b46961c-1f69-4865-97c7-cf85f4bc88e3",
+              "traceId": "22566ad058e460accf256aae60e997c1"
+            }
+          }
+        }
+      },
+      {
+        "name": "refused-token",
+        "title": "A token sent and refused: renew it, or sign in again",
+        "request": {
+          "method": "GET",
+          "path": "/api/notes",
+          "as": "Bearer not-a-token"
+        },
+        "response": {
+          "status": 401,
+          "body": {
+            "success": false,
+            "error": {
+              "code": "SESSION_EXPIRED",
+              "message": "Your session has ended — sign in again",
+              "timestamp": "2026-10-05T14:15:41.053Z",
+              "requestId": "c1a89f3c-5581-4fbe-b15f-00ff265e71b7",
+              "traceId": "e37238e59fd95bc651b7f880e976f433"
+            }
+          }
+        }
+      },
+      {
+        "name": "wrong-password",
+        "title": "One of the SDK's own codes",
+        "request": {
+          "method": "POST",
+          "path": "/egradx/auth/login",
+          "body": {
+            "username": "ada@example.com",
+            "password": "…"
+          }
+        },
+        "response": {
+          "status": 401,
+          "body": {
+            "success": false,
+            "error": {
+              "code": "AUTH_INVALID_CREDENTIALS",
+              "message": "Invalid username or password",
+              "timestamp": "2026-10-05T14:15:41.106Z",
+              "requestId": "18910830-3fdb-4d5c-94e4-bcde61b94ccc",
+              "traceId": "76d0decf36938e2d9658cfe7ab12625c"
+            }
+          }
+        }
+      }
+    ]
+  }
+}

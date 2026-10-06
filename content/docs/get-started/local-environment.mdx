@@ -1,0 +1,94 @@
+---
+title: Local environment
+description: The services an application on the SDK uses while you develop it, in one Docker Compose file.
+---
+
+The SDK needs only **PostgreSQL**. The rest is optional, for what you choose to use:
+
+| Service | Needed for | Port |
+|---|---|---|
+| PostgreSQL 16 | always | 5432 |
+| Mailpit | seeing the emails the SDK sends (password reset, invitations, your own) | 1025 SMTP, 8025 web |
+| RabbitMQ | events between services, with `transport: rabbitmq` | 5672, 15672 web |
+| Kafka | events with `transport: kafka` | 9092 |
+| Jaeger | seeing traces | 4318 OTLP, 16686 web |
+
+```yaml title="docker-compose.yml"
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: my_app
+      POSTGRES_PASSWORD: postgres
+    ports: ["5432:5432"]
+    volumes: [postgres:/var/lib/postgresql/data]
+
+  mailpit:            # SMTP on 1025; open http://localhost:8025 to read what was sent
+    image: axllent/mailpit:latest
+    ports: ["1025:1025", "8025:8025"]
+
+  rabbitmq:           # only if you use transport: rabbitmq
+    image: rabbitmq:4-management-alpine
+    ports: ["5672:5672", "15672:15672"]
+
+  jaeger:             # only if you want to see traces
+    image: jaegertracing/all-in-one:1.62.0
+    ports: ["4318:4318", "16686:16686"]
+
+volumes:
+  postgres:
+```
+
+```sh
+docker compose up -d postgres mailpit
+```
+
+## Sending email to Mailpit
+
+<Languages>
+<Tab value="Java">
+
+```yaml title="application.yml"
+spring:
+  mail:
+    host: localhost
+    port: 1025
+egradx:
+  notification:
+    email:
+      from: no-reply@my-app.local
+```
+
+</Tab>
+<Tab value="Node">
+
+```ts
+createEgradx({
+  // …
+  notifications: {
+    builtInChannels: {
+      email: { transport: { host: 'localhost', port: 1025, ignoreTLS: true }, from: 'no-reply@my-app.local' },
+    },
+  },
+});
+```
+
+</Tab>
+<Tab value="Python">
+
+```python
+from egradx.sdk import ApplicationEmail, BuiltInChannels, NotificationsOptions, SmtpTransport
+
+SdkOptions(
+    auth=...,
+    notifications=NotificationsOptions(built_in_channels=BuiltInChannels(
+        email=ApplicationEmail(SmtpTransport("localhost", 1025, start_tls=False), "no-reply@my-app.local"))),
+)
+```
+
+</Tab>
+</Languages>
+
+<Callout title="See it in OIM">
+  OIM's `apps/egradx-oim/docker-compose.yml` runs the whole stack — PostgreSQL, Redis, Mailpit, Jaeger, Prometheus, a backend and a frontend — and is a working reference for every setting above.
+</Callout>

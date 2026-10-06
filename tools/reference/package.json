@@ -1,0 +1,10 @@
+{
+  "name": "egradx-devportal-reference-tools",
+  "private": true,
+  "description": "The tools scripts/build-api-reference.mjs runs in the monorepo to write the language API references (TypeDoc needs TypeScript 6; the portal itself builds with 7).",
+  "devDependencies": {
+    "typedoc": "0.28.20",
+    "typedoc-plugin-markdown": "4.13.1",
+    "typescript": "~6.0.3"
+  }
+}

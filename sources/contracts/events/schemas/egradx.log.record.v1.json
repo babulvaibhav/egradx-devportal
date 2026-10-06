@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://egradx.com/contracts/events/egradx.log.record.v1.json",
+  "title": "egradx.log.record.v1 data",
+  "description": "One shipped log line (Java: com.egradx.observability.logging.EgradxLogRecord). Fields with no value are null.",
+  "type": "object",
+  "required": ["time", "level", "logger", "message", "service"],
+  "properties": {
+    "time": { "type": "string", "format": "date-time", "description": "When it was logged, ISO-8601 in UTC." },
+    "level": { "enum": ["TRACE", "DEBUG", "INFO", "WARN", "ERROR"] },
+    "logger": { "type": "string" },
+    "thread": { "type": ["string", "null"] },
+    "message": { "type": "string", "description": "The formatted message." },
+    "error": { "type": ["string", "null"], "description": "The logged exception's stack trace, cut at the shipper's maximum length." },
+    "service": { "type": "string", "description": "The application that logged it." },
+    "traceId": { "type": ["string", "null"] },
+    "spanId": { "type": ["string", "null"] },
+    "requestId": { "type": ["string", "null"] },
+    "userId": { "type": ["string", "null"], "description": "The signed-in person it was logged for." },
+    "organizationId": { "type": ["string", "null"], "description": "Their organization." }
+  }
+}

@@ -1,0 +1,10 @@
+target/
+.mvn/wrapper/maven-wrapper.jar
+*.log
+.env
+# The signing keys the SDK creates on the first start: secrets, never committed.
+keys/
+.idea/
+.vscode/
+*.iml
+.DS_Store

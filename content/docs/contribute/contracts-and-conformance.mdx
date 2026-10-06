@@ -1,0 +1,60 @@
+---
+title: Contracts and conformance
+description: The language-neutral source of truth every SDK implements, and the black-box tests that measure parity.
+---
+
+## contracts/
+
+| Folder | What | Checked by |
+|---|---|---|
+| `openapi/` | the HTTP API every SDK serves under `/egradx/**` | Java's `*OpenApiContractTest` (generated from the controllers, fails when the served API differs); Node and Python validate their answers against it |
+| `db/postgresql/` | each capability's tables, as versioned migrations | every SDK ships and runs the same files |
+| `events/` | the CloudEvents envelope, each type's data, the transports | each SDK's contract test with `test-vectors/events.json`; the cross-language events test |
+| `notification-templates/` | the libraries' own message templates, and rendering vectors | each SDK's renderer test, case by case |
+| `test-vectors/` | values every SDK must read or produce alike: sealed secrets, password hashes, keys, gzip, trace context, refresh-token hashes | each SDK tests its own code against them |
+| `schemas/` | the error envelope, error codes, token claims, enums, headers | the conformance suite; the web client's generated types |
+
+The [reference section](/docs/reference) of this portal is generated from these files on every build.
+
+## Changing a contract
+
+1. **Database:** a new migration; never edit an applied one.
+2. **Events:** backward-compatible changes only; otherwise a new version of the type.
+3. **HTTP:** change the Java controller, then regenerate:
+
+   ```sh
+   mvn -pl sdks/java/egradx-auth,sdks/java/egradx-audit,sdks/java/egradx-notification -am test \
+       -Dtest='*OpenApiContractTest' -Dsurefire.failIfNoSpecifiedTests=false -Degradx.contracts.write=true
+   ```
+
+   Without `-Degradx.contracts.write=true`, the same command checks the files.
+4. **Schemas:** edit the file and the code in the same change.
+5. Regenerate the web client's types: `pnpm run generate` in `sdks/web/packages/client`.
+
+## conformance/
+
+Black-box HTTP tests that every application on an SDK must pass. They are run against OIM's backend in each language:
+
+```sh
+cd conformance && npm install
+npm run test:oim          # Java   (build the backend first)
+npm run test:oim-node     # Node
+npm run test:oim-python   # Python
+npm run test:events       # a Java, a Node and a Python service over RabbitMQ or Kafka
+```
+
+Each run recreates a database, starts the backend with a random platform-admin password, waits for it, runs the suite and stops it.
+
+| Test | Checks |
+|---|---|
+| errors | every non-2xx body is the envelope, with a known code, and its `requestId` equals the header |
+| headers | `X-Request-ID` echoed or generated; `X-Trace-Id` accepted |
+| auth | sign-in, `/me`, refresh against the OpenAPI; the token's algorithm and claims |
+| audit | the API's shapes, and the suite's own sign-in in the trail |
+| notification | the inbox, unread count and preference options |
+
+**Adding a test:** through HTTP only, checked against the contract's schemas (`responseSchema(...)`, `errorSchema()`), independent of existing data, and with as few failed sign-ins as possible (they count towards the rate limit).
+
+## See also
+
+- [Add a capability](/docs/contribute/add-a-capability) · [Parity](/docs/reference/parity)

@@ -1,0 +1,36 @@
+---
+title: Export the audit trail as CSV
+description: A download button for the organization's audit trail, with the same filters as the list, through the SDK's export endpoint.
+---
+
+`GET /egradx/audit/events/export` answers CSV for the same filters as the list. It needs `egradx.audit.read`, stops at 100 000 rows, and records the export itself in the trail.
+
+## A button in React
+
+A plain link can't send the access token, so the hook fetches the file and the page saves it:
+
+<RepoSnippet file="apps/egradx-devportal/examples/web-vite/src/recipes/AuditExport.tsx" region="audit-export" title="src/recipes/AuditExport.tsx" />
+
+`truncated` is true when the export stopped at its row limit. Narrow the filters (a date range), or raise `export.max-rows` / `export: { maxRows }` / `export_max_rows`.
+
+The copy-in `audit-log` screen already has this button, using the filters on screen:
+
+```sh
+npx shadcn@latest add https://<this portal>/r/audit-log.json
+```
+
+## Without React
+
+`exportAuditCsv(client, filters)` from `@babulvaibhav/egradx-client` returns `{ blob, filename, truncated }`. From a script, call the endpoint with a token:
+
+```sh
+curl -H "Authorization: Bearer $TOKEN" "http://localhost:8080/egradx/audit/events/export?category=notes&from=2026-01-01T00:00:00Z" -o audit.csv
+```
+
+## Across every organization
+
+The platform's administrators use `/egradx/audit/platform/events/export`, which needs `egradx.audit.platform.read`.
+
+## See also
+
+- [Audit trail](/docs/guides/audit#reading-it) · [HTTP: audit](/docs/reference/http/audit)

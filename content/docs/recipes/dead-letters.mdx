@@ -1,0 +1,55 @@
+---
+title: Read dead letters and replay them
+description: Find events a handler kept failing on, fix the cause, and send them through again — for the outbox, RabbitMQ and Kafka.
+---
+
+A handler that keeps failing doesn't block the others or lose the event. After the last attempt the event is set aside, with the reason. There is no replay tool yet, so replay by hand, as below. Replaying is safe: the inbox drops an event a handler has already handled.
+
+**First fix the cause.** The error is in the service's log (with the event's request id), and on the dead letter itself.
+
+## In-process: the outbox
+
+After 12 attempts, the outbox row is marked dead.
+
+```sql
+-- What is dead, and why
+SELECT id, type, subject, attempts, last_error, dead_at
+FROM egradx_event_outbox
+WHERE dead_at IS NOT NULL
+ORDER BY dead_at DESC;
+
+-- Send one again
+UPDATE egradx_event_outbox
+SET dead_at = NULL, attempts = 0, last_error = NULL, next_attempt_at = clock_timestamp()
+WHERE id = '…';
+```
+
+The relay picks it up on its next poll (within 2 seconds).
+
+## RabbitMQ
+
+After 10 deliveries, a message moves to `egradx.events.<source>.dead`. In the management console (`:15672`), open that queue and **Get messages** to read them. The headers carry the type and the delivery count.
+
+To replay, move them back to the exchange `egradx.events` with the routing key set to the event's type, **without** the `x-egradx-deliveries` header (otherwise it is dead again at once). The shovel plugin, or a few lines of `amqplib` / `pika`, does it.
+
+## Kafka
+
+After 10 deliveries, a record goes to `<topic>.DLT`, with the original topic in the header `kafka_dlt-original-topic`. Read it with any consumer:
+
+```sh
+kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic notes.note.created.v1.DLT --from-beginning --property print.headers=true
+```
+
+To replay, produce the record again to the original topic **with the same key** (the subject), so it stays in order with its subject's other events.
+
+## Watch for them
+
+There are no metrics for dead events yet. Alert on these:
+
+- `SELECT count(*) FROM egradx_event_outbox WHERE dead_at IS NOT NULL`
+- the depth of `*.dead` queues
+- the end offsets of `*.DLT` topics
+
+## See also
+
+- [Events](/docs/guides/events#dead-letters) · [Troubleshooting](/docs/operate/troubleshooting)

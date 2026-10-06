@@ -1,0 +1,55 @@
+---
+title: Ship logs
+description: Send every log line out of the service as an event, with its request, trace, person and organization — and store them where you like.
+---
+
+<Parity id="observability.log-shipping" />
+
+Every log line can also leave the service as an `egradx.log.record.v1` event, over the [events transport](/docs/guides/events). Whatever stores your logs handles that event type. In [the Initializr](/start?caps=events,log-shipping), choose **Log shipping**.
+
+## 1. Turn it on
+
+<Languages>
+<Tab value="Java">
+
+<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/resources/application.yml" region="config" title="application.yml" />
+
+`egradx.observability.logging.shipping.enabled: true`, with `egradx-platform-events` present. Every line through SLF4J is shipped, including Spring's and other libraries'.
+
+</Tab>
+<Tab value="Node">
+
+<RepoSnippet file="apps/egradx-devportal/examples/node/src/logging.ts" region="log-shipping" title="src/logging.ts" />
+
+</Tab>
+<Tab value="Python">
+
+<RepoSnippet file="apps/egradx-devportal/examples/python/application.py" region="main" title="application.py" />
+
+`EgradxLogShipper` is a `logging.Handler`; `await shipper.start()` attaches it to the root logger.
+
+</Tab>
+</Languages>
+
+## 2. Use a broker
+
+With the in-process transport, the lines go to this service's own handlers. If none of them handles `egradx.log.record.v1`, the lines go nowhere. Ship over [RabbitMQ or Kafka](/docs/recipes/move-to-rabbitmq).
+
+## 3. Store them
+
+A small service of your own, on the same SDK, handles `egradx.log.record.v1` and writes the lines to whatever stores your logs (OpenSearch, Loki, a table). Each record carries the level, logger, message, stack trace, service, trace id, request id, person and organization. The [events reference](/docs/reference/events) has the exact fields.
+
+## What it costs
+
+- Logging only queues the line. A background sender ships batches straight over the transport, **not** through the outbox, so a log line never waits on the database.
+- A full queue drops lines and counts them. Shipping is best effort.
+- The transports' own loggers are never shipped (no loops). Add your own noisy loggers to `excluded`.
+
+| | Java (`egradx.observability.logging.shipping.*`) | Node / Python | Default |
+|---|---|---|---|
+| Lowest level | `minimum-level` | `minimumLevel` / `minimum_level` | INFO |
+| Queue, batch, flush | `queue-capacity`, `batch-size`, `flush-interval` | `queueCapacity`, `batchSize`, `flushIntervalMs` / `queue_capacity`, `batch_size`, `flush_interval` | 10 000, 200, 1 s |
+
+## See also
+
+- [Observability](/docs/guides/observability#log-shipping) · [Request ids in your logs](/docs/recipes/request-ids-in-logs)

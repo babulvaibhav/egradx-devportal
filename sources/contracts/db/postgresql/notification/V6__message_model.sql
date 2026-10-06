@@ -1,0 +1,11 @@
+-- egradx-notification: keep a templated message's model, and its language, with the message.
+--
+-- WhatsApp is the reason. Outside a 24-hour conversation window a business may only send a
+-- template Meta has approved, filled with parameters — not the text egradx-notification rendered.
+-- The WhatsApp channel builds those parameters from the model at delivery time, so the model has to
+-- travel with the message. Stored as plain data (maps, lists, text, numbers), as bulk sends already
+-- store theirs.
+--
+-- The language (already stored for a bulk send's messages) is now stored for every templated
+-- message, so a channel can choose the approved template's language to match what was rendered.
+ALTER TABLE egradx_notification_message ADD COLUMN model JSONB;

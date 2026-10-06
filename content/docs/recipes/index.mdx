@@ -1,0 +1,70 @@
+---
+title: Recipes
+description: Task-sized how-tos — one task per page, in Java, Node and Python, with code cut from applications that compile and run.
+---
+
+Each recipe does one task. The code comes from [the example applications](/docs/get-started), which are [the Initializr](/start)'s own output plus a few recipe files. All of it compiles and is tested, in every language.
+
+## Identity and access
+
+| Recipe | |
+|---|---|
+| [Protect an endpoint with a permission](/docs/recipes/protect-an-endpoint) | 401, 403, and the check on each endpoint |
+| [Add a permission and give it to a role](/docs/recipes/add-a-permission) | your authorities in the catalog, on every new organization's roles |
+| [Get the current user and organization](/docs/recipes/current-user-and-organization) | in a request, and in work that outlives it |
+| [Invite a user into an organization](/docs/recipes/invite-a-user) | the invite form and the page the link opens |
+| [Build a password-reset screen](/docs/recipes/password-reset) | "forgot your password?" and the reset page |
+| [Switch organization in the UI](/docs/recipes/switch-organization) | at sign-in, and from a menu |
+| [Handle SESSION_REVOKED in the frontend](/docs/recipes/handle-session-revoked) | when a session ends elsewhere |
+| [Call another service](/docs/recipes/service-token) | forwarding the user's token, or client credentials |
+
+## Audit
+
+| Recipe | |
+|---|---|
+| [Record an update with before and after](/docs/recipes/audit-an-update) | one record per change, in its transaction |
+| [Record a refused or failed attempt](/docs/recipes/record-a-refusal) | kept even when the work rolls back |
+| [Read the audit trail in code](/docs/recipes/read-the-trail) | search without HTTP |
+| [Export the audit trail as CSV](/docs/recipes/export-the-audit-trail) | a download button |
+| [Record audit events from a library](/docs/recipes/publish-from-a-library) | without depending on the audit package |
+
+## Notifications
+
+| Recipe | |
+|---|---|
+| [Send an email when something happens](/docs/recipes/send-an-email) | queued with the change, sent after the commit |
+| [Add a notification type with a template](/docs/recipes/add-a-notification-type) | per channel and language, checked at start-up |
+| [Show the notification bell](/docs/recipes/show-the-bell) | live notices in React |
+| [Let users choose their channels](/docs/recipes/let-users-choose-channels) | verified addresses, opt-outs |
+| [Configure SMTP](/docs/recipes/configure-smtp) | your mail server, or an organization's |
+| [Configure Slack or Twilio](/docs/recipes/configure-slack-or-twilio) | per organization, at run time |
+| [Send to someone who isn't a user](/docs/recipes/send-to-address) | raw addresses, attachments |
+| [Bulk-send to an organization](/docs/recipes/bulk-send) | everyone, in the background |
+| [Add a custom notification channel](/docs/recipes/custom-channel) | with the outbox's retries and log |
+
+## Events and logs
+
+| Recipe | |
+|---|---|
+| [Publish an event and handle it](/docs/recipes/publish-an-event) | in the change's transaction, once per handler |
+| [Move from in-process events to RabbitMQ](/docs/recipes/move-to-rabbitmq) | the same code on a broker |
+| [Read dead letters and replay them](/docs/recipes/dead-letters) | outbox, RabbitMQ, Kafka |
+| [Ship logs](/docs/recipes/ship-logs) | every line as an event |
+| [Add request ids to your own log format](/docs/recipes/request-ids-in-logs) | Logback, pino, Python logging |
+
+## Data
+
+| Recipe | |
+|---|---|
+| [Run the SDK's migrations before your own](/docs/recipes/migrations-order) | the order, in each language |
+| [Add a column to your table](/docs/recipes/add-a-column) | a new migration, never an edited one |
+| [Store a secret field encrypted](/docs/recipes/store-a-secret) | sealed, readable in every language |
+
+## Testing and running
+
+| Recipe | |
+|---|---|
+| [Write an integration test with a signed-in user](/docs/recipes/integration-test) | the whole application, real tokens |
+| [Check an audit record or an email in a test](/docs/recipes/assert-audit-and-email) | ask the SDK what it did |
+| [Deploy with Docker Compose](/docs/recipes/deploy-with-docker-compose) | the image, the keys volume, the database |
+| [Run two instances behind a load balancer](/docs/recipes/two-instances) | what is shared, what is per instance |

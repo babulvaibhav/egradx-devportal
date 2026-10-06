@@ -1,0 +1,1 @@
+{{#if inviterName}}{{inviterName}} invited you{{else}}You were invited{{/if}} to join {{organizationName}} as {{roleName}}: {{link}} (expires in {{expiresInDays}} days).
