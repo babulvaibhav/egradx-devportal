@@ -10,28 +10,13 @@ import {
   EgradxMessageRequest,
 {{/if}}
   type Egradx,
-  type EgradxAuditActionDefinition,
 } from '@babulvaibhav/egradx-sdk';
 import { requireAuthority } from '@babulvaibhav/egradx-sdk/express';
 {{#if cap.events}}
 import type { Events } from '@babulvaibhav/egradx-events';
 {{/if}}
-import type { Prisma, PrismaClient } from './generated/prisma/client.js';
-
-// docs:region audit-catalog
-/** This application's audit actions, with the words the audit screen shows for them. */
-export const AuditActions = {
-  CREATED: '{{project.area}}.note.created',
-  UPDATED: '{{project.area}}.note.updated',
-  DELETED: '{{project.area}}.note.deleted',
-} as const;
-
-export const AUDIT_ACTIONS: EgradxAuditActionDefinition[] = [
-  { action: AuditActions.CREATED, description: 'Created a note', entityType: 'note' },
-  { action: AuditActions.UPDATED, description: 'Changed a note', entityType: 'note' },
-  { action: AuditActions.DELETED, description: 'Deleted a note', entityType: 'note' },
-];
-// docs:end
+import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
+import { AuditActions } from './audit-actions.js';
 
 /** The kind of message a new note is: the bell shows it{{#if cap.email}}, and it names the email template{{/if}}. */
 export const NOTE_CREATED = '{{project.area}}.note.created';

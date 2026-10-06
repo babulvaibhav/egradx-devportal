@@ -1,4 +1,4 @@
-import { bff } from '@/egradx-server';
+import { bff } from '@/lib/egradx-server';
 
 // docs:region web-proxy
 /** Sends anyone without a session to /login (and back afterwards, with ?next=), before a page is rendered. */

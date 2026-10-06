@@ -4,7 +4,7 @@ from pathlib import Path
 
 from egradx.sdk import EgradxNotificationType
 
-from notes import NOTE_CREATED
+from .routes import NOTE_CREATED
 
 # docs:region notification-type
 # A type names the variables its templates may use; the templates live in notification-templates/<key>/, and the
@@ -17,5 +17,5 @@ NOTIFICATION_TYPES = [
     .build(),
 ]
 
-TEMPLATE_DIRECTORY = Path(__file__).parent / "notification-templates"
+TEMPLATE_DIRECTORY = Path(__file__).resolve().parents[3] / "notification-templates"
 # docs:end

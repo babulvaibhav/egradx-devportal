@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { EgradxNotificationType } from '@babulvaibhav/egradx-sdk';
-import { NOTE_CREATED } from './notes.js';
+import { NOTE_CREATED } from './routes.js';
 
 // docs:region notification-type
 /**
@@ -15,5 +15,5 @@ export const notificationTypes = [
     .build(),
 ];
 
-export const templateDirectory = fileURLToPath(new URL('../notification-templates/', import.meta.url));
+export const templateDirectory = fileURLToPath(new URL('../../notification-templates/', import.meta.url));
 // docs:end

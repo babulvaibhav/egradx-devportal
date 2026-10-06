@@ -3,6 +3,9 @@
 // kept. So what a page shows is what /start gives, and the Initializr's test matrix guards both.
 //
 //   node scripts/generate-examples.mjs          regenerate examples/{java,node,python,web-vite,web-next}
+//
+// examples/java, node and python are whole projects (their code in backend/); web-vite and web-next are the frontend/
+// folder of a project, on their own.
 //   node scripts/generate-examples.mjs --check  fail if an example differs from what the templates make
 //
 // Build output and local state in the example folders (node_modules, .venv, target, egradx-wheels, keys) are kept.
@@ -20,13 +23,13 @@ const EXAMPLES = [
   { folder: 'java', query: `lang=java&${EVERYTHING}` },
   { folder: 'node', query: `lang=node&${EVERYTHING}` },
   { folder: 'python', query: `lang=python&${EVERYTHING}` },
-  // The frontends come with any backend; only their web/ folder is kept.
-  { folder: 'web-vite', query: `lang=java&${EVERYTHING}&fe=vite`, only: 'web/' },
-  { folder: 'web-next', query: `lang=java&${EVERYTHING}&fe=next`, only: 'web/' },
+  // The frontends come with any backend; only their frontend/ folder is kept.
+  { folder: 'web-vite', query: `lang=java&${EVERYTHING}&fe=vite`, only: 'frontend/' },
+  { folder: 'web-next', query: `lang=java&${EVERYTHING}&fe=next`, only: 'frontend/' },
 ];
 // Kept: build output and local state, and the portal's recipes (code a recipe shows, compiled with the example; not in
 // the generated project).
-const KEEP = new Set(['node_modules', '.venv', 'target', 'egradx-wheels', 'keys', '.next', 'dist', 'uv.lock', 'package-lock.json', 'src/generated', 'recipes']);
+const KEEP = new Set(['node_modules', '.venv', 'target', 'egradx-wheels', 'keys', '.next', 'dist', 'uv.lock', 'package-lock.json', 'backend/src/generated', 'recipes', 'tsconfig.tsbuildinfo']);
 
 function readTemplates() {
   const root = path.join(app, 'initializr', 'templates');

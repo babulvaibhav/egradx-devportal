@@ -9,11 +9,11 @@ Someone can belong to several organizations. A session acts in one of them at a 
 
 Signing in as someone with several organizations fails with `ORG_SELECTION_REQUIRED`. Its `details.organizations` lists them; sign in again naming the chosen `organizationId`:
 
-<RepoSnippet file="apps/egradx-devportal/examples/web-vite/src/LoginForm.tsx" region="web-sign-in" title="src/LoginForm.tsx" />
+<RepoSnippet file="apps/egradx-devportal/examples/web-vite/src/modules/auth/LoginForm.tsx" region="web-sign-in" title="frontend/src/modules/auth/LoginForm.tsx" />
 
 ## Later, from a menu
 
-<RepoSnippet file="apps/egradx-devportal/examples/web-vite/src/recipes/OrganizationSwitcher.tsx" region="switch-organization" title="src/recipes/OrganizationSwitcher.tsx" />
+<RepoSnippet file="apps/egradx-devportal/examples/web-vite/src/recipes/OrganizationSwitcher.tsx" region="switch-organization" title="frontend/src/recipes/OrganizationSwitcher.tsx" />
 
 `switchOrganization(id)` calls `POST /egradx/auth/my/organizations/{id}/switch`, replaces the tokens, and retires the old refresh token.
 

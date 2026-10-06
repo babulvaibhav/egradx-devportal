@@ -1,5 +1,5 @@
 {
-  "capturedAt": "2026-10-05T14:15:41.721Z",
+  "capturedAt": "2026-10-06T10:57:52.489Z",
   "sdkVersion": "1.0.0",
   "languages": {
     "java": [
@@ -15,16 +15,16 @@
           "body": {
             "items": [
               {
-                "id": "3b6b078e-6ffc-4246-b459-4100daf752fc",
+                "id": "a3666079-2b5d-44b6-a272-f1b0d1050110",
                 "scope": "ORGANIZATION",
-                "organizationId": "05817b4a-7d07-4442-930e-57fdd09d4c7d",
+                "organizationId": "3bad3318-cdcb-445c-b41a-d30e41705391",
                 "notificationKey": "notes.note.created",
                 "title": "New note",
                 "body": "Call the supplier",
                 "metadata": {
-                  "noteId": "d7c0b18c-8854-443f-b969-83d84de850ca"
+                  "noteId": "8e95c934-7020-4866-ace2-1a0a10159fd8"
                 },
-                "createdAt": "2026-10-05T14:15:24.727354Z",
+                "createdAt": "2026-10-06T10:57:35.470520Z",
                 "readAt": null
               }
             ],
@@ -75,22 +75,22 @@
         "response": {
           "status": 200,
           "body": {
-            "id": "9d2c4136-f442-4fe9-b10b-75664537004f",
-            "messageId": "224c02b1-5bce-4f60-9dcf-bd8202541e6a",
-            "organizationId": "05817b4a-7d07-4442-930e-57fdd09d4c7d",
+            "id": "3bf05928-7f17-4e80-9824-dfc9570826c8",
+            "messageId": "7b45fb5b-4c9c-4d15-8579-c53dcfc179d7",
+            "organizationId": "3bad3318-cdcb-445c-b41a-d30e41705391",
             "channel": "email",
             "notificationKey": "notes.note.created",
             "address": "ada@example.com",
             "status": "SENT",
             "attempts": 1,
-            "nextAttemptAt": "2026-10-05T14:20:24.873211Z",
+            "nextAttemptAt": "2026-10-06T11:02:35.577214Z",
             "lastError": null,
-            "providerMessageId": "<541510657.0.1791209725225@[192.168.0.108]>",
-            "createdAt": "2026-10-05T14:15:24.830227Z",
-            "updatedAt": "2026-10-05T14:15:25.285617Z",
-            "sentAt": "2026-10-05T14:15:25.285617Z",
-            "traceId": "f842e7b1d8f9771ac003965bc2a662f8",
-            "requestId": "b1eff681-4cc4-45a0-a51d-1da4f3e3b2e2"
+            "providerMessageId": "<368325840.0.1791284255837@KERLPTP-53>",
+            "createdAt": "2026-10-06T10:57:35.537125Z",
+            "updatedAt": "2026-10-06T10:57:35.883375Z",
+            "sentAt": "2026-10-06T10:57:35.883375Z",
+            "traceId": "cabecaf2e7aee46abea774666049c943",
+            "requestId": "dc8d3aa7-550c-4a86-8f6e-7c58febdf6ad"
           }
         }
       }
@@ -108,16 +108,16 @@
           "body": {
             "items": [
               {
-                "id": "f6fed02a-32e6-4f0f-9398-c6622f54cdbd",
+                "id": "b0d3fe60-07cb-4544-a658-100ef12df558",
                 "scope": "ORGANIZATION",
-                "organizationId": "8d41721e-4d59-494c-8f8c-8487d9adc1b2",
+                "organizationId": "c4c7b7f1-b174-43c5-a4bc-020aba868389",
                 "notificationKey": "notes.note.created",
                 "title": "New note",
                 "body": "Call the supplier",
                 "metadata": {
-                  "noteId": "a074d4ff-0b05-49a1-8a94-0973b811bb09"
+                  "noteId": "22ca483e-c807-4a2d-be58-db6482d25476"
                 },
-                "createdAt": "2026-10-05T14:15:32.811Z",
+                "createdAt": "2026-10-06T10:57:44.006Z",
                 "readAt": null
               }
             ],
@@ -168,22 +168,22 @@
         "response": {
           "status": 200,
           "body": {
-            "id": "c87a50c4-c59d-48e6-95fd-6d652333b900",
-            "messageId": "2fa3c454-cb6e-4973-b5cd-3a1d0ba57909",
-            "organizationId": "8d41721e-4d59-494c-8f8c-8487d9adc1b2",
+            "id": "22e332ba-443a-4905-8a27-2315986af747",
+            "messageId": "27689525-7339-49ae-9462-be46ff53d04f",
+            "organizationId": "c4c7b7f1-b174-43c5-a4bc-020aba868389",
             "channel": "email",
             "notificationKey": "notes.note.created",
             "address": "ada@example.com",
             "status": "SENT",
             "attempts": 1,
-            "nextAttemptAt": "2026-10-05T14:20:32.871Z",
+            "nextAttemptAt": "2026-10-06T11:02:44.061Z",
             "lastError": null,
-            "providerMessageId": "<ad1f3b07-de7c-fd81-593c-0831b70d52d8@notes.local>",
-            "createdAt": "2026-10-05T14:15:32.840Z",
-            "updatedAt": "2026-10-05T14:15:33.044Z",
-            "sentAt": "2026-10-05T14:15:33.044Z",
-            "traceId": "45746ef376bfbddd48fd18f63113241e",
-            "requestId": "ffb842cc-3c7e-4ab7-a67b-eba0388cf495"
+            "providerMessageId": "<883c807f-9332-d25a-d353-981249fa321d@notes.local>",
+            "createdAt": "2026-10-06T10:57:44.033Z",
+            "updatedAt": "2026-10-06T10:57:44.207Z",
+            "sentAt": "2026-10-06T10:57:44.207Z",
+            "traceId": "46fc1eebd7dda27c065e732ed0d53a02",
+            "requestId": "e1e32109-1c5a-4351-a441-f9a14b384d68"
           }
         }
       }
@@ -201,16 +201,16 @@
           "body": {
             "items": [
               {
-                "id": "95dd6537-05a1-4e8e-8d0a-5d596acc3161",
+                "id": "ac0849d2-a0c9-45be-bf9d-1e7ef8ea3d3b",
                 "scope": "ORGANIZATION",
-                "organizationId": "95602ad6-dc6e-440e-a8a5-5f01592d2c5f",
+                "organizationId": "0f4ee3c4-942b-427a-ba1e-9b2c977650b9",
                 "notificationKey": "notes.note.created",
                 "title": "New note",
                 "body": "Call the supplier",
                 "metadata": {
-                  "noteId": "1d484808-70a3-422e-b60d-8f610e78ff2f"
+                  "noteId": "dcd99f43-2013-497f-97b5-2dbf1ada40ba"
                 },
-                "createdAt": "2026-10-05T14:15:40.860327Z",
+                "createdAt": "2026-10-06T10:57:51.727933Z",
                 "readAt": null
               }
             ],
@@ -261,22 +261,22 @@
         "response": {
           "status": 200,
           "body": {
-            "id": "cd670a75-cb0c-49ec-a02b-3317ced883d2",
-            "messageId": "e8975021-f881-403f-b017-f9d63b6af563",
-            "organizationId": "95602ad6-dc6e-440e-a8a5-5f01592d2c5f",
+            "id": "9641111e-abbf-4e3e-a515-bade0c29f1fa",
+            "messageId": "aa721d14-280f-43be-aded-faad69f6dba7",
+            "organizationId": "0f4ee3c4-942b-427a-ba1e-9b2c977650b9",
             "channel": "email",
             "notificationKey": "notes.note.created",
             "address": "ada@example.com",
             "status": "SENT",
             "attempts": 1,
-            "nextAttemptAt": "2026-10-05T14:20:40.923300Z",
+            "nextAttemptAt": "2026-10-06T11:02:51.783452Z",
             "lastError": null,
-            "providerMessageId": "<179120974095.29724.10631854466733005317@KERLPTP-53.dlink.router>",
-            "createdAt": "2026-10-05T14:15:40.892555Z",
-            "updatedAt": "2026-10-05T14:15:41.089496Z",
-            "sentAt": "2026-10-05T14:15:41.089496Z",
-            "traceId": "47dd0c3204e5e43298dda535547937b8",
-            "requestId": "9a7378bb-18b3-4a9b-804b-7071d8a8bd6b"
+            "providerMessageId": "<179128427180.32164.4833500945217132994@KERLPTP-53>",
+            "createdAt": "2026-10-06T10:57:51.757209Z",
+            "updatedAt": "2026-10-06T10:57:51.932371Z",
+            "sentAt": "2026-10-06T10:57:51.932371Z",
+            "traceId": "1de33f3386282b84bf1771e97d34c381",
+            "requestId": "8b1b7de0-bfb7-4133-abf3-85ec8afa0d62"
           }
         }
       }

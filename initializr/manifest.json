@@ -240,8 +240,19 @@
         "to": "README.md"
       },
       {
+        "from": "common/backend-README.md.hbs",
+        "to": "backend/README.md"
+      },
+      {
+        "from": "common/frontend-README.md.hbs",
+        "to": "frontend/README.md",
+        "when": [
+          "frontend:any"
+        ]
+      },
+      {
         "from": "common/env.example.hbs",
-        "to": ".env.example"
+        "to": "backend/.env.example"
       },
       {
         "from": "common/docker-compose.yml.hbs",
@@ -342,53 +353,53 @@
       },
       {
         "from": "java/src/Note.java.hbs",
-        "to": "src/main/java/{{project.packagePath}}/Note.java"
+        "to": "src/main/java/{{project.packagePath}}/note/domain/Note.java"
       },
       {
         "from": "java/src/NoteRepository.java.hbs",
-        "to": "src/main/java/{{project.packagePath}}/NoteRepository.java"
+        "to": "src/main/java/{{project.packagePath}}/note/infrastructure/NoteRepository.java"
       },
       {
         "from": "java/src/NoteDtos.java.hbs",
-        "to": "src/main/java/{{project.packagePath}}/NoteDtos.java"
+        "to": "src/main/java/{{project.packagePath}}/note/application/NoteDtos.java"
       },
       {
         "from": "java/src/NoteService.java.hbs",
-        "to": "src/main/java/{{project.packagePath}}/NoteService.java"
+        "to": "src/main/java/{{project.packagePath}}/note/application/NoteService.java"
       },
       {
         "from": "java/src/NoteController.java.hbs",
-        "to": "src/main/java/{{project.packagePath}}/NoteController.java"
+        "to": "src/main/java/{{project.packagePath}}/note/api/NoteController.java"
       },
       {
         "from": "java/src/NoteAuditActions.java.hbs",
-        "to": "src/main/java/{{project.packagePath}}/NoteAuditActions.java"
+        "to": "src/main/java/{{project.packagePath}}/note/application/NoteAuditActions.java"
       },
       {
         "from": "java/src/Setup.java.hbs",
-        "to": "src/main/java/{{project.packagePath}}/Setup.java"
+        "to": "src/main/java/{{project.packagePath}}/common/config/Setup.java"
       },
       {
         "from": "java/src/ApiExceptionHandler.java.hbs",
-        "to": "src/main/java/{{project.packagePath}}/ApiExceptionHandler.java"
+        "to": "src/main/java/{{project.packagePath}}/common/exception/ApiExceptionHandler.java"
       },
       {
         "from": "java/src/NoteNotifications.java.hbs",
-        "to": "src/main/java/{{project.packagePath}}/NoteNotifications.java",
+        "to": "src/main/java/{{project.packagePath}}/note/application/NoteNotifications.java",
         "when": [
           "cap:email"
         ]
       },
       {
         "from": "java/src/NoteStatsHandler.java.hbs",
-        "to": "src/main/java/{{project.packagePath}}/NoteStatsHandler.java",
+        "to": "src/main/java/{{project.packagePath}}/note/events/NoteStatsHandler.java",
         "when": [
           "cap:events"
         ]
       },
       {
         "from": "java/test/NotesTests.java.hbs",
-        "to": "src/test/java/{{project.packagePath}}/NotesTests.java",
+        "to": "src/test/java/{{project.packagePath}}/note/NoteApiTest.java",
         "when": [
           "extra:tests"
         ]
@@ -412,7 +423,8 @@
         "to": ".github/workflows/ci.yml",
         "when": [
           "extra:ci"
-        ]
+        ],
+        "root": true
       }
     ],
     "node": [
@@ -478,44 +490,48 @@
       },
       {
         "from": "node/src/notes.ts.hbs",
-        "to": "src/notes.ts"
+        "to": "src/note/routes.ts"
+      },
+      {
+        "from": "node/src/audit-actions.ts.hbs",
+        "to": "src/note/audit-actions.ts"
       },
       {
         "from": "node/src/setup.ts",
-        "to": "src/setup.ts",
+        "to": "src/common/setup.ts",
         "raw": false
       },
       {
         "from": "node/src/notifications.ts.hbs",
-        "to": "src/notifications.ts",
+        "to": "src/note/notifications.ts",
         "when": [
           "cap:email"
         ]
       },
       {
         "from": "node/src/events.ts.hbs",
-        "to": "src/events.ts",
+        "to": "src/note/stats-handler.ts",
         "when": [
           "cap:events"
         ]
       },
       {
         "from": "node/src/logging.ts",
-        "to": "src/logging.ts",
+        "to": "src/common/logging.ts",
         "when": [
           "cap:log-shipping"
         ]
       },
       {
         "from": "node/src/telemetry.ts",
-        "to": "src/telemetry.ts",
+        "to": "src/common/telemetry.ts",
         "when": [
           "cap:tracing"
         ]
       },
       {
         "from": "node/test/notes.test.ts.hbs",
-        "to": "test/notes.test.ts",
+        "to": "test/note.test.ts",
         "when": [
           "extra:tests"
         ]
@@ -539,7 +555,8 @@
         "to": ".github/workflows/ci.yml",
         "when": [
           "extra:ci"
-        ]
+        ],
+        "root": true
       }
     ],
     "python": [
@@ -583,37 +600,59 @@
       },
       {
         "from": "python/main.py.hbs",
-        "to": "main.py"
+        "to": "src/{{project.module}}/__main__.py"
+      },
+      {
+        "from": "python/package-init.py.hbs",
+        "to": "src/{{project.module}}/__init__.py"
+      },
+      {
+        "from": "python/config.py.hbs",
+        "to": "src/{{project.module}}/config.py"
       },
       {
         "from": "python/application.py.hbs",
-        "to": "application.py"
+        "to": "src/{{project.module}}/app.py"
+      },
+      {
+        "from": "python/common-init.py",
+        "to": "src/{{project.module}}/common/__init__.py",
+        "raw": true
+      },
+      {
+        "from": "python/note-init.py",
+        "to": "src/{{project.module}}/note/__init__.py",
+        "raw": true
+      },
+      {
+        "from": "python/audit_actions.py.hbs",
+        "to": "src/{{project.module}}/note/audit_actions.py"
       },
       {
         "from": "python/notes.py.hbs",
-        "to": "notes.py"
+        "to": "src/{{project.module}}/note/routes.py"
       },
       {
         "from": "python/seeding.py",
-        "to": "seeding.py"
+        "to": "src/{{project.module}}/common/seeding.py"
       },
       {
         "from": "python/notifications.py",
-        "to": "notifications.py",
+        "to": "src/{{project.module}}/note/notifications.py",
         "when": [
           "cap:email"
         ]
       },
       {
         "from": "python/events.py.hbs",
-        "to": "events.py",
+        "to": "src/{{project.module}}/note/stats_handler.py",
         "when": [
           "cap:events"
         ]
       },
       {
         "from": "python/telemetry.py",
-        "to": "telemetry.py",
+        "to": "src/{{project.module}}/common/telemetry.py",
         "when": [
           "cap:tracing"
         ]
@@ -627,7 +666,7 @@
       },
       {
         "from": "python/tests/test_notes.py.hbs",
-        "to": "tests/test_notes.py",
+        "to": "tests/test_note.py",
         "when": [
           "extra:tests"
         ]
@@ -651,7 +690,8 @@
         "to": ".github/workflows/ci.yml",
         "when": [
           "extra:ci"
-        ]
+        ],
+        "root": true
       }
     ],
     "frontend-vite": [
@@ -690,32 +730,32 @@
       },
       {
         "from": "frontend-vite/src/App.tsx",
-        "to": "src/App.tsx",
+        "to": "src/app/App.tsx",
         "raw": true
       },
       {
         "from": "frontend-vite/src/egradx.ts",
-        "to": "src/egradx.ts",
+        "to": "src/lib/egradx.ts",
         "raw": true
       },
       {
         "from": "frontend-common/notes-api.ts",
-        "to": "src/notes-api.ts",
+        "to": "src/modules/notes/notes-api.ts",
         "raw": true
       },
       {
         "from": "frontend-common/LoginForm.tsx",
-        "to": "src/LoginForm.tsx",
+        "to": "src/modules/auth/LoginForm.tsx",
         "raw": true
       },
       {
         "from": "frontend-common/Bell.tsx",
-        "to": "src/Bell.tsx",
+        "to": "src/components/Bell.tsx",
         "raw": true
       },
       {
         "from": "frontend-common/Notes.tsx",
-        "to": "src/Notes.tsx",
+        "to": "src/modules/notes/Notes.tsx",
         "raw": true
       },
       {
@@ -751,12 +791,12 @@
       },
       {
         "from": "frontend-next/src/egradx-server.ts",
-        "to": "src/egradx-server.ts",
+        "to": "src/lib/egradx-server.ts",
         "raw": true
       },
       {
         "from": "frontend-next/src/egradx.ts",
-        "to": "src/egradx.ts",
+        "to": "src/lib/egradx.ts",
         "raw": true
       },
       {
@@ -790,22 +830,22 @@
       },
       {
         "from": "frontend-common/notes-api.ts",
-        "to": "src/notes-api.ts",
+        "to": "src/modules/notes/notes-api.ts",
         "raw": true
       },
       {
         "from": "frontend-common/LoginForm.tsx",
-        "to": "src/LoginForm.tsx",
+        "to": "src/modules/auth/LoginForm.tsx",
         "raw": true
       },
       {
         "from": "frontend-common/Bell.tsx",
-        "to": "src/Bell.tsx",
+        "to": "src/components/Bell.tsx",
         "raw": true
       },
       {
         "from": "frontend-common/Notes.tsx",
-        "to": "src/Notes.tsx",
+        "to": "src/modules/notes/Notes.tsx",
         "raw": true
       },
       {

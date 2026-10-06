@@ -5,7 +5,7 @@ description: An Express application in TypeScript on the EGRADX SDK, signed in a
 
 You need Node 24, a PostgreSQL database ([local environment](/docs/get-started/local-environment)) and [access to the packages](/docs/get-started/access) (the `.npmrc`).
 
-The code on this page is the portal's Node example application, `examples/node` — a small *notes* application built on the published packages and run by the portal's build checks. You can copy it whole.
+The code on this page is the portal's Node example application, `examples/node` — a small *notes* application built on the published packages and run by the portal's build checks. You can copy it whole. Its code is in `backend/`, grouped by feature; run the commands below from there.
 
 <Callout title="Or generate it">
   [The Initializr](/start?lang=node) makes this project, and more, as a zip: choose what you need, and it builds and passes its tests as generated. This page builds it by hand, so you see each part.
@@ -25,7 +25,7 @@ npm install -D typescript tsx prisma @types/express @types/node
 
 The SDK runs its SQL through **your** Prisma client, so its writes join your transactions. It owns no Prisma models: your schema holds only your own tables.
 
-<RepoSnippet file="apps/egradx-devportal/examples/node/prisma/schema.prisma" region="prisma-schema" title="prisma/schema.prisma" />
+<RepoSnippet file="apps/egradx-devportal/examples/node/backend/prisma/schema.prisma" region="prisma-schema" title="backend/prisma/schema.prisma" />
 
 ```sh
 npx prisma generate
@@ -38,7 +38,7 @@ npx prisma generate
 
 The SDK's tables are migrated first (so your tables can reference them), then your own, with the SDK's migration runner. `seed(...)`, `noteRoutes(...)` and the `onOrganizationCreated` listener are the application's own — they come in [your first endpoint](/docs/get-started/first-endpoint).
 
-<RepoSnippet file="apps/egradx-devportal/examples/node/src/app.ts" region="main" title="src/app.ts" />
+<RepoSnippet file="apps/egradx-devportal/examples/node/backend/src/app.ts" region="main" title="backend/src/app.ts" />
 
 </Step>
 <Step>

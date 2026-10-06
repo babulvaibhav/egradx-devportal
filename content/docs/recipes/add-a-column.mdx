@@ -5,7 +5,7 @@ description: Change your own table with a new migration, and map the column — 
 
 The example's notes table, from its first migration:
 
-<RepoSnippet file="apps/egradx-devportal/examples/node/migrations/V1__notes.sql" region="migration" title="V1__notes.sql" />
+<RepoSnippet file="apps/egradx-devportal/examples/node/backend/migrations/V1__notes.sql" region="migration" title="backend/migrations/V1__notes.sql" />
 
 ## 1. A new migration, never an edited one
 
@@ -48,7 +48,7 @@ Then `npx prisma generate`. Not `prisma migrate`: your SQL file is the migration
 </Tab>
 <Tab value="Python">
 
-The example writes SQL directly, so add `pinned` to the `SELECT` and `INSERT` statements in `notes.py`. With an ORM model, add the column to it.
+The example writes SQL directly, so add `pinned` to the `SELECT` and `INSERT` statements in `note/routes.py`. With an ORM model, add the column to it.
 
 </Tab>
 </Languages>

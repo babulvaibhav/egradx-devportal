@@ -25,18 +25,19 @@ yarn-error.log*
 .vercel
 next-env.d.ts
 # The example applications' build output, dependencies and local state
-/examples/java/target/
-/examples/node/node_modules/
+/examples/java/backend/target/
+/examples/node/backend/node_modules/
 /examples/web-vite/node_modules/
 /examples/web-next/node_modules/
 /examples/web-next/.next/
 # Lockfiles would pin the checksums of packages republished as 1.0.0
 /examples/*/package-lock.json
+/examples/*/backend/package-lock.json
 *.tsbuildinfo
-/examples/node/src/generated/
-/examples/python/.venv/
-/examples/python/egradx-wheels/
-/examples/python/uv.lock
+/examples/node/backend/src/generated/
+/examples/python/backend/.venv/
+/examples/python/backend/egradx-wheels/
+/examples/python/backend/uv.lock
 __pycache__/
 keys/
 *.log

@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { callAs, createQuery, EgradxApiError, unwrap, type AuthApi } from '@babulvaibhav/egradx-client';
 import { Can, useAuth, useStore } from '@babulvaibhav/egradx-react';
-import { egradx } from '../egradx';
+import { egradx } from '../lib/egradx';
 
 type Role = AuthApi.components['schemas']['EgradxRoleDto'];
 type InvitationPreview = AuthApi.components['schemas']['EgradxInvitationPreviewDto'];

@@ -1,6 +1,6 @@
 {{#if cap.tracing}}
 // Telemetry starts before anything it instruments is loaded: express and http are imported after it.
-import { startTelemetry } from './telemetry.js';
+import { startTelemetry } from './common/telemetry.js';
 
 const telemetry = startTelemetry('{{project.artifact}}');
 {{/if}}

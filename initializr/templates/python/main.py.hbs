@@ -1,4 +1,4 @@
-"""Runs {{project.name}}: `uv run python main.py`."""
+"""Runs {{project.name}}: `uv run python -m {{project.module}}`."""
 
 import asyncio
 import logging
@@ -10,18 +10,12 @@ import uvicorn
 from egradx.sdk import CORRELATION_FORMAT, install_log_correlation
 
 {{#if cap.tracing}}
-from telemetry import instrument, start_telemetry
+from .common.telemetry import instrument, start_telemetry
 
 start_telemetry("{{project.artifact}}")  # before the application is built, so everything it creates is instrumented
 {{/if}}
-from application import AppConfig, Application  # noqa: E402
-
-
-def required(name: str) -> str:
-    value = os.environ.get(name)
-    if not value:
-        sys.exit(f"Set {name} (see .env.example)")
-    return value
+from .app import Application  # noqa: E402
+from .config import from_environment  # noqa: E402
 
 
 # docs:region log-correlation
@@ -30,16 +24,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s " + CO
 install_log_correlation()
 # docs:end
 
-application = Application(AppConfig(
-    database_url=required("DATABASE_URL"),  # postgresql://postgres:postgres@localhost:5432/{{project.module}}
-    keystore_path=os.environ.get("EGRADX_KEYSTORE_PATH", "keys"),
-    key_passphrase=required("EGRADX_KEY_PASSPHRASE"),  # protects the signing keys; keep it secret
-    demo_password=os.environ.get("DEMO_PASSWORD", "demo-password"),
-{{#if cap.email}}
-    smtp_host=os.environ.get("SMTP_HOST", "localhost"),
-    smtp_port=int(os.environ.get("SMTP_PORT", "1025")),
-{{/if}}
-))
+application = Application(from_environment())
 app = {{#if cap.tracing}}instrument(application.app){{else}}application.app{{/if}}
 
 

@@ -56,6 +56,7 @@ export interface Extra {
  * A file of a template set. `when` lists conditions that must all hold:
  *   cap:<id>  !cap:<id>  option:<capability>.<option>=<value>  frontend:<id>  frontend:any  extra:<id>  !extra:<id>
  * `to` is rendered like the file's content, so it may use {{project.packagePath}}. A `raw` file is copied as it is.
+ * A language's files go under backend/ and a frontend's under frontend/, unless `root` keeps one at the project's root.
  */
 export interface TemplateFile {
   from: string;
@@ -63,6 +64,7 @@ export interface TemplateFile {
   when?: string[];
   raw?: boolean;
   executable?: boolean;
+  root?: boolean;
 }
 
 export interface Manifest {

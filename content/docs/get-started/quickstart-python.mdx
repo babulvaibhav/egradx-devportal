@@ -5,7 +5,7 @@ description: A FastAPI application on the EGRADX SDK, signed in and calling the 
 
 You need Python 3.12 or later, [uv](https://docs.astral.sh/uv/), a PostgreSQL database ([local environment](/docs/get-started/local-environment)) and the SDK's wheels in a folder ([access to the packages](/docs/get-started/access)).
 
-The code on this page is the portal's Python example application, `examples/python` — a small *notes* application built on the published wheels and run by the portal's build checks. You can copy it whole.
+The code on this page is the portal's Python example application, `examples/python` — a small *notes* application built on the published wheels and run by the portal's build checks. You can copy it whole. Its code is in `backend/`, grouped by feature; run the commands below from there.
 
 <Callout title="Or generate it">
   [The Initializr](/start?lang=python) makes this project, and more, as a zip: choose what you need, and it builds and passes its tests as generated. This page builds it by hand, so you see each part.
@@ -16,7 +16,7 @@ The code on this page is the portal's Python example application, `examples/pyth
 
 ### Create the project
 
-<RepoSnippet file="apps/egradx-devportal/examples/python/pyproject.toml" region="pyproject" title="pyproject.toml" />
+<RepoSnippet file="apps/egradx-devportal/examples/python/backend/pyproject.toml" region="pyproject" title="backend/pyproject.toml" />
 
 ```sh
 uv sync
@@ -29,11 +29,11 @@ uv sync
 
 The SDK runs its SQL through **your** SQLAlchemy engine, so its writes join your transactions. Its tables are migrated first (so yours can reference them), then yours, with the SDK's migration runner. `seed(...)`, `note_routes(...)` and the `on_organization_created` listener are the application's own — they come in [your first endpoint](/docs/get-started/first-endpoint).
 
-<RepoSnippet file="apps/egradx-devportal/examples/python/application.py" region="main" title="application.py" />
+<RepoSnippet file="apps/egradx-devportal/examples/python/backend/src/notes/app.py" region="main" title="backend/src/notes/app.py" />
 
-The end of `main.py` starts uvicorn on a selector event loop: psycopg's async mode needs one, and Windows does not use it by default.
+The end of `__main__.py` starts uvicorn on a selector event loop: psycopg's async mode needs one, and Windows does not use it by default.
 
-<RepoSnippet file="apps/egradx-devportal/examples/python/main.py" region="run" title="main.py (end)" />
+<RepoSnippet file="apps/egradx-devportal/examples/python/backend/src/notes/__main__.py" region="run" title="backend/src/notes/__main__.py (end)" />
 
 </Step>
 <Step>
@@ -41,7 +41,7 @@ The end of `main.py` starts uvicorn on a selector event loop: psycopg's async mo
 ### Run it
 
 ```sh
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/notes EGRADX_KEY_PASSPHRASE=change-it uv run python main.py
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/notes EGRADX_KEY_PASSPHRASE=change-it uv run python -m notes
 ```
 
 On first start the SDK creates its tables, generates the signing keys in `./keys`, and seeds the platform organization with its administrator.

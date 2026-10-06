@@ -9,24 +9,24 @@ Three pieces: a **type** that names the message, a **template** for it, and a **
 
 See [add a notification type](/docs/recipes/add-a-notification-type). For this recipe the type is `notes.note.created`, which needs a `title`:
 
-<RepoSnippet file="apps/egradx-devportal/examples/node/notification-templates/notes.note.created/email.subject.txt" title="notification-templates/notes.note.created/email.subject.txt" />
+<RepoSnippet file="apps/egradx-devportal/examples/node/backend/notification-templates/notes.note.created/email.subject.txt" title="backend/notification-templates/notes.note.created/email.subject.txt" />
 
 ## 2. Send it with the change
 
 <Languages>
 <Tab value="Java">
 
-<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/java/com/acme/notes/NoteService.java" region="note-email" title="NoteService.java" />
+<RepoSnippet file="apps/egradx-devportal/examples/java/backend/src/main/java/com/acme/notes/note/application/NoteService.java" region="note-email" title="backend/…/note/application/NoteService.java" />
 
 </Tab>
 <Tab value="Node">
 
-<RepoSnippet file="apps/egradx-devportal/examples/node/src/notes.ts" region="note-email" title="src/notes.ts" />
+<RepoSnippet file="apps/egradx-devportal/examples/node/backend/src/note/routes.ts" region="note-email" title="backend/src/note/routes.ts" />
 
 </Tab>
 <Tab value="Python">
 
-<RepoSnippet file="apps/egradx-devportal/examples/python/notes.py" region="note-email" title="notes.py" />
+<RepoSnippet file="apps/egradx-devportal/examples/python/backend/src/notes/note/routes.py" region="note-email" title="backend/src/notes/note/routes.py" />
 
 </Tab>
 </Languages>

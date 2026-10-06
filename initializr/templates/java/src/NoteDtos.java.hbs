@@ -1,25 +1,27 @@
-package {{project.packageName}};
+package {{project.packageName}}.note.application;
 
 import java.util.UUID;
 
+import {{project.packageName}}.note.domain.Note;
+
 /** What the notes endpoints take and return. */
-final class NoteDtos {
+public final class NoteDtos {
 
     private NoteDtos() {
     }
 
-    record NoteRequest(String title, String body) {
+    public record NoteRequest(String title, String body) {
     }
 
-    record NoteResponse(UUID id, UUID organizationId, String title, String body) {
+    public record NoteResponse(UUID id, UUID organizationId, String title, String body) {
 
-        static NoteResponse from(Note note) {
+        public static NoteResponse from(Note note) {
             return new NoteResponse(note.getId(), note.getOrganizationId(), note.getTitle(), note.getBody());
         }
     }
 {{#if cap.events}}
 
-    record NoteStats(long notesCreated) {
+    public record NoteStats(long notesCreated) {
     }
 {{/if}}
 }

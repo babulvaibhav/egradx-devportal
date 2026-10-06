@@ -7,6 +7,9 @@ application's business logic only.
 
 ## This project
 
+- The API is in `backend/`{{#if frontend}}, the web app in `frontend/`{{/if}}; `README.md` shows what is where. Code is grouped by
+  feature: `note/` is the pattern, and a new feature is a new folder beside it. The wiring around the SDK is in
+  `common/`.
 - Endpoints are under `/api/**`. Each states the permission it needs; without one an endpoint is public.
 - Every query on this application's own tables is scoped to the caller's organization. Another organization's
   record answers 404, never 403.

@@ -19,7 +19,7 @@ Email must work too: see [configure SMTP](/docs/recipes/configure-smtp). Locally
 
 People with `egradx.user.manage` (every organization's `Admin`) invite. They choose one of the organization's roles:
 
-<RepoSnippet file="apps/egradx-devportal/examples/web-vite/src/recipes/Invitations.tsx" region="invite-someone" title="src/recipes/Invitations.tsx" />
+<RepoSnippet file="apps/egradx-devportal/examples/web-vite/src/recipes/Invitations.tsx" region="invite-someone" title="frontend/src/recipes/Invitations.tsx" />
 
 Inviting an address again replaces its pending invitation. `GET /egradx/auth/my/invitations` lists the pending ones; `…/{id}/resend` and `DELETE …/{id}` resend and withdraw them.
 
@@ -27,7 +27,7 @@ Inviting an address again replaces its pending invitation. `GET /egradx/auth/my/
 
 Serve `/accept-invite` in your frontend:
 
-<RepoSnippet file="apps/egradx-devportal/examples/web-vite/src/recipes/Invitations.tsx" region="accept-invitation" title="src/recipes/Invitations.tsx" />
+<RepoSnippet file="apps/egradx-devportal/examples/web-vite/src/recipes/Invitations.tsx" region="accept-invitation" title="frontend/src/recipes/Invitations.tsx" />
 
 - **No account yet:** they choose a name and a password, and the account is created as they join.
 - **An account already:** they sign in as the invited address first, then join with no body. Signed in as anyone else, they get `INVITATION_EMAIL_MISMATCH`.

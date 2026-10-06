@@ -6,199 +6,219 @@ Built on the [EGRADX SDK](https://github.com/babulvaibhav/egradx-v1-workspace) {
 the audit trail and notifications come from the SDK, so this code is the application's own business only. It starts
 with a sample feature, *notes*, that uses each capability you chose; keep it as a pattern or delete it.
 
-## 1. Access to the SDK's packages
+## What is where
 
-The packages are on GitHub Packages, which asks for a token even to read. Create a token (classic) with the scope
-`read:packages` and keep it in `GITHUB_TOKEN`:
-
-```sh
-export GITHUB_TOKEN=ghp_...            # Windows PowerShell: $env:GITHUB_TOKEN = "ghp_..."
 ```
-
-{{#if (eq language "java")}}
-Then give Maven a server with the **same id** as the repository in `pom.xml`, in `~/.m2/settings.xml`:
-
-```xml
-<settings>
-  <servers>
-    <server>
-      <id>egradx-sdk-github</id>
-      <username>YOUR_GITHUB_USERNAME</username>
-      <password>${env.GITHUB_TOKEN}</password>
-    </server>
-  </servers>
-</settings>
-```
+{{project.artifact}}/
+├── README.md                      this file
+{{#if extra.ai-pack}}
+├── AGENTS.md, CLAUDE.md           for coding assistants; the SDK's rules and docs are in egradx-sdk-docs/
+├── egradx-sdk-docs/
 {{/if}}
-{{#if (eq language "node")}}
-`.npmrc` already reads it, so `npm install` works as it is.
-{{/if}}
-{{#if (eq language "python")}}
-The Python packages are wheels on the GitHub release `python-v{{sdkVersion}}`. Download them into `egradx-wheels/`
-(`pyproject.toml` installs from there):
-
-```sh
-python scripts/get_wheels.py           # or: gh release download python-v{{sdkVersion}} -R babulvaibhav/egradx-v1-workspace -p "*.whl" -D egradx-wheels
-```
-{{/if}}
-
-## 2. Run it
-
 {{#if extra.compose}}
-```sh
-docker compose up -d                   # PostgreSQL{{#if cap.email}}, Mailpit{{/if}}{{#if cap.events}}{{#if (eq option.events.transport "rabbitmq")}}, RabbitMQ{{/if}}{{#if (eq option.events.transport "kafka")}}, Kafka{{/if}}{{/if}}{{#if cap.tracing}}, Jaeger, Prometheus{{/if}}
-```
-{{else}}
-You need a PostgreSQL database named `{{project.module}}` (user `postgres`, password `postgres` by default).
+├── docker-compose.yml, docker/    the services it needs locally: PostgreSQL{{#if cap.email}}, Mailpit{{/if}}{{#if cap.events}}{{#if (eq option.events.transport "rabbitmq")}}, RabbitMQ{{/if}}{{#if (eq option.events.transport "kafka")}}, Kafka{{/if}}{{/if}}{{#if cap.tracing}}, Jaeger, Prometheus{{/if}}
 {{/if}}
+{{#if extra.ci}}
+├── .github/workflows/ci.yml       builds and tests every part on each push
+{{/if}}
+{{#if frontend}}
+├── backend/                       the API ({{#if (eq language "java")}}Java, Spring Boot{{/if}}{{#if (eq language "node")}}Node, Express{{/if}}{{#if (eq language "python")}}Python, FastAPI{{/if}}): backend/README.md
+└── frontend/                      the web app ({{#if (eq frontend "vite")}}React with Vite{{else}}Next.js{{/if}}): frontend/README.md
+{{else}}
+└── backend/                       the API ({{#if (eq language "java")}}Java, Spring Boot{{/if}}{{#if (eq language "node")}}Node, Express{{/if}}{{#if (eq language "python")}}Python, FastAPI{{/if}}): backend/README.md
+{{/if}}
+```
+
+Inside `backend/`, the code is grouped **by feature**: everything about notes is in one `note/` folder, and the wiring
+around the SDK in `common/`. A new feature is a new folder beside `note/`, built the same way.
 
 {{#if (eq language "java")}}
-```sh
-EGRADX_KEY_PASSPHRASE=change-me ./mvnw spring-boot:run
+```
+backend/
+├── pom.xml, mvnw                  the build (Maven)
+├── .env.example                   the settings it reads
+{{#if extra.dockerfile}}
+├── Dockerfile
+{{/if}}
+└── src/
+    ├── main/java/{{project.packagePath}}/
+    │   ├── {{project.className}}.java          starts the application
+    │   ├── common/
+    │   │   ├── config/Setup.java          this application's permissions, and the demo organization
+    │   │   └── exception/ApiExceptionHandler.java   its errors in the SDK's envelope
+    │   └── note/                          the sample feature
+    │       ├── api/                       NoteController: the endpoints, and the permission each needs
+    │       ├── application/               NoteService: the logic, with its audit record{{#if cap.email}}, email{{/if}} and notice{{#if cap.events}} and event{{/if}};
+    │       │                              NoteDtos, NoteAuditActions{{#if cap.email}}, NoteNotifications{{/if}}
+    │       ├── domain/                    Note: the table's entity
+{{#if cap.events}}
+    │       ├── infrastructure/            NoteRepository: every query scoped to the caller's organization
+    │       └── events/                    NoteStatsHandler: handles the event a new note publishes
+{{else}}
+    │       └── infrastructure/            NoteRepository: every query scoped to the caller's organization
+{{/if}}
+    ├── main/resources/
+    │   ├── application.yml                the configuration
+{{#if cap.email}}
+    │   ├── notification-templates/        the email's templates
+{{/if}}
+    │   └── db/migration/                  this application's tables (Flyway)
+{{#if extra.tests}}
+    └── test/java/{{project.packagePath}}/note/NoteApiTest.java
+{{/if}}
 ```
 {{/if}}
 {{#if (eq language "node")}}
-```sh
-npm install
-npx prisma generate
-EGRADX_KEY_PASSPHRASE=change-me npm run dev
+```
+backend/
+├── package.json, tsconfig.json
+├── .env.example                   the settings it reads
+{{#if extra.dockerfile}}
+├── Dockerfile
+{{/if}}
+├── prisma/schema.prisma           maps this application's tables (the SDK's are not in it)
+├── migrations/                    this application's tables (SQL, run at start-up after the SDK's)
+{{#if cap.email}}
+├── notification-templates/        the email's templates
+{{/if}}
+├── src/
+│   ├── main.ts                    starts the server{{#if cap.tracing}} (telemetry first){{/if}}
+│   ├── app.ts                     builds the application: the SDK, migrations, routes, the error handler
+│   ├── config.ts                  everything read from the environment
+│   ├── common/                    setup.ts: this application's permissions, and the demo organization{{#if cap.tracing}}; telemetry.ts{{/if}}{{#if cap.log-shipping}}; logging.ts{{/if}}
+│   └── note/                      the sample feature
+│       ├── routes.ts              the endpoints: permission, organization, audit record, notice
+│       ├── audit-actions.ts       the words the audit screen shows for its actions
+{{#if cap.email}}
+│       ├── notifications.ts       the email's type
+{{/if}}
+{{#if cap.events}}
+│       └── stats-handler.ts       handles the event a new note publishes
+{{/if}}
+{{#if extra.tests}}
+└── test/note.test.ts
+{{/if}}
 ```
 {{/if}}
 {{#if (eq language "python")}}
-```sh
-uv sync
-EGRADX_KEY_PASSPHRASE=change-me uv run python main.py
 ```
+backend/
+├── pyproject.toml
+├── .env.example                   the settings it reads
+{{#if extra.dockerfile}}
+├── Dockerfile
 {{/if}}
-
-On the first start the SDK creates its tables, then this application's, generates its signing keys in `./keys`, and
-creates the platform's administrator. The application then adds its permissions (`note.read`, `note.write`) and a
-demo organization, *Demo*, whose administrator is **ada@example.com** / **demo-password**.
-
-## 3. Try it
-
-```sh
-# Sign in
-TOKEN=$(curl -s -X POST http://localhost:8080/egradx/auth/login -H 'Content-Type: application/json' \
-  -d '{"username":"ada@example.com","password":"demo-password"}' | sed 's/.*"accessToken":"\([^"]*\)".*/\1/')
-
-# Create a note
-curl -s -X POST http://localhost:8080/api/notes -H "Authorization: Bearer $TOKEN" \
-  -H 'Content-Type: application/json' -d '{"title":"First note"}'
-
-# Its audit record, and the notice in everyone's bell
-curl -s "http://localhost:8080/egradx/audit/events?action={{project.area}}.note.created" -H "Authorization: Bearer $TOKEN"
-curl -s http://localhost:8080/egradx/notifications -H "Authorization: Bearer $TOKEN"
+├── scripts/get_wheels.py          downloads the SDK's wheels
+├── migrations/                    this application's tables (SQL, run at start-up after the SDK's)
+{{#if cap.email}}
+├── notification-templates/        the email's templates
+{{/if}}
+├── src/{{project.module}}/
+│   ├── __main__.py                starts the server: python -m {{project.module}}
+│   ├── app.py                     builds the application: the SDK, migrations, routes
+│   ├── config.py                  everything read from the environment
+│   ├── common/                    seeding.py: this application's permissions, and the demo organization{{#if cap.tracing}}; telemetry.py{{/if}}
+│   └── note/                      the sample feature
+│       ├── routes.py              the endpoints: permission, organization, audit record, notice
+│       ├── audit_actions.py       the words the audit screen shows for its actions
+{{#if cap.email}}
+│       ├── notifications.py       the email's type
+{{/if}}
 {{#if cap.events}}
-
-# The count an event handler keeps, a moment after the commit
-curl -s http://localhost:8080/api/notes/stats -H "Authorization: Bearer $TOKEN"
+│       └── stats_handler.py       handles the event a new note publishes
+{{/if}}
+{{#if extra.tests}}
+└── tests/test_note.py
 {{/if}}
 ```
+{{/if}}
+{{#if (eq frontend "vite")}}
+
+```
+frontend/
+├── package.json, vite.config.ts   the build; in development, /api and /egradx go to the backend
+└── src/
+    ├── main.tsx                   the entry: the SDK's provider and the router
+    ├── app/App.tsx                the routes, and the guard on signed-in pages
+    ├── lib/egradx.ts              the SDK's client: the session, tokens, request ids
+    ├── components/Bell.tsx        the notification bell
+    └── modules/                   one folder per feature
+        ├── auth/LoginForm.tsx
+        └── notes/                 Notes.tsx (the page), notes-api.ts (its calls to the backend)
+```
+{{/if}}
+{{#if (eq frontend "next")}}
+
+```
+frontend/
+├── package.json, next.config.ts
+└── src/
+    ├── app/                       the routes (Next.js App Router): the notes page, login/, and bff/ — the
+    │                              backend-for-frontend that keeps the tokens in HttpOnly cookies
+    ├── proxy.ts                   sends signed-out visitors to /login (Next.js requires it here)
+    ├── lib/                       egradx.ts (the browser's client), egradx-server.ts (the backend-for-frontend)
+    ├── components/Bell.tsx        the notification bell
+    └── modules/                   one folder per feature
+        ├── auth/LoginForm.tsx
+        └── notes/                 Notes.tsx (the page), notes-api.ts (its calls to the backend)
+```
+{{/if}}
+
+## Where to look
+
+| To | Look in |
+|---|---|
+{{#if (eq language "java")}}
+| add an endpoint, or change who may call it | `backend/src/main/java/{{project.packagePath}}/note/api/` |
+| change what happens when a note is saved | `note/application/NoteService.java` |
+| add a feature | a new folder beside `note/`, with the same four (`api`, `application`, `domain`, `infrastructure`) |
+| add a permission | `common/config/Setup.java` |
+| add a column or a table | a new file in `backend/src/main/resources/db/migration/` |
+{{/if}}
+{{#if (eq language "node")}}
+| add an endpoint, or change who may call it | `backend/src/note/routes.ts` |
+| add a feature | a new folder beside `src/note/`, wired into `src/app.ts` |
+| add a permission | `backend/src/common/setup.ts` |
+| add a column or a table | a new file in `backend/migrations/`, then `prisma/schema.prisma` and `npx prisma generate` |
+{{/if}}
+{{#if (eq language "python")}}
+| add an endpoint, or change who may call it | `backend/src/{{project.module}}/note/routes.py` |
+| add a feature | a new folder beside `note/`, wired into `app.py` |
+| add a permission | `backend/src/{{project.module}}/common/seeding.py` |
+| add a column or a table | a new file in `backend/migrations/` |
+{{/if}}
+{{#if cap.email}}
+| change an email | `{{#if (eq language "java")}}backend/src/main/resources/notification-templates/{{else}}backend/notification-templates/{{/if}}` (`email.subject.txt`, `email.body.html`) |
+{{/if}}
+| change a setting | `backend/.env.example` lists them; set them in the environment |
+{{#if frontend}}
+| add a page | `frontend/src/modules/<feature>/`{{#if (eq frontend "vite")}}, and a route in `frontend/src/app/App.tsx`{{else}}, and a route in `frontend/src/app/`{{/if}} |
+{{/if}}
+
+## Run it
+
+1. **Access to the SDK's packages.** They are on GitHub Packages, which asks for a token even to read. Create a token
+   (classic) with the scope `read:packages` and keep it in `GITHUB_TOKEN`. `backend/README.md` says how{{#if (eq language "java")}} Maven{{/if}}{{#if (eq language "node")}} npm{{/if}}{{#if (eq language "python")}} uv{{/if}} reads it.
+{{#if extra.compose}}
+2. **The services:** `docker compose up -d`, from this folder.
+{{else}}
+2. **A database:** PostgreSQL with a database named `{{project.module}}` (user `postgres`, password `postgres` by default).
+{{/if}}
+3. **The backend:** see `backend/README.md`. It answers on http://localhost:8080.
+{{#if frontend}}
+4. **The frontend:** see `frontend/README.md`. It runs on {{#if (eq frontend "vite")}}http://localhost:5173{{else}}http://localhost:3000{{/if}}.
+{{/if}}
+
+On the first start the SDK creates its tables, then this application's, generates its signing keys in `backend/keys`,
+and creates the platform's administrator. The application then adds its permissions (`note.read`, `note.write`) and a
+demo organization, *Demo*, whose administrator is **ada@example.com** / **demo-password**.
 {{#if cap.email}}
 
-The email to the note's author is in Mailpit: <http://localhost:8025>.
+The email to a note's author is in Mailpit: <http://localhost:8025>.
 {{/if}}
 {{#if cap.tracing}}
 
 Traces are in Jaeger (<http://localhost:16686>), metrics in Prometheus (<http://localhost:9090>).
-{{/if}}
-{{#if frontend}}
-
-## 4. The frontend
-
-```sh
-cd web
-npm install
-npm run dev                            # http://localhost:5173 (React) or http://localhost:3000 (Next.js)
-```
-
-Sign in as ada@example.com / demo-password.
-{{/if}}
-{{#if extra.tests}}
-
-## Tests
-
-The tests run the application over HTTP against the `{{project.module}}_test` database (docker compose creates it;
-`TEST_DB_URL` points elsewhere).
-
-{{#if (eq language "java")}}
-```sh
-./mvnw test
-```
-{{/if}}
-{{#if (eq language "node")}}
-```sh
-npm test
-```
-{{/if}}
-{{#if (eq language "python")}}
-```sh
-uv run pytest
-```
-{{/if}}
-{{/if}}
-{{#if extra.dockerfile}}
-
-## Docker image
-
-{{#if (eq language "java")}}
-```sh
-docker build --secret id=maven-settings,src=$HOME/.m2/settings.xml -t {{project.artifact}} .
-```
-{{/if}}
-{{#if (eq language "node")}}
-```sh
-docker build --secret id=github-token,env=GITHUB_TOKEN -t {{project.artifact}} .
-```
-{{/if}}
-{{#if (eq language "python")}}
-```sh
-python scripts/get_wheels.py && docker build -t {{project.artifact}} .
-```
-{{/if}}
-
-Every instance must share one `keys` volume, and the first start must finish before a second instance starts: it is
-the one that creates the keys.
-{{/if}}
-
-## Where things are
-
-| | |
-|---|---|
-{{#if (eq language "java")}}
-| `NoteController`, `NoteService` | the endpoints and the business logic: permission, organization, audit record, notice |
-| `Setup` | this application's permissions, and the demo organization |
-| `NoteAuditActions` | the words the audit screen shows for this application's actions |
-| `ApiExceptionHandler` | this application's errors in the SDK's envelope |
-{{#if cap.email}}
-| `NoteNotifications`, `notification-templates/` | the email's type and templates |
-{{/if}}
-{{#if cap.events}}
-| `NoteStatsHandler` | an event handler |
-{{/if}}
-| `src/main/resources/db/migration` | this application's tables (Flyway) |
-{{/if}}
-{{#if (eq language "node")}}
-| `src/notes.ts` | the endpoints and the business logic: permission, organization, audit record, notice |
-| `src/setup.ts` | this application's permissions, and the demo organization |
-| `src/main.ts` | the SDK wired in, migrations first |
-{{#if cap.events}}
-| `src/events.ts` | an event handler |
-{{/if}}
-| `migrations/` | this application's tables; `prisma/schema.prisma` maps them |
-{{/if}}
-{{#if (eq language "python")}}
-| `notes.py` | the endpoints and the business logic: permission, organization, audit record, notice |
-| `seeding.py` | this application's permissions, and the demo organization |
-| `main.py` | the SDK wired in, migrations first |
-{{#if cap.events}}
-| `events.py` | an event handler |
-{{/if}}
-| `migrations/` | this application's tables |
-{{/if}}
-{{#if extra.ai-pack}}
-| `AGENTS.md`, `egradx-sdk-docs/` | what a coding assistant needs to build on the SDK instead of re-writing it |
 {{/if}}
 
 Learn more on the EGRADX Developer Portal: guides for each capability, recipes, and the reference.

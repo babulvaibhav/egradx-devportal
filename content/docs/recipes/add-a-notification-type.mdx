@@ -8,19 +8,19 @@ description: Name a message, the variables its templates may use, whether people
 <Languages>
 <Tab value="Java">
 
-<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/java/com/acme/notes/NoteNotifications.java" region="notification-type" title="NoteNotifications.java" />
+<RepoSnippet file="apps/egradx-devportal/examples/java/backend/src/main/java/com/acme/notes/note/application/NoteNotifications.java" region="notification-type" title="backend/…/note/application/NoteNotifications.java" />
 
 </Tab>
 <Tab value="Node">
 
-<RepoSnippet file="apps/egradx-devportal/examples/node/src/notifications.ts" region="notification-type" title="src/notifications.ts" />
+<RepoSnippet file="apps/egradx-devportal/examples/node/backend/src/note/notifications.ts" region="notification-type" title="backend/src/note/notifications.ts" />
 
 Passed as `createEgradx({ notifications: { types: notificationTypes, templates: { directories: [templateDirectory] } } })`.
 
 </Tab>
 <Tab value="Python">
 
-<RepoSnippet file="apps/egradx-devportal/examples/python/notifications.py" region="notification-type" title="notifications.py" />
+<RepoSnippet file="apps/egradx-devportal/examples/python/backend/src/notes/note/notifications.py" region="notification-type" title="backend/src/notes/note/notifications.py" />
 
 </Tab>
 </Languages>
@@ -33,9 +33,9 @@ Passed as `createEgradx({ notifications: { types: notificationTypes, templates: 
 
 One file per channel and part: `notification-templates/<key>/<channel>[.<locale>].(subject|body).(txt|html)`, in Handlebars.
 
-<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/resources/notification-templates/notes.note.created/email.subject.txt" title="email.subject.txt" />
+<RepoSnippet file="apps/egradx-devportal/examples/java/backend/src/main/resources/notification-templates/notes.note.created/email.subject.txt" title="backend/src/main/resources/notification-templates/notes.note.created/email.subject.txt" />
 
-<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/resources/notification-templates/notes.note.created/email.body.html" title="email.body.html" />
+<RepoSnippet file="apps/egradx-devportal/examples/java/backend/src/main/resources/notification-templates/notes.note.created/email.body.html" title="backend/src/main/resources/notification-templates/notes.note.created/email.body.html" />
 
 | File | For |
 |---|---|

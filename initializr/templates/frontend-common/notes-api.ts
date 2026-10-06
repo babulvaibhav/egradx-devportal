@@ -1,5 +1,5 @@
 import { errorFromResponse } from '@babulvaibhav/egradx-client';
-import { egradx } from './egradx';
+import { egradx } from '../../lib/egradx';
 
 export interface Note {
   id: string;

@@ -2,7 +2,6 @@
 
 import logging
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -19,31 +18,24 @@ from egradx.events import EgradxEvents, migrate_events
 from egradx.sdk import EgradxLogShipper
 {{/if}}
 
+from .common.seeding import grant_note_permissions_to_new_organizations, seed
+from .config import AppConfig
+from .note.audit_actions import AUDIT_ACTIONS
+{{#if cap.email}}
+from .note.notifications import NOTIFICATION_TYPES, TEMPLATE_DIRECTORY
+{{/if}}
+from .note.routes import note_routes
 {{#if cap.events}}
-from events import NoteStats
-{{/if}}
-from notes import AUDIT_ACTIONS, note_routes
-{{#if cap.email}}
-from notifications import NOTIFICATION_TYPES, TEMPLATE_DIRECTORY
-{{/if}}
-from seeding import grant_note_permissions_to_new_organizations, seed
-
-
-@dataclass
-class AppConfig:
-    database_url: str
-    keystore_path: str
-    key_passphrase: str
-    demo_password: str
-{{#if cap.email}}
-    smtp_host: str = "localhost"
-    smtp_port: int = 1025
+from .note.stats_handler import NoteStats
 {{/if}}
 
+
+# The backend folder (src/<package>/app.py is two levels below it): migrations/ and notification-templates/.
+BACKEND = Path(__file__).resolve().parents[2]
 
 async def migrate_own_tables(database_url: str) -> None:
     """The application's own tables, with the SDK's runner (Flyway's history format, so any SDK can share the database)."""
-    await migrate_async(database_url, Path(__file__).parent / "migrations", "{{project.module}}_schema_history")
+    await migrate_async(database_url, BACKEND / "migrations", "{{project.module}}_schema_history")
 
 
 class Application:

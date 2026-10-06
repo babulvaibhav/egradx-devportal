@@ -1,4 +1,4 @@
-package {{project.packageName}};
+package {{project.packageName}}.note;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -23,6 +23,7 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
+import {{project.packageName}}.common.config.Setup;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 {{#if cap.email}}
@@ -36,7 +37,7 @@ import com.icegreen.greenmail.util.ServerSetupTest;
  * database that docker compose creates. Signs in as the demo administrator Setup creates.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-class NotesTests {
+class NoteApiTest {
 {{#if cap.email}}
 
     /** An SMTP server inside the test: the application's mail goes here, and the test reads it. */

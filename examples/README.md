@@ -4,9 +4,12 @@ The same small application, *notes*, in each language, plus its two frontends. T
 
 | Folder | What |
 |---|---|
-| `java/`, `node/`, `python/` | the backend: sign-in, the `note.read` / `note.write` permissions, notes scoped to the caller's organization, audited, a notice and an email per new note, an event and its handler, log shipping, tracing, a test, a Dockerfile |
-| `web-vite/`, `web-next/` | the frontend, with Vite or with Next.js and its backend-for-frontend |
-| `*/recipes/` | not generated: code for the recipes the sample feature doesn't cover. Compiled and type-checked with its example, kept when the examples are regenerated |
+| `java/`, `node/`, `python/` | a whole generated project: its `README.md`, `docker-compose.yml`, and the API in `backend/`, grouped by feature (`note/`, with the wiring around the SDK in `common/`) |
+| `web-vite/`, `web-next/` | the `frontend/` folder of a generated project, on its own: React with Vite, or Next.js with its backend-for-frontend |
+| `recipes/` folders | not generated: code for the recipes the sample feature doesn't cover. Compiled and type-checked with its example, kept when the examples are regenerated |
+
+The recipes are in `java/backend/src/main/java/com/acme/notes/recipes/`, `node/backend/src/recipes/`,
+`python/backend/src/notes/recipes/` and `web-vite/src/recipes/`.
 
 Each backend seeds a demo organization, *Demo*, whose administrator is `ada@example.com` / `demo-password` (`DEMO_PASSWORD`).
 
@@ -20,7 +23,7 @@ You need [access to the packages](../content/docs/get-started/access.mdx): `GITH
 node scripts/refresh.mjs prepare check
 ```
 
-That packages the Java example, installs the Node and web ones, fetches the Python wheels and syncs, then type-checks the web examples. By hand, see each example's own README.
+That packages the Java example, installs the Node and web ones, fetches the Python wheels and syncs, then type-checks the web examples. By hand, see each backend's README (`*/backend/README.md`).
 
 ## Record what they answer
 

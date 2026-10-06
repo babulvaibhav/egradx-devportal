@@ -1,4 +1,4 @@
-package {{project.packageName}};
+package {{project.packageName}}.common.config;
 
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -19,11 +19,11 @@ import com.egradx.auth.repository.EgradxUserRepository;
 /** The application's own permissions, and a demo organization to sign in to. */
 @Component
 @Order(100) // after the SDK's own start-up seeding
-class Setup implements CommandLineRunner {
+public class Setup implements CommandLineRunner {
 
     static final String NOTE_READ = "note.read";
     static final String NOTE_WRITE = "note.write";
-    static final String DEMO_ADMIN = "ada@example.com";
+    public static final String DEMO_ADMIN = "ada@example.com";
 
     private final EgradxRoleService roles;
     private final EgradxOrganizationProvisioningService provisioning;

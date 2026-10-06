@@ -1,4 +1,4 @@
-import { bff } from '@/egradx-server';
+import { bff } from '@/lib/egradx-server';
 
 // Every browser call to the API goes through here (src/egradx-server.ts).
 export const dynamic = 'force-dynamic';

@@ -19,21 +19,21 @@ The SDK runs inside your application, so the most useful test runs the applicati
 <Languages>
 <Tab value="Java">
 
-<RepoSnippet file="apps/egradx-devportal/examples/java/src/test/java/com/acme/notes/NotesTests.java" region="test" title="src/test/java/…/NotesTests.java" />
+<RepoSnippet file="apps/egradx-devportal/examples/java/backend/src/test/java/com/acme/notes/note/NoteApiTest.java" region="test" title="backend/…/note/NoteApiTest.java" />
 
 `@SpringBootTest(webEnvironment = RANDOM_PORT)` starts the whole application; the dispatcher and the event relay run as in production, so the test waits for what happens after the commit.
 
 </Tab>
 <Tab value="Node">
 
-<RepoSnippet file="apps/egradx-devportal/examples/node/test/notes.test.ts" region="test" title="test/notes.test.ts" />
+<RepoSnippet file="apps/egradx-devportal/examples/node/backend/test/note.test.ts" region="test" title="backend/test/note.test.ts" />
 
 `startApplication(config)` — the same function `main.ts` calls — gives the Express app and a `close()`.
 
 </Tab>
 <Tab value="Python">
 
-<RepoSnippet file="apps/egradx-devportal/examples/python/tests/test_notes.py" region="test" title="tests/test_notes.py" />
+<RepoSnippet file="apps/egradx-devportal/examples/python/backend/tests/test_note.py" region="test" title="backend/tests/test_note.py" />
 
 The application runs in the test's event loop, called through `httpx.ASGITransport`. On Windows, psycopg needs a selector event loop: `tests/conftest.py` provides it.
 

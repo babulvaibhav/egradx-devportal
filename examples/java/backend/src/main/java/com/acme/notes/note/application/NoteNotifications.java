@@ -1,0 +1,26 @@
+package com.acme.notes.note.application;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+import com.egradx.notification.template.EgradxNotificationType;
+
+// docs:region notification-type
+/**
+ * The messages this application sends. A type names the variables its templates may use; the templates live in
+ * src/main/resources/notification-templates/<key>/, and the application does not start if one uses a variable the
+ * type does not declare.
+ */
+@Configuration
+class NoteNotifications {
+
+    @Bean
+    EgradxNotificationType noteCreated() {
+        return EgradxNotificationType.builder(NoteService.NOTE_CREATED)
+            .description("Sent to the author of a new note")
+            .requires("title")
+            .userCanOptOut()                     // people may turn it off on their settings screen
+            .build();
+    }
+}
+// docs:end

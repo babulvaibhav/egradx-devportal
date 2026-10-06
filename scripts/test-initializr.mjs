@@ -9,7 +9,7 @@
 // Needs: Java 21 and Maven, Node 24, uv; PostgreSQL at PGHOST (localhost:5432, postgres/postgres), where it creates and
 // drops one database pair per combination; GITHUB_TOKEN with read:packages (or a Maven server "egradx-sdk-github" in
 // ~/.m2/settings.xml, whose token is then used); EGRADX_WHEELS_DIR, a folder holding the Python wheels (default:
-// examples/python/egradx-wheels). Projects are generated into .matrix/ (git-ignored) and kept for a look afterwards.
+// examples/python/backend/egradx-wheels). Projects are generated into .matrix/ (git-ignored) and kept for a look afterwards.
 import { spawn } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -122,7 +122,7 @@ async function startAndSignIn(dir, combo, database) {
       ? ['java', ['-jar', path.join('target', readdirSync(path.join(dir, 'target')).find((n) => n.endsWith('.jar') && !n.endsWith('-plain.jar')))]]
       : combo.lang === 'node'
         ? ['npm', ['start']]
-        : [uv, ['run', 'python', 'main.py']];
+        : [uv, ['run', 'python', '-m', database]];
   const child = spawn(command, args, { cwd: dir, env: { ...process.env, ...env, ...uvEnv }, shell: windows, stdio: ['ignore', 'pipe', 'pipe'] });
   let log = '';
   child.stdout.on('data', (d) => (log += d));
@@ -178,24 +178,26 @@ async function runCombo(combo, templates, token) {
   const full = combo.run === 'full';
   if (full) await databases([moduleName, `${moduleName}_test`], 'create');
   const env = { GITHUB_TOKEN: token, TEST_DB_URL: `jdbc:postgresql://${pgConfig.host}:${pgConfig.port}/${moduleName}_test`, TEST_DATABASE_URL: `postgresql://${pgConfig.user}:${pgConfig.password}@${pgConfig.host}:${pgConfig.port}/${moduleName}_test` };
+  // The generated project: its API in backend/, a frontend (when chosen) in frontend/.
+  const backend = path.join(dir, 'backend');
   try {
     if (combo.lang === 'java') {
-      await sh('mvn', ['-B', '-q', full ? 'verify' : 'package', ...(full ? [] : ['-DskipTests'])], { cwd: dir, env });
+      await sh('mvn', ['-B', '-q', full ? 'verify' : 'package', ...(full ? [] : ['-DskipTests'])], { cwd: backend, env });
     } else if (combo.lang === 'node') {
-      await sh('npm', ['install', '--no-audit', '--no-fund'], { cwd: dir, env });
-      await sh('npx', ['prisma', 'generate'], { cwd: dir, env });
-      await sh('npm', ['run', 'typecheck'], { cwd: dir, env });
-      if (full) await sh('npm', ['test'], { cwd: dir, env });
+      await sh('npm', ['install', '--no-audit', '--no-fund'], { cwd: backend, env });
+      await sh('npx', ['prisma', 'generate'], { cwd: backend, env });
+      await sh('npm', ['run', 'typecheck'], { cwd: backend, env });
+      if (full) await sh('npm', ['test'], { cwd: backend, env });
     } else {
-      const wheels = process.env.EGRADX_WHEELS_DIR ?? path.join(app, 'examples', 'python', 'egradx-wheels');
-      cpSync(wheels, path.join(dir, 'egradx-wheels'), { recursive: true });
-      await sh(uv, ['sync', '--quiet'], { cwd: dir, env: { ...env, ...uvEnv } });
-      if (full) await sh(uv, ['run', 'pytest', '-q'], { cwd: dir, env: { ...env, ...uvEnv } });
+      const wheels = process.env.EGRADX_WHEELS_DIR ?? path.join(app, 'examples', 'python', 'backend', 'egradx-wheels');
+      cpSync(wheels, path.join(backend, 'egradx-wheels'), { recursive: true });
+      await sh(uv, ['sync', '--quiet'], { cwd: backend, env: { ...env, ...uvEnv } });
+      if (full) await sh(uv, ['run', 'pytest', '-q'], { cwd: backend, env: { ...env, ...uvEnv } });
     }
-    if (full) await startAndSignIn(dir, combo, moduleName);
+    if (full) await startAndSignIn(backend, combo, moduleName);
     if (combo.fe) {
-      await sh('npm', ['install', '--no-audit', '--no-fund'], { cwd: path.join(dir, 'web'), env });
-      await sh('npm', ['run', 'build'], { cwd: path.join(dir, 'web'), env });
+      await sh('npm', ['install', '--no-audit', '--no-fund'], { cwd: path.join(dir, 'frontend'), env });
+      await sh('npm', ['run', 'build'], { cwd: path.join(dir, 'frontend'), env });
     }
   } finally {
     if (full) await databases([moduleName, `${moduleName}_test`], 'drop').catch(() => {});

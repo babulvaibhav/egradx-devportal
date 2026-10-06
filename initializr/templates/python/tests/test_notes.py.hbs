@@ -1,5 +1,5 @@
 """The application over HTTP, as a client sees it, against a real PostgreSQL: TEST_DATABASE_URL, or the
-{{project.module}}_test database that docker compose creates. Signs in as the demo administrator seeding.py creates."""
+{{project.module}}_test database that docker compose creates. Signs in as the demo administrator common/seeding.py creates."""
 
 import asyncio
 import os
@@ -17,8 +17,9 @@ import pytest_asyncio
 from aiosmtpd.controller import Controller
 {{/if}}
 
-from application import AppConfig, Application
-from seeding import DEMO_ADMIN
+from {{project.module}}.app import Application
+from {{project.module}}.common.seeding import DEMO_ADMIN
+from {{project.module}}.config import AppConfig
 
 pytestmark = pytest.mark.asyncio(loop_scope="module")
 DATABASE_URL = os.environ.get("TEST_DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/{{project.module}}_test")

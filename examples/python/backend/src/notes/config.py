@@ -1,0 +1,33 @@
+"""Everything Notes reads from its environment, in one place."""
+
+import os
+import sys
+from dataclasses import dataclass
+
+
+@dataclass
+class AppConfig:
+    database_url: str
+    keystore_path: str
+    key_passphrase: str
+    demo_password: str
+    smtp_host: str = "localhost"
+    smtp_port: int = 1025
+
+
+def required(name: str) -> str:
+    value = os.environ.get(name)
+    if not value:
+        sys.exit(f"Set {name} (see .env.example)")
+    return value
+
+
+def from_environment() -> AppConfig:
+    return AppConfig(
+        database_url=required("DATABASE_URL"),  # postgresql://postgres:postgres@localhost:5432/notes
+        keystore_path=os.environ.get("EGRADX_KEYSTORE_PATH", "keys"),
+        key_passphrase=required("EGRADX_KEY_PASSPHRASE"),  # protects the signing keys; keep it secret
+        demo_password=os.environ.get("DEMO_PASSWORD", "demo-password"),
+        smtp_host=os.environ.get("SMTP_HOST", "localhost"),
+        smtp_port=int(os.environ.get("SMTP_PORT", "1025")),
+    )

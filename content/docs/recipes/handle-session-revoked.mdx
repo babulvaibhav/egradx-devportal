@@ -17,15 +17,15 @@ The client ends the session and calls your `onSessionEnded(reason)`. Every guard
 
 ## 1. Remember why
 
-<RepoSnippet file="apps/egradx-devportal/examples/web-vite/src/egradx.ts" region="web-client" title="src/egradx.ts" />
+<RepoSnippet file="apps/egradx-devportal/examples/web-vite/src/lib/egradx.ts" region="web-client" title="frontend/src/lib/egradx.ts" />
 
 ## 2. Say it on the sign-in page
 
-<RepoSnippet file="apps/egradx-devportal/examples/web-vite/src/LoginForm.tsx" region="web-sign-in" title="src/LoginForm.tsx" />
+<RepoSnippet file="apps/egradx-devportal/examples/web-vite/src/modules/auth/LoginForm.tsx" region="web-sign-in" title="frontend/src/modules/auth/LoginForm.tsx" />
 
 Your page guard already sends the person there:
 
-<RepoSnippet file="apps/egradx-devportal/examples/web-vite/src/App.tsx" region="web-guard" title="src/App.tsx" />
+<RepoSnippet file="apps/egradx-devportal/examples/web-vite/src/app/App.tsx" region="web-guard" title="frontend/src/app/App.tsx" />
 
 ## Things not to do
 

@@ -2,12 +2,8 @@ import asyncio
 import selectors
 import sys
 from collections.abc import Callable, Mapping
-from pathlib import Path
 
 import pytest
-
-# The tests import the application's modules (application.py, notes.py…) from the project folder.
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 
 def pytest_asyncio_loop_factories(config: pytest.Config, item: pytest.Item) -> Mapping[str, Callable[[], asyncio.AbstractEventLoop]] | None:

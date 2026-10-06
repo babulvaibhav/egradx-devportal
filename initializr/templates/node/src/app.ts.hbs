@@ -7,17 +7,18 @@ import { egradxErrors, egradxMiddleware, egradxRoutes } from '@babulvaibhav/egra
 import { createEvents, migrateEvents, type Events } from '@babulvaibhav/egradx-events';
 {{/if}}
 {{#if cap.email}}
-import { notificationTypes, templateDirectory } from './notifications.js';
+import { notificationTypes, templateDirectory } from './note/notifications.js';
 {{/if}}
 {{#if cap.events}}
-import { noteStats } from './events.js';
+import { noteStats } from './note/stats-handler.js';
 {{/if}}
 {{#if cap.log-shipping}}
-import { createLogging } from './logging.js';
+import { createLogging } from './common/logging.js';
 {{/if}}
 import { PrismaClient } from './generated/prisma/client.js';
-import { AUDIT_ACTIONS, noteRoutes } from './notes.js';
-import { grantNotePermissionsToNewOrganizations, seed } from './setup.js';
+import { AUDIT_ACTIONS } from './note/audit-actions.js';
+import { noteRoutes } from './note/routes.js';
+import { grantNotePermissionsToNewOrganizations, seed } from './common/setup.js';
 
 export interface AppConfig {
   databaseUrl: string;

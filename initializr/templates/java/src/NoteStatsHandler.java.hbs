@@ -1,4 +1,4 @@
-package {{project.packageName}};
+package {{project.packageName}}.note.events;
 
 import java.util.UUID;
 
@@ -6,7 +6,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
-import {{project.packageName}}.NoteDtos.NoteStats;
+import {{project.packageName}}.note.application.NoteDtos.NoteStats;
 import com.egradx.auth.security.EgradxTenantContextAccessor;
 import com.egradx.events.EgradxEvent;
 import com.egradx.events.EgradxEventHandler;
@@ -18,7 +18,7 @@ import com.egradx.events.EgradxEventHandler;
  * tried again later. Another service could handle the same event the same way, over RabbitMQ or Kafka.
  */
 @Component
-class NoteStatsHandler implements EgradxEventHandler {
+public class NoteStatsHandler implements EgradxEventHandler {
 
     private final JdbcTemplate jdbc;
     private final EgradxTenantContextAccessor tenant;
@@ -48,7 +48,7 @@ class NoteStatsHandler implements EgradxEventHandler {
     // docs:end
 
     @Transactional(readOnly = true)
-    NoteStats statsOfCaller() {
+    public NoteStats statsOfCaller() {
         UUID organizationId = tenant.current().orElseThrow().organizationId();
         Long created = jdbc.query("SELECT notes_created FROM {{project.module}}_note_stats WHERE organization_id = ?",
             rows -> rows.next() ? rows.getLong(1) : 0L, organizationId);

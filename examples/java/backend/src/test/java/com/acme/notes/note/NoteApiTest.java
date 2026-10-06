@@ -1,0 +1,141 @@
+package com.acme.notes.note;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Map;
+import java.util.UUID;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.RegisterExtension;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+
+import com.acme.notes.common.config.Setup;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.icegreen.greenmail.junit5.GreenMailExtension;
+import com.icegreen.greenmail.util.ServerSetupTest;
+
+// docs:region test
+/**
+ * The application over HTTP, as a client sees it, against a real PostgreSQL: TEST_DB_URL, or the notes_test
+ * database that docker compose creates. Signs in as the demo administrator Setup creates.
+ */
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+class NoteApiTest {
+
+    /** An SMTP server inside the test: the application's mail goes here, and the test reads it. */
+    @RegisterExtension
+    static GreenMailExtension mail = new GreenMailExtension(ServerSetupTest.SMTP);
+
+    /** The signing keys the SDK creates on start, in a folder of the test's own. */
+    private static final Path KEYS = temporaryFolder();
+
+    @DynamicPropertySource
+    static void properties(DynamicPropertyRegistry registry) {
+        registry.add("spring.datasource.url", () -> System.getenv().getOrDefault("TEST_DB_URL",
+            "jdbc:postgresql://localhost:5432/notes_test"));
+        registry.add("egradx.security.crypto.keystorePath", KEYS::toString);
+        registry.add("egradx.security.crypto.passphrase", () -> "test-passphrase");
+        registry.add("spring.mail.host", () -> "localhost");
+        registry.add("spring.mail.port", () -> ServerSetupTest.SMTP.getPort());
+    }
+
+    private static Path temporaryFolder() {
+        try {
+            return Files.createTempDirectory("notes-test-keys");
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    @LocalServerPort
+    int port;
+
+    private final HttpClient http = HttpClient.newHttpClient();
+    private final ObjectMapper json = new ObjectMapper();
+    private String token;
+
+    @BeforeEach
+    void signIn() throws Exception {
+        JsonNode session = call("POST", "/egradx/auth/login", null,
+            Map.of("username", Setup.DEMO_ADMIN, "password", "demo-password")).body();
+        token = session.get("accessToken").asText();
+    }
+
+    @Test
+    void aNewNoteIsAuditedAndAnnounced() throws Exception {
+        long before = call("GET", "/api/notes/stats", token, null).body().get("notesCreated").asLong();
+        String title = "Test note " + UUID.randomUUID();
+        Answer created = call("POST", "/api/notes", token, Map.of("title", title));
+        assertThat(created.status()).isEqualTo(201);
+        String id = created.body().get("id").asText();
+
+        // The audit record, written in the note's transaction.
+        JsonNode audit = call("GET", "/egradx/audit/events?action=notes.note.created&entityId=" + id, token, null).body();
+        assertThat(audit.get("items")).hasSize(1);
+        assertThat(audit.get("items").get(0).get("after").get("title").asText()).isEqualTo(title);
+
+        // The notice in the bell of everyone in the organization.
+        JsonNode inbox = call("GET", "/egradx/notifications?size=50", token, null).body();
+        assertThat(inbox.get("items").findValuesAsText("body")).contains(title);
+
+        // The email to its author, sent after the commit by the SDK's dispatcher.
+        assertThat(mail.waitForIncomingEmail(15_000, 1)).isTrue();
+        assertThat(mail.getReceivedMessages()[mail.getReceivedMessages().length - 1].getSubject()).contains(title);
+
+        // The event, handled a moment after the commit.
+        long deadline = System.currentTimeMillis() + 15_000;
+        long after = before;
+        while (after <= before && System.currentTimeMillis() < deadline) {
+            Thread.sleep(200);
+            after = call("GET", "/api/notes/stats", token, null).body().get("notesCreated").asLong();
+        }
+        assertThat(after).isEqualTo(before + 1);
+    }
+
+    @Test
+    void refusalsComeInTheSdksEnvelope() throws Exception {
+        Answer anonymous = call("GET", "/api/notes", null, null);
+        assertThat(anonymous.status()).isEqualTo(401);
+        assertThat(anonymous.code()).isEqualTo("NOT_AUTHENTICATED");
+
+        Answer missing = call("GET", "/api/notes/" + UUID.randomUUID(), token, null);
+        assertThat(missing.status()).isEqualTo(404);
+        assertThat(missing.code()).isEqualTo("NOTE_NOT_FOUND");
+
+        Answer untitled = call("POST", "/api/notes", token, Map.of("title", " "));
+        assertThat(untitled.status()).isEqualTo(400);
+        assertThat(untitled.code()).isEqualTo("NOTE_TITLE_REQUIRED");
+    }
+    // docs:end
+
+    record Answer(int status, JsonNode body) {
+        String code() {
+            return body.path("error").path("code").asText();
+        }
+    }
+
+    private Answer call(String method, String path, String bearer, Object body) throws Exception {
+        HttpRequest.Builder request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
+            .header("Content-Type", "application/json")
+            .method(method, body == null ? HttpRequest.BodyPublishers.noBody()
+                : HttpRequest.BodyPublishers.ofString(json.writeValueAsString(body)));
+        if (bearer != null) {
+            request.header("Authorization", "Bearer " + bearer);
+        }
+        HttpResponse<String> response = http.send(request.build(), HttpResponse.BodyHandlers.ofString());
+        return new Answer(response.statusCode(), response.body().isEmpty() ? json.nullNode() : json.readTree(response.body()));
+    }
+}

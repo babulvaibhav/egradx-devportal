@@ -1,7 +1,7 @@
 // The portal's recipes for the browser (type-checked with the example frontend; not part of the generated project).
 import { useState, type FormEvent } from 'react';
 import { EgradxApiError, unwrap } from '@babulvaibhav/egradx-client';
-import { egradx } from '../egradx';
+import { egradx } from '../lib/egradx';
 
 // docs:region forgot-password
 /** "Forgot your password?": always the same answer, so it reveals no accounts. The email links to /reset-password. */

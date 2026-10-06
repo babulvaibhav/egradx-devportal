@@ -146,8 +146,9 @@ export interface GenerateOptions {
 }
 
 /**
- * The project for a selection: every file of the language's set, the frontend's (under web/) and the common one whose
- * conditions hold, rendered with the selection. `templates` maps each template's `from` to its text.
+ * The project for a selection: every file of the language's set (under backend/), the frontend's (under frontend/) and
+ * the common one (at the root) whose conditions hold, rendered with the selection. `templates` maps each template's
+ * `from` to its text.
  */
 export function generate(
   manifest: Manifest,
@@ -158,16 +159,16 @@ export function generate(
   const context = contextOf(manifest, selection);
   const sets: [string, string][] = [
     ['common', ''],
-    [context.language, ''],
+    [context.language, 'backend/'],
   ];
-  if (context.frontend) sets.push([`frontend-${context.frontend}`, 'web/']);
+  if (context.frontend) sets.push([`frontend-${context.frontend}`, 'frontend/']);
   const files = new Map<string, GeneratedFile>();
   for (const [set, prefix] of sets) {
     for (const file of manifest.files[set] ?? []) {
       if (!applies(file, context)) continue;
       const source = templates[file.from];
       if (source === undefined) throw new Error(`The manifest names a template that does not exist: ${file.from}`);
-      const path = prefix + render(`${file.from} (path)`, file.to, context);
+      const path = (file.root ? '' : prefix) + render(`${file.from} (path)`, file.to, context);
       let content = file.raw ? source : tidy(render(file.from, source, context));
       if (!options.keepDocsRegions) content = content.replace(DOCS_MARKER, '');
       // Windows batch files need CRLF for their labels; the templates are kept in LF like the rest of the repository.

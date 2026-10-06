@@ -76,11 +76,11 @@ const steps = {
   },
   prepare() {
     const env = needToken();
-    run('Java: package', 'mvn', ['-B', '-q', '-f', path.join(examples('java'), 'pom.xml'), 'clean', 'package', '-DskipTests']);
-    run('Node: install', 'npm', ['install', '--no-audit', '--no-fund'], { cwd: examples('node'), env });
-    run('Node: prisma generate', 'npx', ['prisma', 'generate'], { cwd: examples('node') });
-    run('Python: wheels', 'python', ['scripts/get_wheels.py'], { cwd: examples('python'), env });
-    run('Python: sync', uv, ['sync'], { cwd: examples('python'), env: uvEnv });
+    run('Java: package', 'mvn', ['-B', '-q', '-f', path.join(examples('java'), 'backend', 'pom.xml'), 'clean', 'package', '-DskipTests']);
+    run('Node: install', 'npm', ['install', '--no-audit', '--no-fund'], { cwd: path.join(examples('node'), 'backend'), env });
+    run('Node: prisma generate', 'npx', ['prisma', 'generate'], { cwd: path.join(examples('node'), 'backend') });
+    run('Python: wheels', 'python', ['scripts/get_wheels.py'], { cwd: path.join(examples('python'), 'backend'), env });
+    run('Python: sync', uv, ['sync'], { cwd: path.join(examples('python'), 'backend'), env: uvEnv });
     for (const web of ['web-vite', 'web-next']) run(`${web}: install`, 'npm', ['install', '--no-audit', '--no-fund'], { cwd: examples(web), env });
   },
   check() {

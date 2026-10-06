@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { EgradxApiError } from '@babulvaibhav/egradx-client';
 import { Can, useAuth } from '@babulvaibhav/egradx-react';
-import { Bell } from './Bell';
+import { Bell } from '../../components/Bell';
 import { createNote, listNotes, type Note } from './notes-api';
 
 /** The notes of the signed-in person's organization, and a form to add one for those who may. */

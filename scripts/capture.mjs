@@ -30,20 +30,20 @@ const LANGUAGES = {
   java: {
     port: 8091,
     command: () => {
-      const target = path.join(examples, 'java', 'target');
+      const target = path.join(examples, 'java', 'backend', 'target');
       const jar = readdirSync(target).find((name) => name.endsWith('.jar') && !name.endsWith('-plain.jar'));
-      return ['java', ['-jar', path.join(target, jar)], path.join(examples, 'java')];
+      return ['java', ['-jar', path.join(target, jar)], path.join(examples, 'java', 'backend')];
     },
     env: (database) => ({ DB_URL: `jdbc:postgresql://${server.host}:${server.port}/${database}`, DB_USER: server.user, DB_PASSWORD: server.password }),
   },
   node: {
     port: 8092,
-    command: () => [process.execPath, [path.join(examples, 'node', 'node_modules', 'tsx', 'dist', 'cli.mjs'), 'src/main.ts'], path.join(examples, 'node')],
+    command: () => [process.execPath, [path.join(examples, 'node', 'backend', 'node_modules', 'tsx', 'dist', 'cli.mjs'), 'src/main.ts'], path.join(examples, 'node', 'backend')],
     env: (database) => ({ DATABASE_URL: url(database) }),
   },
   python: {
     port: 8093,
-    command: () => [path.join(examples, 'python', '.venv', windows ? 'Scripts/python.exe' : 'bin/python'), ['main.py'], path.join(examples, 'python')],
+    command: () => [path.join(examples, 'python', 'backend', '.venv', windows ? 'Scripts/python.exe' : 'bin/python'), ['-m', 'notes'], path.join(examples, 'python', 'backend')],
     env: (database) => ({ DATABASE_URL: url(database), PYTHONUTF8: '1' }),
   },
 };

@@ -1,4 +1,4 @@
-package {{project.packageName}};
+package {{project.packageName}}.note.application;
 
 import java.util.List;
 import java.util.Map;
@@ -7,8 +7,10 @@ import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import {{project.packageName}}.NoteDtos.NoteRequest;
-import {{project.packageName}}.NoteDtos.NoteResponse;
+import {{project.packageName}}.note.application.NoteDtos.NoteRequest;
+import {{project.packageName}}.note.application.NoteDtos.NoteResponse;
+import {{project.packageName}}.note.domain.Note;
+import {{project.packageName}}.note.infrastructure.NoteRepository;
 import com.egradx.audit.EgradxAuditor;
 import com.egradx.auth.security.EgradxTenantContext;
 import com.egradx.auth.security.EgradxTenantContextAccessor;
@@ -31,7 +33,7 @@ import com.egradx.notification.messenger.EgradxMessenger;
 
 // docs:region note-service
 @Service
-class NoteService {
+public class NoteService {
 
     /** The kind of message a new note is: the bell shows it, and (with email) it names the email template. */
     static final String NOTE_CREATED = "{{project.area}}.note.created";
@@ -65,17 +67,17 @@ class NoteService {
     }
 
     @Transactional(readOnly = true)
-    List<NoteResponse> list() {
+    public List<NoteResponse> list() {
         return repository.findByOrganizationIdOrderByTitle(caller().organizationId()).stream().map(NoteResponse::from).toList();
     }
 
     @Transactional(readOnly = true)
-    NoteResponse get(UUID id) {
+    public NoteResponse get(UUID id) {
         return NoteResponse.from(find(id));
     }
 
     @Transactional                                                 // one transaction: the note, its record, its notice
-    NoteResponse create(NoteRequest request) {
+    public NoteResponse create(NoteRequest request) {
         EgradxTenantContext caller = caller();                     // who is calling, in which organization
         UUID organizationId = caller.organizationId();
         Note saved = repository.save(new Note(organizationId, titleOf(request), request.body()));
@@ -101,7 +103,7 @@ class NoteService {
 
     // docs:region note-update
     @Transactional
-    NoteResponse update(UUID id, NoteRequest request) {
+    public NoteResponse update(UUID id, NoteRequest request) {
         Note note = find(id);
         NoteResponse before = NoteResponse.from(note);             // a copy, taken before the change
         note.change(titleOf(request), request.body());
@@ -116,7 +118,7 @@ class NoteService {
     // docs:end
 
     @Transactional
-    void delete(UUID id) {
+    public void delete(UUID id) {
         Note note = find(id);
         auditor.record(EgradxAuditEvent.of(NoteAuditActions.DELETED)
             .organization(note.getOrganizationId())

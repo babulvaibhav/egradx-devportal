@@ -8,7 +8,6 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from egradx.sdk import (
-    EgradxAuditActionDefinition,
     EgradxAuditEvent,
     EgradxInAppMessage,
 {{#if cap.email}}
@@ -24,18 +23,7 @@ from egradx.sdk.fastapi import require_authority, signed_in_user
 from egradx.events import EgradxEvents
 {{/if}}
 
-# docs:region audit-catalog
-CREATED = "{{project.area}}.note.created"
-UPDATED = "{{project.area}}.note.updated"
-DELETED = "{{project.area}}.note.deleted"
-
-# This application's audit actions, with the words the audit screen shows for them.
-AUDIT_ACTIONS = [
-    EgradxAuditActionDefinition(CREATED, "Created a note", "note"),
-    EgradxAuditActionDefinition(UPDATED, "Changed a note", "note"),
-    EgradxAuditActionDefinition(DELETED, "Deleted a note", "note"),
-]
-# docs:end
+from .audit_actions import CREATED, DELETED, UPDATED
 
 # The kind of message a new note is: the bell shows it{{#if cap.email}}, and it names the email template{{/if}}.
 NOTE_CREATED = "{{project.area}}.note.created"

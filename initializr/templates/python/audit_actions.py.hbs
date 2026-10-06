@@ -1,0 +1,16 @@
+"""This application's audit actions, with the words the audit screen shows for them."""
+
+from egradx.sdk import EgradxAuditActionDefinition
+
+# docs:region audit-catalog
+CREATED = "{{project.area}}.note.created"
+UPDATED = "{{project.area}}.note.updated"
+DELETED = "{{project.area}}.note.deleted"
+
+# This application's audit actions, with the words the audit screen shows for them.
+AUDIT_ACTIONS = [
+    EgradxAuditActionDefinition(CREATED, "Created a note", "note"),
+    EgradxAuditActionDefinition(UPDATED, "Changed a note", "note"),
+    EgradxAuditActionDefinition(DELETED, "Deleted a note", "note"),
+]
+# docs:end

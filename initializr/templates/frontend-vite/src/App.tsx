@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react';
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@babulvaibhav/egradx-react';
-import { LoginForm } from './LoginForm';
-import { Notes } from './Notes';
+import { LoginForm } from '../modules/auth/LoginForm';
+import { Notes } from '../modules/notes/Notes';
 
 export function App() {
   const navigate = useNavigate();

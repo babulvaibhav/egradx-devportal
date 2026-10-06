@@ -18,21 +18,21 @@ The SDK decides **who** is calling and **what they hold**; your application deci
 <Languages>
 <Tab value="Java">
 
-<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/java/com/acme/notes/NoteController.java" region="note-controller" title="NoteController.java" />
+<RepoSnippet file="apps/egradx-devportal/examples/java/backend/src/main/java/com/acme/notes/note/api/NoteController.java" region="note-controller" title="backend/…/note/api/NoteController.java" />
 
 `hasAuthority('note.write')` names the authority exactly as stored — no `ROLE_` prefix. `hasAnyAuthority(...)`, `and` and `or` work as in any Spring Security expression; `hasRole(...)` does not apply, since roles are not authorities. Method security is already on.
 
 </Tab>
 <Tab value="Node">
 
-<RepoSnippet file="apps/egradx-devportal/examples/node/src/notes.ts" region="note-routes" title="src/notes.ts" />
+<RepoSnippet file="apps/egradx-devportal/examples/node/backend/src/note/routes.ts" region="note-routes" title="backend/src/note/routes.ts" />
 
 `requireAuthority('a', 'b')` needs **every** authority named. For "any of", check in the handler: `currentCaller()!.authorities.has(...)`.
 
 </Tab>
 <Tab value="Python">
 
-<RepoSnippet file="apps/egradx-devportal/examples/python/notes.py" region="note-routes" title="notes.py" />
+<RepoSnippet file="apps/egradx-devportal/examples/python/backend/src/notes/note/routes.py" region="note-routes" title="backend/src/notes/note/routes.py" />
 
 `require_authority("a", "b")` needs **every** authority named; it is already a `Depends`. For "any of", use `authorize(lambda caller: ...)` inside the route.
 
@@ -58,19 +58,19 @@ Authorities live in a catalog in the SDK's tables. Your application adds its own
 <Languages>
 <Tab value="Java">
 
-<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/java/com/acme/notes/Setup.java" region="seed-permission" title="Setup.java" />
+<RepoSnippet file="apps/egradx-devportal/examples/java/backend/src/main/java/com/acme/notes/common/config/Setup.java" region="seed-permission" title="backend/…/common/config/Setup.java" />
 
 `@Order(100)` makes it run after the SDK's own start-up seeding.
 
 </Tab>
 <Tab value="Node">
 
-<RepoSnippet file="apps/egradx-devportal/examples/node/src/setup.ts" region="seed-permission" title="src/setup.ts" />
+<RepoSnippet file="apps/egradx-devportal/examples/node/backend/src/common/setup.ts" region="seed-permission" title="backend/src/common/setup.ts" />
 
 </Tab>
 <Tab value="Python">
 
-<RepoSnippet file="apps/egradx-devportal/examples/python/seeding.py" region="seed-permission" title="seeding.py" />
+<RepoSnippet file="apps/egradx-devportal/examples/python/backend/src/notes/common/seeding.py" region="seed-permission" title="backend/src/notes/common/seeding.py" />
 
 </Tab>
 </Languages>

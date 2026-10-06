@@ -27,23 +27,23 @@ Throw the SDK's exceptions; give them a code of your own when a client should te
 <Languages>
 <Tab value="Java">
 
-<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/java/com/acme/notes/NoteService.java" region="note-validation" title="NoteService.java" />
+<RepoSnippet file="apps/egradx-devportal/examples/java/backend/src/main/java/com/acme/notes/note/application/NoteService.java" region="note-validation" title="backend/…/note/application/NoteService.java" />
 
-<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/java/com/acme/notes/NoteService.java" region="tenant-scope" title="NoteService.java" />
+<RepoSnippet file="apps/egradx-devportal/examples/java/backend/src/main/java/com/acme/notes/note/application/NoteService.java" region="tenant-scope" title="backend/…/note/application/NoteService.java" />
 
 </Tab>
 <Tab value="Node">
 
-<RepoSnippet file="apps/egradx-devportal/examples/node/src/notes.ts" region="note-validation" title="src/notes.ts" />
+<RepoSnippet file="apps/egradx-devportal/examples/node/backend/src/note/routes.ts" region="note-validation" title="backend/src/note/routes.ts" />
 
-<RepoSnippet file="apps/egradx-devportal/examples/node/src/notes.ts" region="tenant-scope" title="src/notes.ts" />
+<RepoSnippet file="apps/egradx-devportal/examples/node/backend/src/note/routes.ts" region="tenant-scope" title="backend/src/note/routes.ts" />
 
 </Tab>
 <Tab value="Python">
 
-<RepoSnippet file="apps/egradx-devportal/examples/python/notes.py" region="note-validation" title="notes.py" />
+<RepoSnippet file="apps/egradx-devportal/examples/python/backend/src/notes/note/routes.py" region="note-validation" title="backend/src/notes/note/routes.py" />
 
-<RepoSnippet file="apps/egradx-devportal/examples/python/notes.py" region="tenant-scope" title="notes.py" />
+<RepoSnippet file="apps/egradx-devportal/examples/python/backend/src/notes/note/routes.py" region="tenant-scope" title="backend/src/notes/note/routes.py" />
 
 </Tab>
 </Languages>
@@ -73,7 +73,7 @@ Node and Python exceptions also take `details`. Better than a code at each throw
 
 The SDK's endpoints answer this way already. For **your** endpoints, add one advice extending the SDK's — every generated project has it:
 
-<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/java/com/acme/notes/ApiExceptionHandler.java" region="error-advice" title="ApiExceptionHandler.java" />
+<RepoSnippet file="apps/egradx-devportal/examples/java/backend/src/main/java/com/acme/notes/common/exception/ApiExceptionHandler.java" region="error-advice" title="backend/…/common/exception/ApiExceptionHandler.java" />
 
 <Callout type="warn" title="Without it">
   A Java application on `egradx-sdk` alone answers its own endpoints' failures in Spring Boot's format: a `NotFoundException` becomes a 500, a validation failure Spring's `/error` body. The advice above (or `egradx-webservice`, which carries one) fixes that.
@@ -98,7 +98,7 @@ The SDK's endpoints answer this way already. For **your** endpoints, add one adv
 
 The client turns every refusal into an `EgradxApiError` with `status`, `code`, `message`, `requestId`, `traceId` and `details` — or `NETWORK_ERROR` when there was no answer, `HTTP_<status>` when the answer wasn't the envelope (a proxy's error page). Switch on `code`:
 
-<RepoSnippet file="apps/egradx-devportal/examples/web-vite/src/Notes.tsx" title="src/Notes.tsx" />
+<RepoSnippet file="apps/egradx-devportal/examples/web-vite/src/modules/notes/Notes.tsx" title="frontend/src/modules/notes/Notes.tsx" />
 
 Show the request id on a 5xx ("ref 4f1c2a9e"): it finds the failure in the logs.
 

@@ -5,7 +5,7 @@ description: A Spring Boot application on the EGRADX SDK, signed in and calling 
 
 You need Java 21, Maven, a PostgreSQL database ([local environment](/docs/get-started/local-environment)) and [access to the packages](/docs/get-started/access).
 
-The code on this page is the portal's Java example application, `examples/java` — a small *notes* application built on the published packages and run by the portal's build checks. You can copy it whole.
+The code on this page is the portal's Java example application, `examples/java` — a small *notes* application built on the published packages and run by the portal's build checks. You can copy it whole. Its code is in `backend/`, grouped by feature as OIM is; run the commands below from there.
 
 <Callout title="Or generate it">
   [The Initializr](/start?lang=java) makes this project, and more, as a zip: choose what you need, and it builds and passes its tests as generated. This page builds it by hand, so you see each part.
@@ -18,7 +18,7 @@ The code on this page is the portal's Java example application, `examples/java` 
 
 A Spring Boot 3.4 project (the SDK is built on 3.4.9), with the SDK's bill of materials so you never write an EGRADX version twice:
 
-<RepoSnippet file="apps/egradx-devportal/examples/java/pom.xml" region="pom" title="pom.xml" />
+<RepoSnippet file="apps/egradx-devportal/examples/java/backend/pom.xml" region="pom" title="backend/pom.xml" />
 
 </Step>
 <Step>
@@ -27,7 +27,7 @@ A Spring Boot 3.4 project (the SDK is built on 3.4.9), with the SDK's bill of ma
 
 Three things are required: the database, where the signing keys live, and the issuer stamped on tokens.
 
-<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/resources/application.yml" region="config" title="src/main/resources/application.yml" />
+<RepoSnippet file="apps/egradx-devportal/examples/java/backend/src/main/resources/application.yml" region="config" title="backend/src/main/resources/application.yml" />
 
 </Step>
 <Step>
@@ -36,7 +36,7 @@ Three things are required: the database, where the signing keys live, and the is
 
 A plain Spring Boot main class is all the wiring there is: every library configures itself.
 
-<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/java/com/acme/notes/NotesApplication.java" region="main" title="NotesApplication.java" />
+<RepoSnippet file="apps/egradx-devportal/examples/java/backend/src/main/java/com/acme/notes/NotesApplication.java" region="main" title="backend/…/NotesApplication.java" />
 
 ```sh
 EGRADX_KEY_PASSPHRASE=change-it mvn spring-boot:run

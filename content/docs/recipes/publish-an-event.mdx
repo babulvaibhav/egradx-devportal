@@ -19,12 +19,12 @@ Nothing to do. Its tables are migrated at start-up, and the relay runs on every 
 </Tab>
 <Tab value="Node">
 
-<RepoSnippet file="apps/egradx-devportal/examples/node/src/app.ts" region="main" title="src/app.ts" />
+<RepoSnippet file="apps/egradx-devportal/examples/node/backend/src/app.ts" region="main" title="backend/src/app.ts" />
 
 </Tab>
 <Tab value="Python">
 
-<RepoSnippet file="apps/egradx-devportal/examples/python/application.py" region="main" title="application.py" />
+<RepoSnippet file="apps/egradx-devportal/examples/python/backend/src/notes/app.py" region="main" title="backend/src/notes/app.py" />
 
 </Tab>
 </Languages>
@@ -34,17 +34,17 @@ Nothing to do. Its tables are migrated at start-up, and the relay runs on every 
 <Languages>
 <Tab value="Java">
 
-<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/java/com/acme/notes/NoteService.java" region="note-service" title="NoteService.java" />
+<RepoSnippet file="apps/egradx-devportal/examples/java/backend/src/main/java/com/acme/notes/note/application/NoteService.java" region="note-service" title="backend/…/note/application/NoteService.java" />
 
 </Tab>
 <Tab value="Node">
 
-<RepoSnippet file="apps/egradx-devportal/examples/node/src/notes.ts" region="note-routes" title="src/notes.ts" />
+<RepoSnippet file="apps/egradx-devportal/examples/node/backend/src/note/routes.ts" region="note-routes" title="backend/src/note/routes.ts" />
 
 </Tab>
 <Tab value="Python">
 
-<RepoSnippet file="apps/egradx-devportal/examples/python/notes.py" region="note-routes" title="notes.py" />
+<RepoSnippet file="apps/egradx-devportal/examples/python/backend/src/notes/note/routes.py" region="note-routes" title="backend/src/notes/note/routes.py" />
 
 Put dates in `data` as ISO strings yourself.
 
@@ -60,19 +60,19 @@ The event is written to the outbox **in your transaction**. If the change rolls 
 <Languages>
 <Tab value="Java">
 
-<RepoSnippet file="apps/egradx-devportal/examples/java/src/main/java/com/acme/notes/NoteStatsHandler.java" region="event-handler" title="NoteStatsHandler.java" />
+<RepoSnippet file="apps/egradx-devportal/examples/java/backend/src/main/java/com/acme/notes/note/events/NoteStatsHandler.java" region="event-handler" title="backend/…/note/events/NoteStatsHandler.java" />
 
 Give `name()` a fixed value: it is the inbox's key.
 
 </Tab>
 <Tab value="Node">
 
-<RepoSnippet file="apps/egradx-devportal/examples/node/src/events.ts" region="event-handler" title="src/events.ts" />
+<RepoSnippet file="apps/egradx-devportal/examples/node/backend/src/note/stats-handler.ts" region="event-handler" title="backend/src/note/stats-handler.ts" />
 
 </Tab>
 <Tab value="Python">
 
-<RepoSnippet file="apps/egradx-devportal/examples/python/events.py" region="event-handler" title="events.py" />
+<RepoSnippet file="apps/egradx-devportal/examples/python/backend/src/notes/note/stats_handler.py" region="event-handler" title="backend/src/notes/note/stats_handler.py" />
 
 </Tab>
 </Languages>

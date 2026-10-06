@@ -1,0 +1,19 @@
+package com.acme.notes.note.infrastructure;
+
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import com.acme.notes.note.domain.Note;
+
+// docs:region note-repository
+/** Every query names the organization: the SDK knows who is calling, this application keeps their data apart. */
+public interface NoteRepository extends JpaRepository<Note, UUID> {
+
+    List<Note> findByOrganizationIdOrderByTitle(UUID organizationId);
+
+    Optional<Note> findByIdAndOrganizationId(UUID id, UUID organizationId);
+}
+// docs:end
