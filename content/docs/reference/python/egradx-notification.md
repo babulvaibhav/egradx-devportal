@@ -57,9 +57,9 @@ The defaults are Java's: 500 recipients per message, a 5-minute lease, a 2-minut
 
 Sending, submitting, bulk sends and every delivery attempt are observed, and dead, discarded, enqueued and published messages counted, as Java does ([the guide](/docs/guides/observability)). There are gauges for the backlog and open streams. Each message stores the trace, the request id and the trace context of the request that submitted it, so a delivery's span is a child of that request's and its log lines carry its request id. Set `observations` and `metrics` in `NotificationsOptions`; by default they use the global OpenTelemetry providers. `backlog_refresh_seconds` is Java's `egradx.notification.metrics.backlog-refresh`.
 
-## Not ported
+## With egradx-auth
 
-- `egradx-notification-auth`. It arrives with Python auth (step 6d).
+`egradx-notification-auth` connects it to `egradx-auth`: the recipient, viewer and actor resolvers, people's verified addresses and preferences, and the `egradx.notification.*` permissions. `egradx-sdk` wires both.
 
 ## Tests
 

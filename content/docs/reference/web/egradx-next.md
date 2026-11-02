@@ -8,7 +8,7 @@ description: "A backend-for-frontend  for a Next.js application in front of an E
 A backend-for-frontend (BFF) for a Next.js application in front of an EGRADX API.
 
 The tokens never reach the browser:
-- **Session-issuing calls.** Sign-in, refresh, switching organization, a password change and accepting an invitation answer the browser with the session minus its tokens. The BFF keeps the tokens in HttpOnly cookies.
+- **Session-issuing calls.** Sign-in (with a password, an emailed code or a provider), sign-up, refresh, switching organization, a password change and accepting an invitation answer the browser with the session minus its tokens. The BFF keeps the tokens in HttpOnly cookies.
 - **Every other call.** The BFF passes it on to the API with the access token. When that token has expired, the BFF refreshes it first; when the API refuses it, the BFF refreshes once and retries.
 - **Streaming.** Responses stream through, so the notification stream (SSE) works.
 
@@ -31,7 +31,7 @@ export const { GET, HEAD, POST, PUT, PATCH, DELETE } = bff.routeHandlers;
 // proxy.ts (middleware.ts before Next 16)
 import { bff } from '@/lib/egradx';
 export function proxy(request: Request) {
-  return bff.guard(request, { signInPath: '/login', publicPaths: ['/forgot-password', '/invitations/'] });
+  return bff.guard(request, { signInPath: '/login', publicPaths: ['/forgot-password', '/reset-password', '/accept-invite', '/sign-up', '/auth/callback'] });
 }
 
 // app/providers.tsx — 'use client'
@@ -39,14 +39,44 @@ const client = createEgradxClient({ baseUrl: '/api', tokens: 'server' });
 // <EgradxProvider client={client}> … </EgradxProvider>
 ```
 
+## Signing in with a code, a provider, or signing up
+
+See `docs/auth/sign-in-methods.md`. Nothing needs wiring beyond the catch-all route:
+
+- **Session-issuing endpoints.** `email-code/verify`, `signup/confirm`, `oidc/exchange` and `oidc/signup` set the session cookies exactly as `login` does. These and the other public sign-in endpoints (`sign-in-options`, `email-code`, `signup`, the provider's `start` and `callback`) go to the API without the current session, so a stale or ended cookie never answers for them.
+- **The provider's start goes through the BFF.** The sign-in page navigates the browser (not a fetch) to `/api/egradx/auth/oidc/{id}/start?returnTo=/somewhere`, which is what the client's `providerSignInUrl(id, returnTo)` gives with `baseUrl: '/api'`. The BFF passes the API's 302 to the provider back as it is. Navigating straight to the API works too, if the browser can reach it.
+- **The provider's callback.** Register `{callback-base-url}/egradx/auth/oidc/{id}/callback` with the provider. Set the API's `egradx.auth.oidc.callback-base-url` to the BFF's public URL (`https://app.example.com/api`) to bring it through the BFF as well, or to the API's own public URL. Either way the API then redirects the browser to `{links.base-url}/auth/callback?code=…&returnTo=…` (or `?error=…`, or `?linked=…` after linking from the profile), so set `egradx.auth.links.base-url` to the Next app's URL.
+- **Align the two URLs.** `callback-base-url` is where the *provider* sends the browser back (the API, or the BFF's `/api` in front of it), and `links.base-url` is where the *API* then sends it (the Next app). Both must be public URLs the browser can reach, and the redirect URI registered with each provider must be exactly `{callback-base-url}/egradx/auth/oidc/{id}/callback`. With the BFF: `callback-base-url: https://app.example.com/api` and `links.base-url: https://app.example.com`.
+- **The `/auth/callback` page.** A public page (add it to the guard's `publicPaths`) and a client component. It reads the query with `readProviderCallback(searchParams)` and calls `client.session.exchangeProviderCode({ code })`, which goes through the BFF: the BFF sets the cookies and the client stores the session view. Handle `ORG_SELECTION_REQUIRED` (call again with `organizationId` and the same code) and `SIGNUP_REQUIRED` (ask for an organization name, then `signUpWithProvider`). The `auth-callback` item of `@babulvaibhav/egradx-ui` is this page:
+
+```tsx
+// app/auth/callback/page.tsx
+'use client';
+import { useRouter } from 'next/navigation';
+import { AuthCallback } from '@/components/egradx/auth/auth-callback';
+export default function Page() {
+  const router = useRouter();
+  return <AuthCallback onSignedIn={(_, returnTo) => router.replace(returnTo ?? '/')} onLinked={(_, returnTo) => router.replace(returnTo ?? '/profile')} />;
+}
+```
+
+## Files
+
+Uploads and downloads of the files API (`/egradx/files/**`, `/egradx/auth/my/profile/photo`) need nothing beyond the catch-all route:
+
+- **Uploads.** A multipart body goes on byte for byte, with its `Content-Type` (and so its boundary). The BFF reads the whole body before sending it, so that it can send it again after a refresh: an upload takes its size in memory while it passes. The API's `egradx.files.max-size` (25 MB by default) is the limit; Next sets none on route handlers.
+- **Keep `/api` out of `proxy.ts`'s matcher**, as above (`'/((?!api/|_next/).*)'`). A request the proxy matches has its body held up to `experimental.proxyClientMaxBodySize` (10 MB by default) and cut there, so a larger upload would reach the API broken. If `/api` must stay in the matcher, raise that setting above the API's limit.
+- **Downloads.** The bytes stream through with the API's `Content-Type`, `Content-Length`, `Content-Disposition`, `ETag` and `Accept-Ranges`. A `Range` goes on, and its 206 and `Content-Range` come back. With pre-signed downloads on, the API's 302 comes back as it is and the browser fetches the file from the bucket (`fetch()` from a script then needs CORS on the bucket for the app's origin; `<img>` and links do not).
+- **`<img src>` just works.** The cookie goes with a plain URL, so `<img src="/api/egradx/files/{id}/content">` (or a profile's `photoUrl` under `/api`) shows the file, and `client.files.displayUrl` and `useFileObjectUrl` give that URL without downloading anything.
+
 ## What it gives server code
 
 | | |
 |---|---|
 | `bff.routeHandlers`, `bff.handle(request)` | The catch-all route: `/api/**` to the API, plus `GET /api/egradx/bff/session`, which returns the session the cookies hold. The client's `restore()` calls it. |
-| `bff.guard(request, { signInPath, publicPaths })` | For `proxy.ts`. It sends someone without a session cookie to sign in, adding `?next=` with where they were going. It only checks that the cookie is there; the API decides what the cookie is worth. |
+| `await bff.guard(request, { signInPath, publicPaths })` | For `proxy.ts`. It sends someone without a session cookie to sign in, adding `?next=` with where they were going. When the access token is about to expire, it refreshes it here, before the page renders: the new cookies go to the browser and to the page's own request, so server components never need to refresh. A session the API has ended goes to sign in, its cookies cleared. Otherwise it only checks that the cookie is there; the API decides what the cookie is worth. |
 | `await bff.getSession()` | In server components, route handlers and server actions: the person, the organization and the authorities, read from the cookies. Returns null when there is no session. |
-| `await bff.serverFetch('/v1/products')` | fetch to the API as the signed-in person, refreshing the token when it has expired. A refresh's new cookies are kept where Next allows setting them (route handlers and server actions). |
+| `await bff.serverFetch('/v1/products')` | fetch to the API as the signed-in person, refreshing the token when it has expired. A refresh's new cookies are kept where Next allows setting them (route handlers and server actions). A server component cannot keep them; with `guard` in `proxy.ts` it rarely needs to refresh at all. |
 
 ## How it protects the session
 
@@ -54,7 +84,7 @@ const client = createEgradxClient({ baseUrl: '/api', tokens: 'server' });
 - **Refresh token lifetime.** The refresh cookie lives 7 days, matching the API's default `egradx.auth.refresh-token-ttl-days`. Set `cookies.refreshMaxAgeSeconds` if the API's setting differs.
 - **Cross-site requests.** A state-changing request whose `Origin` names another host, or whose `Sec-Fetch-Site` is `cross-site`, is refused with 403.
 - **Never passed on.** The browser's cookies, its `Authorization` header and hop-by-hop headers are dropped. `X-Forwarded-Host` and `-Proto` are set. `/api/actuator/**` is not reachable (`blockedPaths`).
-- **Concurrent refreshes.** A page's parallel requests that all find the access token expired share one refresh. This works within one server process. The API does not rotate refresh tokens, so several instances refreshing at once is harmless.
+- **Refresh-token rotation.** The API replaces the refresh token on every refresh. A replaced token still works for a short grace (`egradx.auth.refresh-token-reuse-grace-seconds`, 30 s by default); presented after that, the API takes it as stolen and ends the whole session. So the BFF never presents a replaced token: a page's parallel requests share one refresh, and for as long as the new access token lasts, a caller still holding the old cookie (a server component refreshed and could not keep the new cookies) gets the new tokens from this process instead. Both work within one server process; with several Next.js instances behind a load balancer, `guard` refreshing before each page, and the grace, cover the rest.
 - **API outages.** When the API cannot be reached for a refresh, the BFF answers 503 and keeps the session. A 4xx refusal ends the session and clears the cookies.
 
 `pnpm build` compiles to `dist/`. `pnpm test` runs the tests, which emulate a browser keeping the cookies against a scripted API.
@@ -141,6 +171,10 @@ Every other request is passed on to the API with the access token, refreshed fir
 refreshed and retried once when the API refuses it. Responses stream through, so the notification stream (SSE)
 works. The browser uses `@babulvaibhav/egradx-client` with `tokens: 'server'`.
 
+Signing in with an emailed code or a provider, and signing up, issue sessions like signing in with a password. A
+provider's start (`/api/egradx/auth/oidc/{id}/start`) and callback are browser navigations through it: the API's
+redirects pass back as they are. The frontend's callback page (`/auth/callback`) exchanges the code through it.
+
   // lib/egradx.ts
   export const bff = createEgradxBff({ apiUrl: process.env.EGRADX_API_URL! });
   // app/api/[...path]/route.ts
@@ -167,5 +201,5 @@ works. The browser uses `@babulvaibhav/egradx-client` with `tokens: 'server'`.
 | `routeHandlers.POST()` | (`request`) => `Promise`\<`Response`\> | `handle` | - |
 | `routeHandlers.PUT()` | (`request`) => `Promise`\<`Response`\> | `handle` | - |
 | `getSession()` | () => `Promise`\< \| \{ `accessToken?`: `string` \| `null`; `authorities?`: `string`[] \| `null`; `expiresAt?`: `string` \| `null`; `organizationId?`: `string` \| `null`; `organizationName?`: `string` \| `null`; `platformOrganization?`: `boolean` \| `null`; `refreshToken?`: `string` \| `null`; `roleId?`: `string` \| `null`; `roleName?`: `string` \| `null`; `tokenType?`: `string` \| `null`; `user?`: \| \{ `active?`: `boolean` \| `null`; `createdAt?`: `string` \| `null`; `displayName?`: `string` \| `null`; `email?`: `string` \| `null`; `id?`: `string` \| `null`; `username?`: `string` \| `null`; \} \| `null`; \} \| `null`\> | - | The signed-in session, for server components, route handlers and server actions: the person, the organization and the authorities, minus the tokens. Null without one. Read from the cookies, unchecked: the API checks the token on every call. |
-| `guard()` | (`request`, `guard`) => `Response` \| `undefined` | - | For `proxy.ts` (`middleware.ts` before Next 16): sends someone without a session to sign in, and returns nothing (go on) otherwise. It checks only that a session cookie is there; the API decides what it is worth. |
-| `serverFetch()` | (`path`, `init?`) => `Promise`\<`Response`\> | - | fetch to the API as the signed-in person, from the server: `path` below `apiUrl`, e.g. `/v1/products`. The token is refreshed when it has expired; the new cookies are kept where Next allows setting them (route handlers and server actions; a server component cannot, so it refreshes again next time). |
+| `guard()` | (`request`, `guard`) => `Promise`\<`Response` \| `undefined`\> | - | For `proxy.ts` (`middleware.ts` before Next 16), before any page renders. Someone without a session is sent to sign in. Someone whose access token is about to expire has it refreshed here, where cookies can be set: the new cookies go to the browser, and to the page rendering now, so its server components (which cannot set cookies) never refresh themselves. Otherwise it returns nothing: go on. It checks only that a session cookie is there; the API decides what it is worth. |
+| `serverFetch()` | (`path`, `init?`) => `Promise`\<`Response`\> | - | fetch to the API as the signed-in person, from the server: `path` below `apiUrl`, e.g. `/v1/products`. The token is refreshed when it has expired; the new cookies are kept where Next allows setting them (route handlers and server actions). A server component cannot set them: `guard` in `proxy.ts` refreshes before the page renders so that it need not, and should it still, the next caller with the old cookie gets the same new tokens from this process rather than presenting a replaced refresh token to the API. |

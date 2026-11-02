@@ -1,0 +1,533 @@
+---
+title: Add another sign-in provider
+description: Add "Sign in with GitHub", or any provider the SDK doesn't have, as one class — the SDK still runs the round trip, the linking and the session.
+---
+
+Google, Zoho and any OpenID Connect provider are configuration ([add Sign in with Google and Zoho](/docs/recipes/sign-in-with-google-and-zoho)). A provider beyond those is **one class of yours**, plugged into the SDK. Here it is GitHub, which speaks OAuth 2 but not OpenID Connect: there is no ID token, so the class asks GitHub's API who signed in.
+
+You write where to send the browser, and who came back. The SDK keeps doing the rest: the state, the callback endpoint, linking to an account, sign-up, the session. How providers plug in is in [adding a provider](/docs/guides/sign-in-methods#adding-a-provider).
+
+## 1. Create the GitHub OAuth app
+
+1. On GitHub, **Settings → Developer settings → OAuth Apps → New OAuth App** (or the same under an organization's settings).
+2. **Authorization callback URL:** `{callback-base-url}/egradx/auth/oidc/github/callback`, for example `https://api.example.com/api/egradx/auth/oidc/github/callback`. The id `github` is the one you give the provider below. An OAuth App has one callback URL, so make one app per environment.
+3. Generate a **client secret**. Keep the client ID and secret in your secret store, as `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET`.
+
+## 2. Write the provider
+
+The class does two things:
+
+- **Where to send the browser:** `https://github.com/login/oauth/authorize` with the client id, the redirect URI, the `state` and the scopes `read:user user:email`.
+- **Who came back:** it exchanges the code at `https://github.com/login/oauth/access_token`, then reads `https://api.github.com/user` and `https://api.github.com/user/emails`. It returns:
+  - the issuer `https://github.com`, a fixed value, since GitHub isn't OpenID Connect;
+  - the subject, GitHub's numeric user id. It never changes, unlike the login;
+  - the primary email, and whether GitHub has verified it;
+  - the name, or the login when there is none.
+
+Anything that goes wrong throws `EgradxSignInProviderException`: the browser comes back with `OIDC_FAILED`, and the message goes to the log.
+
+<Languages>
+<Tab value="Java">
+
+```java title="src/main/java/com/example/notes/auth/GitHubSignInProvider.java"
+package com.example.notes.auth;
+
+import com.egradx.auth.signin.EgradxProviderIdentity;
+import com.egradx.auth.signin.EgradxSignInProvider;
+import com.egradx.auth.signin.EgradxSignInProviderException;
+import java.util.List;
+import java.util.Map;
+import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
+import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.web.util.UriComponentsBuilder;
+
+/** Sign in with GitHub: OAuth 2, not OpenID Connect, so who signed in comes from GitHub's API. */
+public class GitHubSignInProvider implements EgradxSignInProvider {
+
+    private static final ParameterizedTypeReference<Map<String, Object>> OBJECT = new ParameterizedTypeReference<>() {};
+    private static final ParameterizedTypeReference<List<Map<String, Object>>> LIST = new ParameterizedTypeReference<>() {};
+
+    private final String id;
+    private final String clientId;
+    private final String clientSecret;
+    private final boolean trustEmail;
+    private final RestTemplate http;
+
+    public GitHubSignInProvider(String id, String clientId, String clientSecret, boolean trustEmail, RestTemplate http) {
+        this.id = id;
+        this.clientId = clientId;
+        this.clientSecret = clientSecret;
+        this.trustEmail = trustEmail;
+        this.http = http;
+    }
+
+    @Override
+    public String id() {
+        return id;
+    }
+
+    @Override
+    public String name() {
+        return "GitHub";
+    }
+
+    @Override
+    public boolean trustEmail() {
+        return trustEmail;
+    }
+
+    @Override
+    public String authorizationUrl(Authorization request) {
+        return UriComponentsBuilder.fromUriString("https://github.com/login/oauth/authorize")
+                .queryParam("client_id", clientId)
+                .queryParam("redirect_uri", request.redirectUri())
+                .queryParam("state", request.state())
+                .queryParam("scope", "read:user user:email")
+                .build().encode().toUriString();
+    }
+
+    @Override
+    public EgradxProviderIdentity complete(Callback callback) {
+        try {
+            MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
+            form.add("client_id", clientId);
+            form.add("client_secret", clientSecret);
+            form.add("code", callback.code());
+            form.add("redirect_uri", callback.redirectUri());
+            Map<String, Object> token = http.exchange("https://github.com/login/oauth/access_token", HttpMethod.POST,
+                    new HttpEntity<>(form, headers(null)), OBJECT).getBody();
+            // GitHub answers a bad code with 200 and { "error": … }.
+            if (token == null || !(token.get("access_token") instanceof String accessToken)) {
+                throw new EgradxSignInProviderException("GitHub refused the code: " + (token == null ? null : token.get("error")));
+            }
+            HttpEntity<Void> asUser = new HttpEntity<>(headers(accessToken));
+            Map<String, Object> user = http.exchange("https://api.github.com/user", HttpMethod.GET, asUser, OBJECT).getBody();
+            List<Map<String, Object>> emails = http.exchange("https://api.github.com/user/emails", HttpMethod.GET, asUser, LIST).getBody();
+            if (user == null || emails == null) {
+                throw new EgradxSignInProviderException("GitHub sent no user");
+            }
+            Map<String, Object> primary = emails.stream().filter(e -> Boolean.TRUE.equals(e.get("primary"))).findFirst().orElse(null);
+            return new EgradxProviderIdentity(
+                    "https://github.com",
+                    String.valueOf(user.get("id")),
+                    primary == null ? null : (String) primary.get("email"),
+                    primary != null && Boolean.TRUE.equals(primary.get("verified")),
+                    (String) (user.get("name") != null ? user.get("name") : user.get("login")));
+        } catch (RestClientException e) {
+            throw new EgradxSignInProviderException("GitHub could not be reached", e);
+        }
+    }
+
+    private static HttpHeaders headers(String accessToken) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setAccept(List.of(MediaType.APPLICATION_JSON));
+        headers.set(HttpHeaders.USER_AGENT, "notes");
+        if (accessToken != null) {
+            headers.setBearerAuth(accessToken);
+        }
+        return headers;
+    }
+}
+```
+
+It uses the `RestTemplate` the SDK registers, with its timeouts and tracing: don't declare another.
+
+</Tab>
+<Tab value="Node">
+
+```ts title="src/auth/github.ts"
+import {
+  EgradxSignInProviderException,
+  type EgradxProviderIdentity,
+  type EgradxSignInAuthorization,
+  type EgradxSignInCallback,
+  type EgradxSignInProvider,
+} from '@babulvaibhav/egradx-sdk';
+
+interface GitHubUser { id: number; login: string; name: string | null }
+interface GitHubEmail { email: string; primary: boolean; verified: boolean }
+
+/** Sign in with GitHub: OAuth 2, not OpenID Connect, so who signed in comes from GitHub's API. */
+export class GitHubSignInProvider implements EgradxSignInProvider {
+  readonly name = 'GitHub';
+
+  constructor(readonly id: string, private readonly clientId: string, private readonly clientSecret: string,
+    readonly trustEmail = false) {}
+
+  authorizationUrl({ redirectUri, state }: EgradxSignInAuthorization): string {
+    const query = new URLSearchParams({ client_id: this.clientId, redirect_uri: redirectUri, state, scope: 'read:user user:email' });
+    return `https://github.com/login/oauth/authorize?${query}`;
+  }
+
+  async complete({ code, redirectUri }: EgradxSignInCallback): Promise<EgradxProviderIdentity> {
+    const token = await this.call<{ access_token?: string; error?: string }>('https://github.com/login/oauth/access_token', {},
+      new URLSearchParams({ client_id: this.clientId, client_secret: this.clientSecret, code, redirect_uri: redirectUri }));
+    // GitHub answers a bad code with 200 and { error: … }.
+    if (typeof token.access_token !== 'string') throw new EgradxSignInProviderException(`GitHub refused the code: ${token.error}`);
+    const asUser = { Authorization: `Bearer ${token.access_token}` };
+    const user = await this.call<GitHubUser>('https://api.github.com/user', asUser);
+    const emails = await this.call<GitHubEmail[]>('https://api.github.com/user/emails', asUser);
+    const primary = emails.find((email) => email.primary);
+    return {
+      issuer: 'https://github.com',
+      subject: String(user.id),
+      email: primary?.email ?? null,
+      emailVerified: primary?.verified ?? false,
+      name: user.name ?? user.login,
+    };
+  }
+
+  private async call<T>(url: string, headers: Record<string, string>, form?: URLSearchParams): Promise<T> {
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: form ? 'POST' : 'GET',
+        headers: { Accept: 'application/json', 'User-Agent': 'notes', ...headers },
+        body: form,
+        signal: AbortSignal.timeout(10_000),
+      });
+    } catch (error) {
+      throw new EgradxSignInProviderException(`GitHub could not be reached: ${url}`, { cause: error });
+    }
+    if (!response.ok) throw new EgradxSignInProviderException(`GitHub answered ${response.status}: ${url}`);
+    return (await response.json()) as T;
+  }
+}
+```
+
+</Tab>
+<Tab value="Python">
+
+```python title="src/<module>/auth/github.py"
+from urllib.parse import urlencode
+
+import httpx
+from egradx.sdk import EgradxProviderIdentity, EgradxSignInProviderException, SignInAuthorization, SignInCallback
+
+
+class GitHubSignInProvider:
+    """Sign in with GitHub: OAuth 2, not OpenID Connect, so who signed in comes from GitHub's API."""
+
+    name = "GitHub"
+
+    def __init__(self, provider_id: str, client_id: str, client_secret: str, trust_email: bool = False) -> None:
+        self.id = provider_id
+        self.trust_email = trust_email
+        self._client_id = client_id
+        self._client_secret = client_secret
+
+    def authorization_url(self, request: SignInAuthorization) -> str:
+        return "https://github.com/login/oauth/authorize?" + urlencode({
+            "client_id": self._client_id, "redirect_uri": request.redirect_uri, "state": request.state,
+            "scope": "read:user user:email"})
+
+    async def complete(self, callback: SignInCallback) -> EgradxProviderIdentity:
+        try:
+            async with httpx.AsyncClient(timeout=10, headers={"Accept": "application/json"}) as http:
+                token = (await http.post("https://github.com/login/oauth/access_token", data={
+                    "client_id": self._client_id, "client_secret": self._client_secret,
+                    "code": callback.code, "redirect_uri": callback.redirect_uri})).raise_for_status().json()
+                # GitHub answers a bad code with 200 and {"error": ...}.
+                if not isinstance(token.get("access_token"), str):
+                    raise EgradxSignInProviderException(f"GitHub refused the code: {token.get('error')}")
+                as_user = {"Authorization": f"Bearer {token['access_token']}"}
+                user = (await http.get("https://api.github.com/user", headers=as_user)).raise_for_status().json()
+                emails = (await http.get("https://api.github.com/user/emails", headers=as_user)).raise_for_status().json()
+        except httpx.HTTPError as error:
+            raise EgradxSignInProviderException(f"GitHub could not be reached: {error}") from error
+        primary = next((email for email in emails if email.get("primary")), None)
+        return EgradxProviderIdentity(
+            issuer="https://github.com",
+            subject=str(user["id"]),
+            email=primary["email"] if primary else None,
+            email_verified=bool(primary and primary.get("verified")),
+            name=user.get("name") or user.get("login"),
+        )
+```
+
+</Tab>
+</Languages>
+
+`trustEmail` is false here, the default for any provider that isn't built in: a GitHub sign-in whose email matches an existing account answers `IDENTITY_LINK_REQUIRED`, and the person [links GitHub from their profile](/docs/recipes/link-a-provider) after signing in another way. GitHub reports whether it verified each address, so you may turn it on (`trust-email: true`), and an account with that verified email is then linked automatically. An unverified email never links or makes an account.
+
+## 3. Register it
+
+Register a **factory** for a new type, `github`, and configure the provider like Google. A provider without its client id or secret is then left out with a warning, as Google is, so the same configuration runs on a laptop without credentials.
+
+<Languages>
+<Tab value="Java">
+
+```java title="src/main/java/com/example/notes/auth/GitHubSignInProviderFactory.java"
+package com.example.notes.auth;
+
+import com.egradx.auth.config.EgradxAuthProperties;
+import com.egradx.auth.signin.EgradxSignInProvider;
+import com.egradx.auth.signin.EgradxSignInProviderFactory;
+import org.springframework.stereotype.Component;
+import org.springframework.web.client.RestTemplate;
+
+@Component
+class GitHubSignInProviderFactory implements EgradxSignInProviderFactory {
+
+    private final RestTemplate http;
+
+    GitHubSignInProviderFactory(RestTemplate http) {
+        this.http = http;
+    }
+
+    @Override
+    public String type() {
+        return "github";
+    }
+
+    @Override
+    public EgradxSignInProvider create(String id, EgradxAuthProperties.OidcProvider settings) {
+        return new GitHubSignInProvider(id, settings.getClientId().strip(), settings.getClientSecret(),
+                Boolean.TRUE.equals(settings.getTrustEmail()), http);
+    }
+}
+```
+
+```yaml title="application.yml"
+egradx:
+  auth:
+    oidc:
+      providers:
+        github: { type: github, client-id: "${GITHUB_CLIENT_ID:}", client-secret: "${GITHUB_CLIENT_SECRET:}" }
+```
+
+</Tab>
+<Tab value="Node">
+
+```ts title="src/app.ts"
+import { createEgradx, type SignInProviderFactory } from '@babulvaibhav/egradx-sdk';
+import { GitHubSignInProvider } from './auth/github.js';
+
+const github: SignInProviderFactory = {
+  type: 'github',
+  create: (id, settings) => new GitHubSignInProvider(id, settings.clientId!, settings.clientSecret!, settings.trustEmail ?? false),
+};
+
+const egradx = createEgradx({
+  prisma,
+  auth: {
+    // …issuer, keys, links
+    oidc: {
+      callbackBaseUrl: process.env.EGRADX_OIDC_CALLBACK_BASE_URL ?? 'http://localhost:8080',
+      providerFactories: [github],
+      providers: {
+        github: { type: 'github', clientId: process.env.GITHUB_CLIENT_ID, clientSecret: process.env.GITHUB_CLIENT_SECRET },
+      },
+    },
+  },
+});
+```
+
+</Tab>
+<Tab value="Python">
+
+```python title="src/<module>/app.py"
+from egradx.sdk import EgradxSignInProvider, OidcProviderSettings, OidcSettings
+
+from .auth.github import GitHubSignInProvider
+
+
+class GitHubSignInProviderFactory:
+    type = "github"
+
+    def create(self, provider_id: str, settings: OidcProviderSettings) -> EgradxSignInProvider:
+        return GitHubSignInProvider(provider_id, settings.client_id, settings.client_secret, bool(settings.trust_email))
+
+
+AuthOptions(
+    # …issuer, keystore_path, keystore_passphrase, links
+    oidc=OidcSettings(
+        callback_base_url=os.environ.get("EGRADX_OIDC_CALLBACK_BASE_URL", "http://localhost:8080"),
+        provider_factories=[GitHubSignInProviderFactory()],
+        providers={"github": OidcProviderSettings(type="github", client_id=os.environ.get("GITHUB_CLIENT_ID"),
+                                                  client_secret=os.environ.get("GITHUB_CLIENT_SECRET"))},
+    ),
+)
+```
+
+</Tab>
+</Languages>
+
+`scopes` from the configuration is not used: the class asks for the scopes GitHub needs.
+
+**Or register the provider object itself**, when you read its credentials yourself. Java: a bean; Node: `oidc.extraProviders`; Python: `OidcSettings(extra_providers=[…])`. It is always listed, so give it its credentials:
+
+<Languages>
+<Tab value="Java">
+
+```java
+@Bean
+EgradxSignInProvider githubSignInProvider(RestTemplate http, @Value("${GITHUB_CLIENT_ID}") String clientId,
+        @Value("${GITHUB_CLIENT_SECRET}") String clientSecret) {
+    return new GitHubSignInProvider("github", clientId, clientSecret, false, http);
+}
+```
+
+</Tab>
+<Tab value="Node">
+
+```ts
+oidc: {
+  callbackBaseUrl: process.env.EGRADX_OIDC_CALLBACK_BASE_URL ?? 'http://localhost:8080',
+  extraProviders: [new GitHubSignInProvider('github', process.env.GITHUB_CLIENT_ID!, process.env.GITHUB_CLIENT_SECRET!)],
+},
+```
+
+</Tab>
+<Tab value="Python">
+
+```python
+oidc=OidcSettings(
+    callback_base_url=os.environ.get("EGRADX_OIDC_CALLBACK_BASE_URL", "http://localhost:8080"),
+    extra_providers=[GitHubSignInProvider("github", os.environ["GITHUB_CLIENT_ID"], os.environ["GITHUB_CLIENT_SECRET"])],
+),
+```
+
+</Tab>
+</Languages>
+
+Either way, `callback-base-url` and `links.base-url` must be set, as for Google, and no other provider may have the id `github`.
+
+## 4. Check it
+
+Restart, then `GET /egradx/auth/sign-in-options`: `{ "id": "github", "name": "GitHub" }` is in `providers`. The sign-in page and the [picker](/docs/guides/sign-in-methods#choosing-which-methods-to-show) show its button with no frontend change. Pass GitHub's own mark through `icons={{ github: <GitHubMark /> }}`: no logo ships with the screens.
+
+Sign in once. The round trip, the `/auth/callback` page and the errors are those of any provider ([what can go wrong](/docs/recipes/sign-in-with-google-and-zoho#what-can-go-wrong)). The audit records `auth.login` with `method: oidc` and `provider: github`.
+
+## An OpenID Connect provider with a quirk
+
+A provider that speaks OpenID Connect needs no new class, only configuration, unless it differs from the standard in one thing. Then extend `EgradxOidcSignInProvider` and override that thing; discovery, PKCE, the code exchange and the ID token check come with it. That is how `EgradxZohoSignInProvider` follows Zoho's data centres: it overrides `issuerFor` (Python `issuer_for`).
+
+Say "Example ID", a made-up provider at `https://id.example.com`, sends people with European accounts back with `?region=eu`, and their ID tokens come from `https://eu.id.example.com`:
+
+<Languages>
+<Tab value="Java">
+
+```java title="src/main/java/com/example/notes/auth/ExampleIdSignInProvider.java"
+package com.example.notes.auth;
+
+import com.egradx.auth.config.EgradxAuthProperties;
+import com.egradx.auth.oidc.EgradxOidcClient;
+import com.egradx.auth.oidc.EgradxOidcSignInProvider;
+import com.egradx.auth.signin.EgradxSignInProvider;
+import com.egradx.auth.signin.EgradxSignInProviderFactory;
+import java.util.Map;
+import org.springframework.stereotype.Component;
+
+public class ExampleIdSignInProvider extends EgradxOidcSignInProvider {
+
+    public ExampleIdSignInProvider(Settings settings, EgradxOidcClient client) {
+        super(settings, client);
+    }
+
+    @Override
+    protected String issuerFor(Map<String, String> callbackParameters) {
+        return "eu".equals(callbackParameters.get("region")) ? "https://eu.id.example.com" : issuer();
+    }
+
+    /** {@code type: example-id}: the issuer and the name filled in, emails not trusted unless configured. */
+    @Component
+    public static class Factory implements EgradxSignInProviderFactory {
+
+        private final EgradxOidcClient client; // the SDK's
+
+        public Factory(EgradxOidcClient client) {
+            this.client = client;
+        }
+
+        @Override
+        public String type() {
+            return "example-id";
+        }
+
+        @Override
+        public EgradxSignInProvider create(String id, EgradxAuthProperties.OidcProvider configured) {
+            return new ExampleIdSignInProvider(settings(id, configured, "https://id.example.com", "Example ID", false), client);
+        }
+    }
+}
+```
+
+```yaml title="application.yml"
+egradx.auth.oidc.providers:
+  example: { type: example-id, client-id: "${EXAMPLE_CLIENT_ID:}", client-secret: "${EXAMPLE_CLIENT_SECRET:}" }
+```
+
+</Tab>
+<Tab value="Node">
+
+```ts title="src/auth/example-id.ts"
+import { EgradxOidcClient, EgradxOidcSignInProvider, type SignInProviderFactory } from '@babulvaibhav/egradx-sdk';
+
+export class ExampleIdSignInProvider extends EgradxOidcSignInProvider {
+  protected override issuerFor(callbackParameters: Readonly<Record<string, string>>): string {
+    return callbackParameters.region === 'eu' ? 'https://eu.id.example.com' : this.issuer;
+  }
+
+  /** `type: 'example-id'`: the issuer and the name filled in, emails not trusted unless configured. */
+  static factory(client = new EgradxOidcClient()): SignInProviderFactory {
+    return {
+      type: 'example-id',
+      create: (id, configured) => new ExampleIdSignInProvider(
+        ExampleIdSignInProvider.settings(id, configured, 'https://id.example.com', 'Example ID', false), client),
+    };
+  }
+}
+
+// In createEgradx's auth options:
+// oidc: { callbackBaseUrl, providerFactories: [ExampleIdSignInProvider.factory()],
+//         providers: { example: { type: 'example-id', clientId: process.env.EXAMPLE_CLIENT_ID, clientSecret: process.env.EXAMPLE_CLIENT_SECRET } } }
+```
+
+</Tab>
+<Tab value="Python">
+
+```python title="src/<module>/auth/example_id.py"
+from collections.abc import Mapping
+
+from egradx.sdk import EgradxOidcClient, EgradxOidcSignInProvider, EgradxSignInProvider, OidcProviderSettings
+
+
+class ExampleIdSignInProvider(EgradxOidcSignInProvider):
+    def issuer_for(self, callback_parameters: Mapping[str, str]) -> str:
+        return "https://eu.id.example.com" if callback_parameters.get("region") == "eu" else self.issuer
+
+    class Factory:
+        """type="example-id": the issuer and the name filled in, emails not trusted unless configured."""
+
+        type = "example-id"
+
+        def __init__(self, client: EgradxOidcClient | None = None) -> None:
+            self._client = client or EgradxOidcClient()
+
+        def create(self, provider_id: str, settings: OidcProviderSettings) -> EgradxSignInProvider:
+            return ExampleIdSignInProvider(
+                EgradxOidcSignInProvider.settings_from(provider_id, settings, "https://id.example.com", "Example ID", False),
+                self._client)
+
+
+# OidcSettings(callback_base_url=..., provider_factories=[ExampleIdSignInProvider.Factory()],
+#              providers={"example": OidcProviderSettings(type="example-id", client_id=..., client_secret=...)})
+```
+
+</Tab>
+</Languages>
+
+Override only what differs, and keep the issuer check strict: accept only the provider's own addresses, as Zoho's does with its list of data centres. An issuer taken from the callback as it comes would let anyone choose the issuer.
+
+## See also
+
+- [Sign-up and sign-in methods: adding a provider](/docs/guides/sign-in-methods#adding-a-provider) · [Add Sign in with Google and Zoho](/docs/recipes/sign-in-with-google-and-zoho) · [Link a provider from the profile](/docs/recipes/link-a-provider)
+- API: [Java `com.egradx.auth.signin`](/reference/java/com/egradx/auth/signin/package-summary.html) · [Node `EgradxSignInProvider`](/docs/reference/node/egradx-auth#egradxsigninprovider) · [Python `EgradxSignInProvider`](/docs/reference/python/egradx-auth#egradxsigninprovider)

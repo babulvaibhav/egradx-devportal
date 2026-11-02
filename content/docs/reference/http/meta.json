@@ -1,4 +1,4 @@
 {
   "title": "HTTP",
-  "pages": ["index", "auth", "audit", "notification"]
+  "pages": ["index", "auth", "audit", "notification", "files"]
 }

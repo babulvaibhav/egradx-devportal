@@ -8,10 +8,13 @@ description: What the SDK protects for you, what it leaves to your application, 
 | Area | What it does |
 |---|---|
 | Passwords | Argon2id, the same parameters in every language. A wrong username takes as long as a wrong password. |
-| Tokens | RS256 access tokens (60 minutes) and refresh tokens (7 days), signed with the application's own key. |
-| Every request | checks the signature, then reads from the database whether the person is active, whether their sessions were ended, whether the organization is active, and what their role holds now |
-| Sign-in attempts | limited per account and address (5) and per address (100) in 15 minutes, per instance |
-| Account flows | password reset and invitations answer the same whether or not an account exists; links are single use and expire |
+| Tokens | RS256 access tokens (60 minutes), signed with the application's own key, and refresh tokens stored only as their SHA-256. |
+| Sessions | one per sign-in, lasting 7 days from it. Every refresh replaces the refresh token; a replaced one presented after a 30-second grace ends the whole session (`SESSION_REVOKED`, audited as `auth.session.reused`). People list their sessions and end one, or all, themselves. |
+| Every request | checks the signature, then reads from the database whether the person is active, whether the token's session (`sid`) and their sessions are still going, whether the organization is active, and what their role holds now |
+| Sign-in attempts | limited per account and address (5) and per address (100) in 15 minutes; per instance, or across instances with `egradx-redis` |
+| Account flows | password reset, invitations and sign-in codes answer the same whether or not an account exists; links and codes are single use and expire |
+| Emailed codes | six digits, stored as Argon2 hashes, 10 minutes and 5 wrong tries; every send and every failure counts toward the sign-in attempt limit |
+| Providers (Google, Zoho, OpenID Connect) | the authorization code flow with PKCE, `state` and `nonce`; ID tokens verified against the provider's published keys; `returnTo` only a path on your site; an unverified email never links or makes an account, and the owner is emailed when a provider is linked |
 | Secrets it stores | channel credentials encrypted with a passphrase, never returned by the API |
 | Audit | append-only against the application; keys such as `password`, `token`, `secret` and `otp` are redacted from states |
 | Errors | a 5xx never reveals anything; untrusted request ids are replaced |
@@ -26,6 +29,8 @@ description: What the SDK protects for you, what it leaves to your application, 
 - [ ] **Background work** carries its organization explicitly; it has no caller.
 - [ ] **Secrets of your own** are sealed ([store a secret](/docs/recipes/store-a-secret)) and kept out of logs and audit states. Add your own sensitive keys to the audit redaction list.
 - [ ] **The browser:** tokens in `localStorage` can be read by any script on the page. Use a strict CSP, or the backend-for-frontend.
+- [ ] **A client of your own** (not the SDK's web packages) stores the new refresh token every refresh returns, and never sends a replaced one ([how sessions behave](/docs/guides/identity#sessions)).
+- [ ] **A sessions screen** lets people see where they are signed in and end a session they don't recognise ([list and end sessions](/docs/recipes/list-and-end-sessions)).
 
 ## Keys and passphrases
 
@@ -35,10 +40,9 @@ description: What the SDK protects for you, what it leaves to your application, 
 
 ## Known gaps to weigh
 
-- Refresh tokens aren't rotated, and there is no list of one's sessions to end one at a time. "Sign out everywhere" exists.
 - No JWKS endpoint, and keys don't rotate on their own. Services that verify each other's tokens share the keys folder.
 - The sign-in limit is per instance: add one at the load balancer.
-- No single sign-on and no sign-in by one-time code.
+- No single sign-on per organization, no SAML, no second factor. Providers are application-wide; set `trust-email` only for providers that verify every email ([trusting a provider's email](/docs/guides/sign-in-methods#trusting-a-providers-email)).
 - The audit trail is append-only against the application, not tamper-evident against the database's owner.
 - Kafka has no TLS or SASL settings yet.
 

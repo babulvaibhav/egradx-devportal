@@ -4,23 +4,27 @@
     {
       "name": "egradx.app.software-id",
       "type": "java.util.UUID",
-      "module": "egradx-core"
+      "module": "egradx-core",
+      "description": "A fixed id for this application, the same on every instance and every start. Informational: the SDK keeps it for the application to read."
     },
     {
       "name": "egradx.app.software-name",
       "type": "java.lang.String",
-      "module": "egradx-core"
+      "module": "egradx-core",
+      "description": "This application's name, for the application to read."
     },
     {
       "name": "egradx.app.software-repository-name",
       "type": "java.lang.String",
-      "module": "egradx-core"
+      "module": "egradx-core",
+      "description": "The name of the repository this application's source lives in, for the application to read."
     },
     {
       "name": "egradx.app.software-version",
       "type": "java.lang.Integer",
       "module": "egradx-core",
-      "defaultValue": 0
+      "defaultValue": 0,
+      "description": "This application's version number, for the application to read."
     },
     {
       "name": "egradx.audit.capture.client-address",
@@ -222,6 +226,34 @@
       "description": "The name of the role every organization is guaranteed to have. egradx-auth creates it whenever an organization is created — including the platform organization — and seeds it with {@link com.egradx.auth.EgradxAuthorities#ORGANIZATION_ADMIN}, so a brand-new organization always has someone who can administer it. <p>A host app adds its <em>own</em> default roles on top by listening for {@code EgradxOrganizationCreatedEvent} — one app's tenants might additionally start with Manager/Staff, another's with teaching-staff/administrative-staff. Only this one is the SDK's.</p>"
     },
     {
+      "name": "egradx.auth.email-code.enabled",
+      "type": "java.lang.Boolean",
+      "module": "egradx-auth",
+      "defaultValue": true,
+      "description": "Offer signing in with an emailed code. Needs something that delivers account messages."
+    },
+    {
+      "name": "egradx.auth.email-code.max-attempts",
+      "type": "java.lang.Integer",
+      "module": "egradx-auth",
+      "defaultValue": 5,
+      "description": "Wrong codes allowed before a new one must be asked for."
+    },
+    {
+      "name": "egradx.auth.email-code.resend-interval",
+      "type": "java.time.Duration",
+      "module": "egradx-auth",
+      "defaultValue": "60s",
+      "description": "How soon another code may be sent to the same address."
+    },
+    {
+      "name": "egradx.auth.email-code.ttl",
+      "type": "java.time.Duration",
+      "module": "egradx-auth",
+      "defaultValue": "10m",
+      "description": "How long a code works."
+    },
+    {
       "name": "egradx.auth.issuer-uri",
       "type": "java.lang.String",
       "module": "egradx-auth",
@@ -246,6 +278,87 @@
       "module": "egradx-auth",
       "defaultValue": "/reset-password?token={token}",
       "description": "{@code {token}} is replaced with the (URL-encoded) token."
+    },
+    {
+      "name": "egradx.auth.oidc.callback-base-url",
+      "type": "java.lang.String",
+      "module": "egradx-auth",
+      "description": "This server's public address as the provider's browser redirect reaches it, e.g. {@code https://api.example.com/api}. A provider's redirect URI is this plus {@code /egradx/auth/oidc/{id}/callback}; register it with the provider."
+    },
+    {
+      "name": "egradx.auth.oidc.flow-ttl",
+      "type": "java.time.Duration",
+      "module": "egradx-auth",
+      "defaultValue": "10m",
+      "description": "How long a round trip to a provider, and the code it ends with, may take."
+    },
+    {
+      "name": "egradx.auth.oidc.frontend-callback-path",
+      "type": "java.lang.String",
+      "module": "egradx-auth",
+      "defaultValue": "/auth/callback",
+      "description": "Where on the frontend (after {@code links.base-url}) the browser lands after the provider."
+    },
+    {
+      "name": "egradx.auth.oidc.providers",
+      "type": "java.util.Map<java.lang.String,com.egradx.auth.config.EgradxAuthProperties$OidcProvider>",
+      "module": "egradx-auth",
+      "description": "The providers, by id ({@code google}, {@code zoho}, …): the id is in the URLs and on the buttons' data."
+    },
+    {
+      "name": "egradx.auth.oidc.providers.<id>.client-id",
+      "type": "java.lang.String",
+      "module": "egradx-auth",
+      "description": "The client id the provider issued for this application. Without it the provider is left out, with a warning."
+    },
+    {
+      "name": "egradx.auth.oidc.providers.<id>.client-secret",
+      "type": "java.lang.String",
+      "module": "egradx-auth",
+      "description": "The client secret the provider issued for this application. Without it the provider is left out, with a warning."
+    },
+    {
+      "name": "egradx.auth.oidc.providers.<id>.enabled",
+      "type": "java.lang.Boolean",
+      "module": "egradx-auth",
+      "defaultValue": true,
+      "description": "Turn the provider off without removing its settings."
+    },
+    {
+      "name": "egradx.auth.oidc.providers.<id>.issuer",
+      "type": "java.lang.String",
+      "module": "egradx-auth",
+      "description": "The provider's issuer; its discovery document is at {@code {issuer}/.well-known/openid-configuration}. Required for {@code type: oidc}."
+    },
+    {
+      "name": "egradx.auth.oidc.providers.<id>.name",
+      "type": "java.lang.String",
+      "module": "egradx-auth",
+      "description": "Shown on the button. Defaults to the type's name ({@code Google}, {@code Zoho}), else the id."
+    },
+    {
+      "name": "egradx.auth.oidc.providers.<id>.scopes",
+      "type": "java.util.List<java.lang.String>",
+      "module": "egradx-auth",
+      "defaultValue": [
+        "openid",
+        "email",
+        "profile"
+      ],
+      "description": "Scopes asked for."
+    },
+    {
+      "name": "egradx.auth.oidc.providers.<id>.trust-email",
+      "type": "java.lang.Boolean",
+      "module": "egradx-auth",
+      "description": "Take the provider's verified emails as proof of owning the address: a sign-in whose email matches an account is linked to it. Defaults to true for the google and zoho types and false otherwise."
+    },
+    {
+      "name": "egradx.auth.oidc.providers.<id>.type",
+      "type": "java.lang.String",
+      "module": "egradx-auth",
+      "defaultValue": "oidc",
+      "description": "What kind of provider, so which EgradxSignInProviderFactory makes it: {@code oidc} (any OpenID Connect provider, from its issuer), {@code google}, {@code zoho}, or a type an application adds with an {@code EgradxSignInProviderFactory} bean. {@code google} and {@code zoho} fill in the issuer, the name and {@code trust-email}."
     },
     {
       "name": "egradx.auth.platform.admin-display-name",
@@ -372,11 +485,18 @@
       "description": "How far back failures count. The wait is until the oldest counted failure leaves it."
     },
     {
+      "name": "egradx.auth.refresh-token-reuse-grace-seconds",
+      "type": "java.lang.Long",
+      "module": "egradx-auth",
+      "defaultValue": 30,
+      "description": "How long a refresh token replaced by a refresh still renews its session, in seconds, so that two callers refreshing with it at once (two tabs, a page and its route handler) both carry on. Presented after this, it ends the session as a stolen copy."
+    },
+    {
       "name": "egradx.auth.refresh-token-ttl-days",
       "type": "java.lang.Long",
       "module": "egradx-auth",
       "defaultValue": 7,
-      "description": "How long a refresh token is valid, in days."
+      "description": "How long a session lasts, in days: its refresh tokens stop working this long after sign-in, however often they rotate."
     },
     {
       "name": "egradx.auth.role-authorities-cache-ttl-seconds",
@@ -391,6 +511,33 @@
       "module": "egradx-auth",
       "defaultValue": true,
       "description": "Off: create the tables yourself from {@code db/egradx-auth/postgresql/} in this jar."
+    },
+    {
+      "name": "egradx.auth.signup.allowed-email-domains",
+      "type": "java.util.List<java.lang.String>",
+      "module": "egradx-auth",
+      "description": "Email domains allowed to sign up ({@code example.com}); empty allows any."
+    },
+    {
+      "name": "egradx.auth.signup.legacy-register",
+      "type": "java.lang.Boolean",
+      "module": "egradx-auth",
+      "defaultValue": false,
+      "description": "Keep the deprecated {@code POST /egradx/auth/register}, which makes an account in no organization. Off, it answers {@code SIGNUP_DISABLED}."
+    },
+    {
+      "name": "egradx.auth.signup.mode",
+      "type": "com.egradx.auth.config.EgradxAuthProperties$SignupMode",
+      "module": "egradx-auth",
+      "defaultValue": "invitation",
+      "description": "{@code invitation}: accounts are made only by an administrator or by accepting an invitation. {@code organization}: anyone may also sign up, and becomes the administrator of a new organization of their own. Joining an existing organization always takes an invitation."
+    },
+    {
+      "name": "egradx.errors.fallback.enabled",
+      "type": "java.lang.Boolean",
+      "module": "egradx-sdk",
+      "defaultValue": true,
+      "description": "Whether failures on the application's own endpoints that no advice of its own answers are answered in the EGRADX error envelope. An advice of the application's own answers first either way; set false to leave every unanswered failure to Spring Boot."
     },
     {
       "name": "egradx.events.enabled",
@@ -555,6 +702,119 @@
       "module": "egradx-platform-events",
       "defaultValue": "in-process",
       "description": "How events travel: {@code in-process}, {@code rabbitmq} or {@code kafka}."
+    },
+    {
+      "name": "egradx.files.allowed-content-types",
+      "type": "java.util.List<java.lang.String>",
+      "module": "egradx-file-storage",
+      "description": "Content types that may be uploaded, such as {@code image/*} or {@code application/pdf}; empty allows any."
+    },
+    {
+      "name": "egradx.files.backend",
+      "type": "com.egradx.files.config.EgradxFilesProperties$Backend",
+      "module": "egradx-file-storage",
+      "defaultValue": "local",
+      "description": "Where the bytes are stored: {@code local} (a folder) or {@code s3} (any S3-compatible store)."
+    },
+    {
+      "name": "egradx.files.cleanup.enabled",
+      "type": "java.lang.Boolean",
+      "module": "egradx-file-storage",
+      "defaultValue": true,
+      "description": "Run the clean-up on this instance."
+    },
+    {
+      "name": "egradx.files.cleanup.interval",
+      "type": "java.time.Duration",
+      "module": "egradx-file-storage",
+      "defaultValue": "1h",
+      "description": "How often it runs."
+    },
+    {
+      "name": "egradx.files.local.root",
+      "type": "java.lang.String",
+      "module": "egradx-file-storage",
+      "defaultValue": "./egradx-files",
+      "description": "The folder files are stored in; created if missing. With several instances, a folder they all share."
+    },
+    {
+      "name": "egradx.files.max-size",
+      "type": "org.springframework.util.unit.DataSize",
+      "module": "egradx-file-storage",
+      "defaultValue": "25MB",
+      "description": "The largest file that may be uploaded. Spring's multipart limits are raised to fit it."
+    },
+    {
+      "name": "egradx.files.profile-photo.content-types",
+      "type": "java.util.List<java.lang.String>",
+      "module": "egradx-file-storage",
+      "description": "Content types a profile photo may have."
+    },
+    {
+      "name": "egradx.files.profile-photo.max-size",
+      "type": "org.springframework.util.unit.DataSize",
+      "module": "egradx-file-storage",
+      "defaultValue": "5MB",
+      "description": "The largest profile photo."
+    },
+    {
+      "name": "egradx.files.s3.access-key",
+      "type": "java.lang.String",
+      "module": "egradx-file-storage",
+      "description": "The access key; without it, the AWS SDK's default credentials are used."
+    },
+    {
+      "name": "egradx.files.s3.bucket",
+      "type": "java.lang.String",
+      "module": "egradx-file-storage",
+      "description": "The bucket files are stored in; it must exist."
+    },
+    {
+      "name": "egradx.files.s3.endpoint",
+      "type": "java.lang.String",
+      "module": "egradx-file-storage",
+      "description": "The store's address, for anything but AWS itself, e.g. {@code http://localhost:9000} for MinIO."
+    },
+    {
+      "name": "egradx.files.s3.path-style",
+      "type": "java.lang.Boolean",
+      "module": "egradx-file-storage",
+      "defaultValue": false,
+      "description": "Address the bucket in the path rather than the host name; most S3-compatible stores need it."
+    },
+    {
+      "name": "egradx.files.s3.presigned-downloads",
+      "type": "java.lang.Boolean",
+      "module": "egradx-file-storage",
+      "defaultValue": false,
+      "description": "Downloads redirect (302) to a short-lived pre-signed URL instead of streaming through the application."
+    },
+    {
+      "name": "egradx.files.s3.presigned-ttl",
+      "type": "java.time.Duration",
+      "module": "egradx-file-storage",
+      "defaultValue": "5m",
+      "description": "How long a pre-signed download URL works."
+    },
+    {
+      "name": "egradx.files.s3.region",
+      "type": "java.lang.String",
+      "module": "egradx-file-storage",
+      "defaultValue": "us-east-1",
+      "description": "The region; any value for most S3-compatible stores."
+    },
+    {
+      "name": "egradx.files.s3.secret-key",
+      "type": "java.lang.String",
+      "module": "egradx-file-storage",
+      "description": "The secret key, with {@code access-key}."
+    },
+    {
+      "name": "egradx.files.schema.migrate",
+      "type": "java.lang.Boolean",
+      "module": "egradx-file-storage",
+      "defaultValue": true,
+      "description": "Off: create the table yourself from {@code db/egradx-file-storage/postgresql/} in this jar."
     },
     {
       "name": "egradx.notification.bulk.max-recipients",
@@ -839,13 +1099,15 @@
       "name": "egradx.observability.logging.shipping.batch-size",
       "type": "java.lang.Integer",
       "module": "egradx-observability",
-      "defaultValue": 200
+      "defaultValue": 200,
+      "description": "The most lines sent together in one batch."
     },
     {
       "name": "egradx.observability.logging.shipping.enabled",
       "type": "java.lang.Boolean",
       "module": "egradx-observability",
-      "defaultValue": false
+      "defaultValue": false,
+      "description": "Whether log lines are shipped to an {@code EgradxLogSink}."
     },
     {
       "name": "egradx.observability.logging.shipping.excluded",
@@ -889,6 +1151,20 @@
       "description": "Record egradx counters and gauges when the application has a MeterRegistry."
     },
     {
+      "name": "egradx.redis.enabled",
+      "type": "java.lang.Boolean",
+      "module": "egradx-redis",
+      "defaultValue": true,
+      "description": "Whether the libraries coordinate through Redis. Off, each instance counts, caches and pushes on its own."
+    },
+    {
+      "name": "egradx.redis.key-prefix",
+      "type": "java.lang.String",
+      "module": "egradx-redis",
+      "defaultValue": "egradx:",
+      "description": "Starts every key and channel. Instances that must act together use the same prefix; applications sharing one Redis use different ones (contracts/redis)."
+    },
+    {
       "name": "egradx.rest-template.connect-timeout",
       "type": "java.time.Duration",
       "module": "egradx-web-security",
@@ -923,7 +1199,8 @@
     {
       "name": "egradx.security.client.scope",
       "type": "java.lang.String",
-      "module": "egradx-web-security"
+      "module": "egradx-web-security",
+      "description": "The scope to ask for with the service token. Not yet sent by the Java token manager, which requests the client's default scope; the Node SDK sends it."
     },
     {
       "name": "egradx.security.crypto.keystorePath",

@@ -1,5 +1,5 @@
 {
-  "capturedAt": "2026-10-06T10:57:52.491Z",
+  "capturedAt": "2026-11-02T06:23:55.023Z",
   "sdkVersion": "1.0.0",
   "languages": {
     "java": [
@@ -18,31 +18,31 @@
           "status": 200,
           "body": {
             "accessToken": "eyJhbGciOiJSUzI1… (redacted)",
-            "refreshToken": "PXmtLk0Zq5ZEy8a8… (redacted)",
+            "refreshToken": "cQC2WzZAa_a0S7hv… (redacted)",
             "tokenType": "Bearer",
-            "expiresAt": "2026-10-06T11:57:36.115166500Z",
+            "expiresAt": "2026-11-02T07:23:42.684329Z",
             "user": {
-              "id": "9e456567-0f77-4efc-b0c2-705b3a3149d3",
+              "id": "edbfc42a-0d1f-467a-908a-d7599cb90dbe",
               "username": "ada@example.com",
               "email": "ada@example.com",
               "displayName": "Ada Admin",
               "active": true,
-              "createdAt": "2026-10-06T10:57:34.994315Z"
+              "createdAt": "2026-11-02T06:23:40.902884Z"
             },
-            "organizationId": "3bad3318-cdcb-445c-b41a-d30e41705391",
+            "organizationId": "4fdcdc8d-6f54-4c39-8259-a85ab1afef8c",
             "platformOrganization": false,
-            "roleId": "fbf64fa9-f345-4d65-b016-2a37acb8e438",
+            "roleId": "6953f5dc-60cd-4310-bd3e-beab22e0d2ce",
             "roleName": "Admin",
             "authorities": [
-              "egradx.user.manage",
-              "egradx.notification.manage",
+              "note.write",
+              "egradx.role.read",
+              "egradx.audit.read",
+              "egradx.role.manage",
               "note.read",
               "egradx.notification.read",
-              "note.write",
+              "egradx.notification.manage",
               "egradx.user.read",
-              "egradx.audit.read",
-              "egradx.role.read",
-              "egradx.role.manage"
+              "egradx.user.manage"
             ],
             "organizationName": "Demo"
           }
@@ -58,12 +58,12 @@
         "response": {
           "status": 200,
           "body": {
-            "id": "9e456567-0f77-4efc-b0c2-705b3a3149d3",
+            "id": "edbfc42a-0d1f-467a-908a-d7599cb90dbe",
             "username": "ada@example.com",
             "email": "ada@example.com",
             "displayName": "Ada Admin",
             "active": true,
-            "createdAt": "2026-10-06T10:57:34.994315Z"
+            "createdAt": "2026-11-02T06:23:40.902884Z"
           }
         }
       },
@@ -81,31 +81,31 @@
           "status": 200,
           "body": {
             "accessToken": "eyJhbGciOiJSUzI1… (redacted)",
-            "refreshToken": "PXmtLk0Zq5ZEy8a8… (redacted)",
+            "refreshToken": "dQDlAhJR1BKCelc0… (redacted)",
             "tokenType": "Bearer",
-            "expiresAt": "2026-10-06T11:57:36.164155500Z",
+            "expiresAt": "2026-11-02T07:23:42.740778800Z",
             "user": {
-              "id": "9e456567-0f77-4efc-b0c2-705b3a3149d3",
+              "id": "edbfc42a-0d1f-467a-908a-d7599cb90dbe",
               "username": "ada@example.com",
               "email": "ada@example.com",
               "displayName": "Ada Admin",
               "active": true,
-              "createdAt": "2026-10-06T10:57:34.994315Z"
+              "createdAt": "2026-11-02T06:23:40.902884Z"
             },
-            "organizationId": "3bad3318-cdcb-445c-b41a-d30e41705391",
+            "organizationId": "4fdcdc8d-6f54-4c39-8259-a85ab1afef8c",
             "platformOrganization": false,
-            "roleId": "fbf64fa9-f345-4d65-b016-2a37acb8e438",
+            "roleId": "6953f5dc-60cd-4310-bd3e-beab22e0d2ce",
             "roleName": "Admin",
             "authorities": [
-              "egradx.user.manage",
-              "egradx.notification.manage",
+              "note.write",
+              "egradx.role.read",
+              "egradx.audit.read",
+              "egradx.role.manage",
               "note.read",
               "egradx.notification.read",
-              "note.write",
+              "egradx.notification.manage",
               "egradx.user.read",
-              "egradx.audit.read",
-              "egradx.role.read",
-              "egradx.role.manage"
+              "egradx.user.manage"
             ],
             "organizationName": "Demo"
           }
@@ -128,20 +128,20 @@
           "status": 200,
           "body": {
             "accessToken": "eyJhbGciOiJSUzI1… (redacted)",
-            "refreshToken": "Amm6kbx4HGMXErb6… (redacted)",
+            "refreshToken": "rSLNVVol2G5ERcVz… (redacted)",
             "tokenType": "Bearer",
-            "expiresAt": "2026-10-06T11:57:44.665Z",
+            "expiresAt": "2026-11-02T07:23:48.304Z",
             "user": {
-              "id": "d457249a-7111-4587-b0f1-5db7b73bf503",
+              "id": "fd7ae432-19b5-4b36-ac3f-218ab90cd40e",
               "username": "ada@example.com",
               "email": "ada@example.com",
               "displayName": "Ada Admin",
               "active": true,
-              "createdAt": "2026-10-06T10:57:43.101Z"
+              "createdAt": "2026-11-02T06:23:47.421Z"
             },
-            "organizationId": "c4c7b7f1-b174-43c5-a4bc-020aba868389",
+            "organizationId": "d015d133-f0fc-4f70-b7ac-795bb2a075be",
             "platformOrganization": false,
-            "roleId": "50b33227-ef80-44f1-9b98-90637e233e53",
+            "roleId": "1f44ee49-facf-48b4-b977-06df2097f6a7",
             "roleName": "Admin",
             "authorities": [
               "egradx.audit.read",
@@ -168,12 +168,12 @@
         "response": {
           "status": 200,
           "body": {
-            "id": "d457249a-7111-4587-b0f1-5db7b73bf503",
+            "id": "fd7ae432-19b5-4b36-ac3f-218ab90cd40e",
             "username": "ada@example.com",
             "email": "ada@example.com",
             "displayName": "Ada Admin",
             "active": true,
-            "createdAt": "2026-10-06T10:57:43.101Z"
+            "createdAt": "2026-11-02T06:23:47.421Z"
           }
         }
       },
@@ -191,20 +191,20 @@
           "status": 200,
           "body": {
             "accessToken": "eyJhbGciOiJSUzI1… (redacted)",
-            "refreshToken": "Amm6kbx4HGMXErb6… (redacted)",
+            "refreshToken": "q8PxwX1EmcSmKMd_… (redacted)",
             "tokenType": "Bearer",
-            "expiresAt": "2026-10-06T11:57:44.691Z",
+            "expiresAt": "2026-11-02T07:23:48.335Z",
             "user": {
-              "id": "d457249a-7111-4587-b0f1-5db7b73bf503",
+              "id": "fd7ae432-19b5-4b36-ac3f-218ab90cd40e",
               "username": "ada@example.com",
               "email": "ada@example.com",
               "displayName": "Ada Admin",
               "active": true,
-              "createdAt": "2026-10-06T10:57:43.101Z"
+              "createdAt": "2026-11-02T06:23:47.421Z"
             },
-            "organizationId": "c4c7b7f1-b174-43c5-a4bc-020aba868389",
+            "organizationId": "d015d133-f0fc-4f70-b7ac-795bb2a075be",
             "platformOrganization": false,
-            "roleId": "50b33227-ef80-44f1-9b98-90637e233e53",
+            "roleId": "1f44ee49-facf-48b4-b977-06df2097f6a7",
             "roleName": "Admin",
             "authorities": [
               "egradx.audit.read",
@@ -238,31 +238,31 @@
           "status": 200,
           "body": {
             "accessToken": "eyJhbGciOiJSUzI1… (redacted)",
-            "refreshToken": "RbglS70o438kcP4d… (redacted)",
+            "refreshToken": "AePub2lerz8ebvlM… (redacted)",
             "tokenType": "Bearer",
-            "expiresAt": "2026-10-06T11:57:52.409852Z",
+            "expiresAt": "2026-11-02T07:23:54.930393Z",
             "user": {
-              "id": "27960287-43f0-4d20-9f25-0c8c4ee3949f",
+              "id": "eccd459e-a53e-45ed-b8de-802ca7070591",
               "username": "ada@example.com",
               "email": "ada@example.com",
               "displayName": "Ada Admin",
               "active": true,
-              "createdAt": "2026-10-06T10:57:50.998486Z"
+              "createdAt": "2026-11-02T06:23:53.355344Z"
             },
-            "organizationId": "0f4ee3c4-942b-427a-ba1e-9b2c977650b9",
+            "organizationId": "f177f399-65d2-49d0-b7b6-fe1aa9a4f92c",
             "platformOrganization": false,
-            "roleId": "7d78a605-5858-43b7-a5da-8c5177e9b1fc",
+            "roleId": "fd4990e2-4d82-4363-91c0-0ad0519c81bf",
             "roleName": "Admin",
             "authorities": [
               "egradx.role.manage",
+              "note.write",
               "egradx.notification.manage",
               "egradx.notification.read",
-              "egradx.audit.read",
               "egradx.user.read",
               "note.read",
-              "egradx.user.manage",
+              "egradx.audit.read",
               "egradx.role.read",
-              "note.write"
+              "egradx.user.manage"
             ],
             "organizationName": "Demo"
           }
@@ -278,12 +278,12 @@
         "response": {
           "status": 200,
           "body": {
-            "id": "27960287-43f0-4d20-9f25-0c8c4ee3949f",
+            "id": "eccd459e-a53e-45ed-b8de-802ca7070591",
             "username": "ada@example.com",
             "email": "ada@example.com",
             "displayName": "Ada Admin",
             "active": true,
-            "createdAt": "2026-10-06T10:57:50.998486Z"
+            "createdAt": "2026-11-02T06:23:53.355344Z"
           }
         }
       },
@@ -301,31 +301,31 @@
           "status": 200,
           "body": {
             "accessToken": "eyJhbGciOiJSUzI1… (redacted)",
-            "refreshToken": "RbglS70o438kcP4d… (redacted)",
+            "refreshToken": "rqKMXenuc1l1-fl4… (redacted)",
             "tokenType": "Bearer",
-            "expiresAt": "2026-10-06T11:57:52.439191Z",
+            "expiresAt": "2026-11-02T07:23:54.967089Z",
             "user": {
-              "id": "27960287-43f0-4d20-9f25-0c8c4ee3949f",
+              "id": "eccd459e-a53e-45ed-b8de-802ca7070591",
               "username": "ada@example.com",
               "email": "ada@example.com",
               "displayName": "Ada Admin",
               "active": true,
-              "createdAt": "2026-10-06T10:57:50.998486Z"
+              "createdAt": "2026-11-02T06:23:53.355344Z"
             },
-            "organizationId": "0f4ee3c4-942b-427a-ba1e-9b2c977650b9",
+            "organizationId": "f177f399-65d2-49d0-b7b6-fe1aa9a4f92c",
             "platformOrganization": false,
-            "roleId": "7d78a605-5858-43b7-a5da-8c5177e9b1fc",
+            "roleId": "fd4990e2-4d82-4363-91c0-0ad0519c81bf",
             "roleName": "Admin",
             "authorities": [
               "egradx.role.manage",
+              "note.write",
               "egradx.notification.manage",
               "egradx.notification.read",
-              "egradx.audit.read",
               "egradx.user.read",
               "note.read",
-              "egradx.user.manage",
+              "egradx.audit.read",
               "egradx.role.read",
-              "note.write"
+              "egradx.user.manage"
             ],
             "organizationName": "Demo"
           }

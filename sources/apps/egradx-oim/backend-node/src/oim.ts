@@ -1,4 +1,4 @@
-import { type Auditor, type Auth, currentTransaction, EgradxAuditEvent, type EgradxCaller, EgradxMessageRequest, EgradxNotificationType, EgradxObservations, type Notifications, otelMetrics, type SqlClient } from '@babulvaibhav/egradx-sdk';
+import { type Auditor, type Auth, type EgradxFileStorage, currentTransaction, EgradxAuditEvent, type EgradxCaller, EgradxMessageRequest, EgradxNotificationType, EgradxObservations, type Notifications, otelMetrics, type SqlClient } from '@babulvaibhav/egradx-sdk';
 import type { PrismaClient } from './generated/prisma/client.js';
 import { tenantDenied } from './http.js';
 
@@ -8,6 +8,8 @@ export interface Oim {
   auth: Auth;
   auditor: Auditor;
   notifications: Notifications;
+  /** Uploaded files: order attachments and profile photos. */
+  files?: EgradxFileStorage;
   dashboard: DashboardCache;
   log: { info(message: string): void; warn(message: string): void; error(message: string, error?: unknown): void };
   lowStockChannels: readonly string[];

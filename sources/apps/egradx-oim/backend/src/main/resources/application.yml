@@ -101,6 +101,37 @@ egradx:
     # docker-compose's nginx it is port 3000.
     links:
       base-url: ${APP_PUBLIC_URL:http://localhost:5173}
+    # Anyone may sign up, and gets a new organization of their own to administer (docs/auth/sign-in-methods.md).
+    # Set to `invitation` for people to join only by invitation.
+    signup:
+      mode: ${EGRADX_SIGNUP_MODE:organization}
+    # Signing in with Google and Zoho. Each provider is offered once its client id and secret are set; the redirect
+    # URI to register with it is {callback-base-url}/egradx/auth/oidc/{google|zoho}/callback. Without them, startup
+    # logs that the provider is left out.
+    oidc:
+      callback-base-url: ${EGRADX_OIDC_CALLBACK_BASE_URL:http://localhost:8080/api}
+      providers:
+        google:
+          type: google
+          client-id: ${GOOGLE_CLIENT_ID:}
+          client-secret: ${GOOGLE_CLIENT_SECRET:}
+        zoho:
+          type: zoho
+          client-id: ${ZOHO_CLIENT_ID:}
+          client-secret: ${ZOHO_CLIENT_SECRET:}
+  # Uploaded files (egradx-file-storage): on local disk in ./files, or in an S3-compatible bucket with
+  # EGRADX_FILES_BACKEND=s3 and the egradx.files.s3.* settings (docs/files/design.md).
+  files:
+    backend: ${EGRADX_FILES_BACKEND:local}
+    max-size: ${EGRADX_FILES_MAX_SIZE:25MB}
+    local:
+      root: ${EGRADX_FILES_ROOT:./files}
+    s3:
+      bucket: ${EGRADX_FILES_S3_BUCKET:}
+      endpoint: ${EGRADX_FILES_S3_ENDPOINT:}
+      path-style: ${EGRADX_FILES_S3_PATH_STYLE:true}
+      access-key: ${EGRADX_FILES_S3_ACCESS_KEY:}
+      secret-key: ${EGRADX_FILES_S3_SECRET_KEY:}
   notification:
     # Stored channel secrets (SMTP passwords, Slack and Twilio tokens) are encrypted with
     # egradx.security.crypto.passphrase above. Changing that passphrase makes them unreadable:
@@ -133,9 +164,10 @@ app:
       channels: ${LOW_STOCK_CHANNELS:email,slack,whatsapp,sms}
   seed:
     # Demo credentials created on first boot by DataSeeder. Change or disable before this is
-    # anywhere that matters.
+    # anywhere that matters. The platform administrator is egradx-auth's platform-admin, not
+    # seeded here: its first password is egradx.auth.platform.admin-password, set with
+    # EGRADX_AUTH_PLATFORM_ADMIN_PASSWORD (the same variable the Node and Python backends read).
     admin-password: ${SEED_ADMIN_PASSWORD:adminPassword}
-    owner-password: ${SEED_OWNER_PASSWORD:ownerPassword}
   cors:
     # Comma-separated allowed origins, or "*" for any (not recommended past a demo). Defaults to
     # the frontend's Vite dev server and its Docker-mapped port. Override with CORS_ALLOWED_ORIGINS

@@ -1,0 +1,88 @@
+---
+title: Sign in with an emailed code
+description: '"Email me a code" on the sign-in page: six digits to the account''s address, no password needed.'
+---
+
+The SDK makes the code, emails it, checks it and limits the tries. It is on by default wherever email works. You add a two-step form.
+
+## 1. Make sure it is offered
+
+Codes need email ([configure SMTP](/docs/recipes/configure-smtp)) and `email-code.enabled`, which is true by default. `GET /egradx/auth/sign-in-options` answers `"emailCode": true` when both hold. To turn codes off:
+
+| Java | Node | Python |
+|---|---|---|
+| `egradx.auth.email-code.enabled: false` | `auth: { emailCode: { enabled: false } }` | `AuthOptions(email_code=EmailCodeSettings(enabled=False))` |
+
+The same settings take `ttl` (10 minutes), `max-attempts` (5) and `resend-interval` (60 s). In Node and Python they are `ttlMs` / `ttl_ms`, `maxAttempts` / `max_attempts`, `resendIntervalMs` / `resend_interval_ms`.
+
+## 2. The form
+
+```tsx title="frontend/src/modules/auth/EmailCodeSignIn.tsx"
+import { useState, type FormEvent } from 'react';
+import { EgradxApiError, organizationChoices, retryAfterSeconds, type OrganizationChoice } from '@babulvaibhav/egradx-client';
+import { useAuth, useSignInOptions } from '@babulvaibhav/egradx-react';
+
+export function EmailCodeSignIn({ onSignedIn }: { onSignedIn: () => void }) {
+  const { requestEmailCode, verifyEmailCode } = useAuth();
+  const { data: options } = useSignInOptions();
+  const [email, setEmail] = useState('');
+  const [sent, setSent] = useState(false);
+  const [code, setCode] = useState('');
+  const [organizations, setOrganizations] = useState<OrganizationChoice[] | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+
+  async function send(event: FormEvent) {
+    event.preventDefault();
+    await requestEmailCode(email); // always 204: it never says whether the address has an account
+    setSent(true);
+  }
+
+  async function verify(organizationId?: string) {
+    try {
+      await verifyEmailCode({ email, code, organizationId });
+      onSignedIn();
+    } catch (e) {
+      const choices = organizationChoices(e);
+      if (choices) return setOrganizations(choices); // send the same code again with one
+      const wait = retryAfterSeconds(e);
+      setProblem(wait ? `Too many tries: wait ${wait} s.`
+        : e instanceof EgradxApiError && e.code === 'EMAIL_CODE_INVALID' ? 'That code is not right.'
+        : 'That code has expired: ask for a new one.');
+    }
+  }
+
+  if (!options?.emailCode) return null;
+  // Render: the email form (send) until `sent`, then the code form (verify()), or the organization choice (verify(id)).
+  return null;
+}
+```
+
+The `sign-in` copy-in screen has this built in, as "Email me a code":
+
+```sh
+npx shadcn@latest add https://<this portal>/r/sign-in.json
+```
+
+To offer **only** the emailed code, or put it first, choose the methods: `<SignInMethodsPicker methods={["email-code"]} />` from the `sign-in-methods-picker` item, or `useSignInMethodList({ methods: ["email-code"] })` for a form of your own, whose `requestEmailCode`, `verifyEmailCode` and `chooseOrganization` do the steps above ([choosing which methods to show](/docs/guides/sign-in-methods#choosing-which-methods-to-show)).
+
+## How it behaves
+
+- **It never reveals an account.** Asking for a code answers 204 whatever the address. A code is sent only to an active account. Asking again within 60 seconds is quietly ignored.
+- **A code is good for 10 minutes and 5 wrong tries**, and only the last one sent works.
+- **Failures count toward the sign-in limit**, as wrong passwords do: 5 from one address answer `AUTH_TOO_MANY_ATTEMPTS` (429), with `retryAfterSeconds`.
+- **It works for accounts with no password**, such as those made by a provider or an invitation.
+- **It is recorded** as `auth.login` with `method: email_code`.
+
+## What can go wrong
+
+| Code | When |
+|---|---|
+| `EMAIL_CODE_INVALID` (400) | a wrong code, an unknown address, or no code sent: the same answer for all three |
+| `EMAIL_CODE_EXPIRED` (400) | over 10 minutes old |
+| `EMAIL_CODE_TOO_MANY_ATTEMPTS` (400) | 5 wrong tries: the code is gone |
+| `ORG_SELECTION_REQUIRED` (400) | in several organizations: send the same code with `organizationId` |
+| `AUTH_TOO_MANY_ATTEMPTS` (429) | too many failures from this address |
+
+## See also
+
+- [Sign-up and sign-in methods](/docs/guides/sign-in-methods#an-emailed-code) · [Build a password-reset screen](/docs/recipes/password-reset)

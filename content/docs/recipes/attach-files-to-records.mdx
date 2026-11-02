@@ -1,0 +1,136 @@
+---
+title: Attach files to your records
+description: Files on an order, a ticket or any record of yours — an access policy that says who may see and add them, and the Attachments screen to list, upload, download and delete.
+---
+
+`egradx-file-storage` stores the files and serves the endpoints. You decide who may see and add the files of each kind of record, and put the list on the record's page. The example is OIM's: files on an order, seen by whoever may see the order, added and deleted by whoever may create orders.
+
+The package must be [wired in](/docs/guides/files#wiring-it-in).
+
+## 1. Say who may see the record's files
+
+Register an access policy for the record's type. It answers `ALLOW`, `DENY`, or `DEFAULT` to let the built-in `egradx.file.*` permissions decide. **Check that the record belongs to the caller's organization**: the record id comes from the browser.
+
+<Languages>
+<Tab value="Java">
+
+A bean; Spring picks it up.
+
+<RepoSnippet file="apps/egradx-oim/backend/src/main/java/com/egradx/oim/order/infrastructure/OrderFileAccess.java" title="order/infrastructure/OrderFileAccess.java" />
+
+</Tab>
+<Tab value="Node">
+
+```ts title="src/order/order-files.ts"
+import { isUuid } from '@babulvaibhav/egradx-sdk';
+import { fileAccessPolicy } from '@babulvaibhav/egradx-file-storage';
+
+export const orderFiles = (prisma: PrismaClient) =>
+  fileAccessPolicy('order', async (request) => {
+    if (!isUuid(request.attachedId)) return 'DENY';
+    const order = await prisma.order.findFirst({ where: { id: request.attachedId, organizationId: request.organizationId }, select: { id: true } });
+    if (!order) return 'DENY';
+    return request.authorities.has(request.action === 'READ' ? 'order.read' : 'order.create') ? 'ALLOW' : 'DENY';
+  });
+```
+
+```ts title="src/app.ts"
+files: createFileStorage({ local: { root: './files' }, policies: [orderFiles(prisma)] }),
+```
+
+</Tab>
+<Tab value="Python">
+
+```python title="src/<module>/order/files.py"
+from sqlalchemy import text
+
+from egradx.core import is_uuid
+from egradx.files import EgradxFileAccessPolicy, FileAction, FileDecision
+
+
+def order_files(engine) -> EgradxFileAccessPolicy:
+    async def decide(request):
+        if not is_uuid(request.attached_id):
+            return FileDecision.DENY
+        async with engine.connect() as connection:
+            found = (await connection.execute(
+                text("SELECT 1 FROM orders WHERE id = CAST(:id AS uuid) AND organization_id = CAST(:org AS uuid)"),
+                {"id": request.attached_id, "org": request.organization_id})).first()
+        if found is None:
+            return FileDecision.DENY
+        needed = "order.read" if request.action == FileAction.READ else "order.create"
+        return FileDecision.ALLOW if needed in request.authorities else FileDecision.DENY
+
+    return EgradxFileAccessPolicy("order", decide)
+```
+
+```python title="src/<module>/app.py"
+files=FilesOptions(local=LocalSettings(root="./files"), policies=[order_files(engine)]),
+```
+
+</Tab>
+</Languages>
+
+`request.action` is `READ` (details, bytes, the list), `WRITE` (uploading to the record) or `DELETE`. Whoever uploaded a file may always read and delete it, whatever the policy says.
+
+## 2. Put the files on the record's page
+
+The copy-in `attachments` screen lists the record's files with download and delete, and an upload area above:
+
+```sh
+npx shadcn@latest add https://<this portal>/r/attachments.json
+```
+
+```tsx title="frontend/src/modules/orders/OrderAttachments.tsx"
+import { useAuth } from '@babulvaibhav/egradx-react';
+import { Attachments } from '@/components/egradx/files/attachments';
+
+export function OrderAttachments({ orderId, notify }: { orderId: string; notify: (message: string) => void }) {
+  const { hasAuthority } = useAuth();
+  return (
+    <Attachments
+      attachedType="order"
+      attachedId={orderId}
+      maxSize={25 * 1024 * 1024}           // the server's egradx.files.max-size
+      canUpload={hasAuthority('order.create')}
+      canDelete={hasAuthority('order.create')}
+      onNotify={notify}
+    />
+  );
+}
+```
+
+`canUpload` and `canDelete` only hide buttons; the policy decides. Of your own design, use the hooks:
+
+```tsx
+const attachments = useAttachments({ attachedType: 'order', attachedId: order.id });
+const upload = useFileUpload({ attachedType: 'order', attachedId: order.id, maxSize: 25 * 1024 * 1024, onUploaded: () => attachments.reload() });
+
+<input type="file" onChange={(e) => e.target.files?.[0] && upload.upload(e.target.files[0]).catch(() => {})} />
+{upload.uploading && <progress value={upload.progress?.fraction} />}
+{attachments.files.map((file) => <button key={file.id} onClick={() => attachments.download(file)}>{file.name}</button>)}
+```
+
+## 3. Let a proxy pass the upload
+
+A reverse proxy in front of the API needs a body limit above `max-size`: with nginx, `client_max_body_size 30m;` for the 25 MB default. With Next.js, keep the backend-for-frontend's path out of `proxy.ts`'s matcher ([web](/docs/guides/files#the-frontend)).
+
+## How it behaves
+
+- **Uploading** sends `POST /egradx/files` with `attachedType=order` and `attachedId`; the policy is asked with `WRITE`. The file is recorded as `files.file.uploaded`, with the order.
+- **The list** is the order's files the caller may read, newest first, at most 200. Without leave to read them, a caller still sees the files they uploaded.
+- **An order of another organization**, or an id that isn't one, is refused by the policy: 403 on upload, and its files are never found (404).
+- **Deleting the order** doesn't delete its files. Delete them as well, with `DELETE /egradx/files/{id}` from the frontend, or the service in your code (Java `EgradxFileService.delete`, Node `files.service.delete`, Python `files.service.delete`).
+
+## What can go wrong
+
+| Code | When |
+|---|---|
+| `ACCESS_DENIED` (403) | the policy said `DENY`, or `DEFAULT` and the caller lacks `egradx.file.write` / `.read` / `.delete` |
+| `FILE_TOO_LARGE` (413) | over `max-size`; a 413 that isn't the error envelope came from a proxy |
+| `FILE_TYPE_NOT_ALLOWED` (415) | not in `allowed-content-types` |
+| `INVALID_REQUEST` (400) | `attachedType` without `attachedId`, or the other way round |
+
+## See also
+
+- [Files](/docs/guides/files#who-may-do-what) · [Scan uploads](/docs/recipes/scan-uploads) · [Add a permission and give it to a role](/docs/recipes/add-a-permission)

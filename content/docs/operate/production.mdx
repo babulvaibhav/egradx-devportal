@@ -6,7 +6,7 @@ description: Everything to set, turn off and watch before an application on the 
 ## Secrets and keys
 
 - [ ] **The keys passphrase** (`EGRADX_KEY_PASSPHRASE`) comes from a secret store. Keep it stable: a changed passphrase can't read the keys, and everyone is signed out.
-- [ ] **The keys folder** is a volume shared by every instance, backed up, and readable only by the application. Java writes the private keys with the system's default permissions, so restrict the folder yourself.
+- [ ] **The keys folder** is a volume shared by every instance, backed up, and readable only by the application. Java writes the private keys owner-only where POSIX permissions exist; on Windows, restrict the folder yourself.
 - [ ] **The first instance starts alone** on an empty keys folder, and the others after it. See [keys](/docs/guides/keys#rules).
 - [ ] **The notification secrets passphrase** is set, so administrators can store SMTP, Slack and Twilio credentials. Java falls back to the keys passphrase. Node and Python fall back only to the environment variables `EGRADX_NOTIFICATION_SECRETS_PASSPHRASE` and `EGRADX_SECURITY_CRYPTO_PASSPHRASE`, not to the passphrase you pass in code. Without one, saving credentials fails.
 - [ ] **The issuer** is a stable identifier, the same on every instance (`egradx.auth.issuer-uri`, `issuer`).
@@ -15,7 +15,9 @@ description: Everything to set, turn off and watch before an application on the 
 
 - [ ] **The platform administrator's password** is set before the **first** start (Java `EGRADX_AUTH_PLATFORM_ADMIN_PASSWORD`; Node `auth: { platform: { adminPassword } }`; Python `AuthOptions(platform=PlatformSettings(admin_password=…))`). It is only used when the account is created. Afterwards, change it from the account itself.
 - [ ] **The demo data is gone.** The generated `Setup` creates a demo organization with `ada@example.com` and `DEMO_PASSWORD`. Remove that part, or set a strong password and remove the account after the first start.
-- [ ] **Links in emails** point at the frontend's public HTTPS address (`links.base-url`). Without it, password reset and invitations can't be sent.
+- [ ] **Links in emails** point at the frontend's public HTTPS address (`links.base-url`). Without it, password reset and invitations can't be sent, and no provider is offered.
+- [ ] **Sign-up is what you mean it to be.** `signup.mode` is `invitation` unless anyone may make an account with an organization of their own; `signup.allowed-email-domains` if only some domains may. `signup.legacy-register` stays off.
+- [ ] **Providers:** client ids and secrets (`GOOGLE_CLIENT_SECRET`, `ZOHO_CLIENT_SECRET`…) come from a secret store. `oidc.callback-base-url` is the public HTTPS address of the API (or the BFF), and each provider has exactly `{callback-base-url}/egradx/auth/oidc/{id}/callback` registered. `trust-email` is on only for providers that verify every email ([sign-in methods](/docs/guides/sign-in-methods)).
 
 ## Email
 
@@ -28,18 +30,31 @@ description: Everything to set, turn off and watch before an application on the 
 - [ ] The application's database user may create tables. Migrations run at start-up, the SDK's and yours, under an advisory lock.
 - [ ] **Retention** is set: the audit trail is kept for ever by default (`retention.default-period`). Notifications keep sent messages 30 days, dead ones 90, in-app notices 365.
 
+## Files
+
+If the application stores [files](/docs/guides/files):
+
+- [ ] **The backend is chosen.** Local disk (`local.root`) is a volume that every instance mounts and that is backed up with the database: a row without its bytes answers `FILE_STORAGE_UNAVAILABLE`. Or a bucket (`backend: s3`), with versioning or backups of its own; Java also needs `software.amazon.awssdk:s3` on the classpath ([store files in S3](/docs/recipes/store-files-in-s3)).
+- [ ] **Bucket credentials** come from a secret store, or better an instance role; the bucket is private.
+- [ ] **Limits are what you mean:** `max-size` (25 MB), `allowed-content-types` (any, by default), `profile-photo.*`. The frontend's `accept` and `maxSize` match them.
+- [ ] **Every proxy in front** allows bodies above `max-size`: nginx `client_max_body_size` (1 MB by default; OIM uses `30m`), an ingress's or load balancer's body limit, and its timeouts for a slow upload.
+- [ ] **Every kind of record with files has an access policy**, checking that the record is in the caller's organization.
+- [ ] **A scanner**, if people upload files others will open ([scan uploads](/docs/recipes/scan-uploads)).
+- [ ] **The Content-Security-Policy** allows `blob:` in `img-src` (and `frame-src` for PDFs) when tokens are in the browser; with pre-signed downloads, the bucket's origin, and CORS on the bucket for scripts that fetch from it.
+
 ## In front of the application
 
 - [ ] TLS at the load balancer or reverse proxy.
 - [ ] Buffering off for `/egradx/notifications/stream`, and idle timeouts of at least five minutes.
-- [ ] A rate limit on `/egradx/auth/login` too. The SDK's own limit counts per instance.
+- [ ] With more than one instance, `egradx-redis` and a Redis, so attempt limits, role changes and live notices are shared ([two instances](/docs/recipes/two-instances)).
+- [ ] A rate limit on `/egradx/auth/login`, `/email-code` and `/signup` at the load balancer too: the SDK's own limit stops guessing at an account, not a flood.
 - [ ] Java: Actuator's endpoints (`/actuator/prometheus`, `/actuator/metrics`) aren't public. Expose them on a management port, or protect them.
 
 ## Your code
 
 - [ ] Every endpoint names the authority it needs. An endpoint without a check is public.
 - [ ] Every query of yours filters by the caller's organization.
-- [ ] Java: the error advice is present (the generated `ApiExceptionHandler`). If you declared your own `SecurityFilterChain`, it adds the SDK's filter.
+- [ ] Java: your endpoints answer in the error envelope — `egradx-sdk`'s fallback advice does it, or keep the generated `ApiExceptionHandler` with a build of `egradx-sdk` from before the fallback. An advice of your own that catches `Exception` also handles `AccessDeniedException`. If you declared your own `SecurityFilterChain`, it adds the SDK's filter.
 - [ ] Frontend: a strict Content-Security-Policy if tokens are in `localStorage` (Vite), or the Next.js backend-for-frontend, which keeps them out of the browser.
 
 ## Watch

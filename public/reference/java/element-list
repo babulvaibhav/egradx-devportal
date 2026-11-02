@@ -12,9 +12,11 @@ com.egradx.auth.config
 com.egradx.auth.dto
 com.egradx.auth.entity
 com.egradx.auth.event
+com.egradx.auth.oidc
 com.egradx.auth.profile
 com.egradx.auth.repository
 com.egradx.auth.security
+com.egradx.auth.signin
 com.egradx.auth.support
 com.egradx.auth.token
 com.egradx.auth.web
@@ -33,6 +35,11 @@ com.egradx.events
 com.egradx.events.config
 com.egradx.events.kafka
 com.egradx.events.rabbitmq
+com.egradx.files
+com.egradx.files.config
+com.egradx.files.spi
+com.egradx.files.storage
+com.egradx.files.web
 com.egradx.grpc
 com.egradx.grpc.context
 com.egradx.grpc.interceptor
@@ -63,9 +70,10 @@ com.egradx.observability
 com.egradx.observability.config
 com.egradx.observability.logging
 com.egradx.observability.web
+com.egradx.redis
 com.egradx.sdk.config
 com.egradx.sdk.logger
-com.egradx.sdk.properties
+com.egradx.sdk.web
 com.egradx.tls.provider.configs
 com.egradx.tls.provider.utils
 com.egradx.web

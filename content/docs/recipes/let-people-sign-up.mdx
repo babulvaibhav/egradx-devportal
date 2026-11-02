@@ -1,0 +1,126 @@
+---
+title: Let people sign up
+description: Open sign-up, so anyone can make an account and an organization of their own to administer — confirmed by an emailed code, or with Google or Zoho.
+---
+
+By default, accounts come only from an administrator or an invitation. One setting opens sign-up. Each person who signs up gets a **new organization**, with the SDK's `Admin` role and them as its administrator. Joining an existing organization still takes an [invitation](/docs/recipes/invite-a-user).
+
+## 1. Open sign-up
+
+<Languages>
+<Tab value="Java">
+
+```yaml title="application.yml"
+egradx:
+  auth:
+    signup:
+      mode: organization
+      allowed-email-domains: []   # e.g. [example.com] to allow only those
+```
+
+</Tab>
+<Tab value="Node">
+
+```ts
+auth: {
+  // …
+  signup: { mode: 'organization', allowedEmailDomains: [] },
+},
+```
+
+</Tab>
+<Tab value="Python">
+
+```python
+AuthOptions(
+    # …
+    signup=SignupSettings(mode="organization", allowed_email_domains=[]),  # from egradx.sdk import SignupSettings
+)
+```
+
+</Tab>
+</Languages>
+
+The code is emailed, so email must work ([configure SMTP](/docs/recipes/configure-smtp); locally, Mailpit at `http://localhost:8025`). `GET /egradx/auth/sign-in-options` now answers `"signup": "organization"`.
+
+## 2. Make the new organization ready
+
+A signed-up organization is made like any other, so your [`onOrganizationCreated` listener](/docs/guides/identity#organizations-and-their-first-administrator) runs in its transaction. Give the `Admin` role your application's permissions there, and create any other roles: the person who signs up has nothing else to work with.
+
+## 3. The sign-up page
+
+Two steps: the details, then the code.
+
+```tsx title="frontend/src/modules/auth/SignUp.tsx"
+import { useState, type FormEvent } from 'react';
+import { EgradxApiError, type SignupStarted } from '@babulvaibhav/egradx-client';
+import { useAuth } from '@babulvaibhav/egradx-react';
+
+export function SignUp({ onSignedIn }: { onSignedIn: () => void }) {
+  const { startSignup, confirmSignup } = useAuth();
+  const [email, setEmail] = useState('');
+  const [organizationName, setOrganizationName] = useState('');
+  const [started, setStarted] = useState<SignupStarted | null>(null);
+  const [code, setCode] = useState('');
+  const [problem, setProblem] = useState<string | null>(null);
+
+  async function start(event: FormEvent) {
+    event.preventDefault();
+    try {
+      // name and password are optional: an account needs no password
+      setStarted(await startSignup({ email, organizationName }));
+    } catch (e) {
+      setProblem(e instanceof EgradxApiError ? e.code : 'Signing up failed.'); // EMAIL_IN_USE, ORGANIZATION_NAME_IN_USE…
+    }
+  }
+
+  async function confirm(event: FormEvent) {
+    event.preventDefault();
+    try {
+      await confirmSignup({ email, code }); // signed in, in the new organization
+      onSignedIn();
+    } catch (e) {
+      setProblem(e instanceof EgradxApiError ? e.code : 'That code did not work.'); // EMAIL_CODE_INVALID, _EXPIRED…
+    }
+  }
+
+  // Render the first form (start) until `started`, then the code form (confirm). `started.resendAvailableAt` says
+  // when "send again" (start once more) is allowed.
+  return null;
+}
+```
+
+Or copy the finished page in. It also offers the provider buttons, and says "by invitation" when sign-up is closed:
+
+```sh
+npx shadcn@latest add https://<this portal>/r/sign-up.json
+```
+
+With Next.js, add `/sign-up` to the guard's `publicPaths`.
+
+## Signing up with Google or Zoho
+
+Nothing more to build once [the providers are set up](/docs/recipes/sign-in-with-google-and-zoho). A provider sign-in that finds no account answers `SIGNUP_REQUIRED` with the provider's email and name. Your `/auth/callback` page asks for an organization name and calls `signUpWithProvider({ code, organizationName })` with the same code. There is no emailed code and no password: the provider has verified the email.
+
+## What can go wrong
+
+| Code | When |
+|---|---|
+| `SIGNUP_DISABLED` (403) | `signup.mode` is `invitation` |
+| `SIGNUP_EMAIL_DOMAIN_NOT_ALLOWED` (400) | the domain isn't in `allowed-email-domains` |
+| `EMAIL_IN_USE` (409) | an account has that email: sign in instead |
+| `ORGANIZATION_NAME_IN_USE` (409) | choose another name |
+| `PASSWORD_INVALID` (400) | a password was given and is not 8 to 128 characters |
+| `EMAIL_CODE_RATE_LIMITED` (400) | the code was asked for again within 60 seconds |
+| `EMAIL_CODE_UNAVAILABLE` (400) | email isn't set up |
+| `EMAIL_CODE_INVALID`, `EMAIL_CODE_EXPIRED`, `EMAIL_CODE_TOO_MANY_ATTEMPTS` (400) | a wrong, old or over-tried code: ask again |
+
+Each sign-up is recorded as `auth.signup.completed`.
+
+## The old `POST /egradx/auth/register`
+
+It made an account in no organization. It is deprecated, and answers `SIGNUP_DISABLED` unless `signup.legacy-register` (Node `legacyRegister`, Python `legacy_register`) is true. Move to sign-up.
+
+## See also
+
+- [Sign-up and sign-in methods](/docs/guides/sign-in-methods) · [HTTP: sign-up and other sign-in methods](/docs/reference/http/auth#sign-up-and-other-sign-in-methods)

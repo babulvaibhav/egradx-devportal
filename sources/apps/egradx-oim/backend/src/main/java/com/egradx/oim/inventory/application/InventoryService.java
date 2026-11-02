@@ -106,12 +106,17 @@ public class InventoryService {
             .orElseThrow(() -> new ResourceNotFoundException("Inventory not found"));
         InventoryResponse response = InventoryResponse.from(saved);
 
-        auditor.record(EgradxAuditEvent.of(OimAuditActions.INVENTORY_ADJUSTED)
+        // The reason is kept on the adjustment's audit record, which already holds the before and
+        // after quantities: that record is the adjustment history.
+        EgradxAuditEvent.Builder adjusted = EgradxAuditEvent.of(OimAuditActions.INVENTORY_ADJUSTED)
             .organization(organizationId)
             .entity("inventory", saved.getId())
             .before(beforeResponse)
-            .after(response)
-            .build());
+            .after(response);
+        if (request.reason() != null && !request.reason().isBlank()) {
+            adjusted.detail("reason", request.reason());
+        }
+        auditor.record(adjusted.build());
         notifications.inventoryUpdated(organizationId, response);
         notifyIfLowStockCrossed(organizationId, saved, -request.quantity());
         dashboardCacheEvictor.evict(organizationId);

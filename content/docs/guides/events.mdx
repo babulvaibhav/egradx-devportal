@@ -114,7 +114,7 @@ RabbitMQ: a topic exchange `egradx.events`, routed by type; a quorum queue `egra
 
 ## Starting it (Node and Python)
 
-Java starts everything when the package is on the classpath. Node and Python start it themselves: migrate its tables (`migrateEvents` / `migrate_events` — `migrateEgradx` doesn't include them), then `await events.start()`, and `await events.close()` at shutdown. The examples' `backend/src/app.ts` (Node) and `backend/src/notes/app.py` (Python) show the order.
+Java starts everything when the package is on the classpath. Node and Python start it themselves: migrate its tables (`migrateEgradx` / `migrate_egradx` include them when the events package is installed; `migrateEvents` / `migrate_events` migrate them alone), then `await events.start()`, and `await events.close()` at shutdown. The examples' `backend/src/app.ts` (Node) and `backend/src/notes/app.py` (Python) show the order.
 
 ## Ordering
 

@@ -1,6 +1,6 @@
 ---
 title: Troubleshooting
-description: The symptoms people actually hit with the SDK, what causes them, and the fix — sign-in, permissions, migrations, email, events and the browser.
+description: The symptoms people actually hit with the SDK, what causes them, and the fix — sign-in, permissions, migrations, email, files, events and the browser.
 ---
 
 ## Sign-in and sessions
@@ -21,6 +21,22 @@ The issuer differs between instances, or one of them can't read the keys (a diff
 
 The person belongs to several organizations. Sign in again with `organizationId` set to one from `details.organizations`. The generated login form does this.
 
+### The Google or Zoho button doesn't appear
+
+The provider was left out at startup, which logs what it needs: its client id and secret, `oidc.callback-base-url`, and `links.base-url`. `GET /egradx/auth/sign-in-options` lists the providers on offer. See [sign-in methods](/docs/guides/sign-in-methods#configuration).
+
+### The provider says `redirect_uri_mismatch`
+
+The redirect URI registered with the provider must be exactly `{callback-base-url}/egradx/auth/oidc/{id}/callback`: same scheme, host, port and path prefix, no trailing slash. Behind the Next.js backend-for-frontend, `callback-base-url` is the BFF's public prefix.
+
+### `/auth/callback?error=OIDC_FAILED`
+
+The code exchange or the ID token check failed: a wrong client secret, a custom provider's wrong `issuer`, the API unable to reach the provider, or a clock more than 60 seconds off. The API's log says which. `OIDC_STATE_INVALID` means the round trip took over 10 minutes or was replayed.
+
+### `EMAIL_CODE_UNAVAILABLE`, or no "email me a code"
+
+Nothing delivers account messages, or `email-code.enabled` is false. Email must work ([configure SMTP](/docs/recipes/configure-smtp)). `egradx-sdk` includes the sender in every language (`egradx-notification-auth`); an application wiring the packages one by one adds it.
+
 ### The platform administrator gets 403 on my endpoints
 
 That is by design: the platform administrator holds every SDK authority and none of yours. To work inside an organization they need a membership there.
@@ -33,7 +49,12 @@ On other instances, a role's authorities are cached for up to 60 seconds. If it 
 
 ### My endpoint answers 500 for a `NotFoundException` (Java)
 
-A Java application on `egradx-sdk` alone doesn't put its own endpoints' errors in the envelope. Add the error advice that generated projects have (`ApiExceptionHandler`): see [errors](/docs/guides/errors#wiring-the-envelope-in). If your advice has a catch-all `@ExceptionHandler(Exception.class)`, it also catches `AccessDeniedException`, so refusals become 500s. Handle that exception too, as the generated one does.
+`egradx-sdk` answers your endpoints in the envelope through its fallback advice, `EgradxApplicationExceptionHandler` ([errors](/docs/guides/errors#wiring-the-envelope-in)). If you still get Spring Boot's format:
+
+- Your `egradx-sdk` 1.0.0 predates the fallback (it ships with the next republish; see [what's new](/docs/whats-new)): keep the generated `ApiExceptionHandler`, or fetch the package again.
+- `egradx.errors.fallback.enabled` is `false`.
+
+If refusals come back as 500s, your own advice has a catch-all `@ExceptionHandler(Exception.class)`: it answers before the fallback and catches `AccessDeniedException` too. Handle that exception as well, as the generated advice does, or handle only your own exceptions.
 
 ### Node: errors come back as HTML
 
@@ -78,6 +99,34 @@ A proxy is buffering `/egradx/notifications/stream`. Turn buffering off for it. 
 ### The application doesn't start: a template uses an undeclared variable
 
 Add the variable to the type's `requires` / `optional`, or fix the template. The message names both.
+
+## Files
+
+### Uploads fail with a bare 413
+
+A proxy in front of the API refused the body before the API saw it: the answer is not the error envelope, so the client reports `HTTP_413` rather than `FILE_TOO_LARGE`. nginx allows 1 MB by default. Raise its limit above `egradx.files.max-size` (`client_max_body_size 30m;` for the 25 MB default), and any ingress's or load balancer's too. The API's own refusal is `FILE_TOO_LARGE` in the envelope.
+
+### With Next.js, uploads over 10 MB arrive broken
+
+`proxy.ts`'s matcher includes the backend-for-frontend's path, so the proxy holds the body and cuts it at `experimental.proxyClientMaxBodySize` (10 MB). Exclude the path, as the generated matcher does (`/((?!bff/|_next/|favicon.ico).*)`), or raise that setting above `max-size`.
+
+### Images and photos don't show
+
+- **A plain `<img src>` with tokens in the browser** (Vite): the browser sends no bearer token, so the API answers 401. Use `useFileObjectUrl`, `useProfilePhoto` or `client.files.displayUrl`, which download with the session.
+- **They download, but stay blank:** the Content-Security-Policy refuses the `blob:` URL. Add `blob:` to `img-src` (and to `frame-src` for PDFs shown in a frame).
+- **Another organization's photo** answers 404: photos are readable only in the organization they were uploaded in.
+
+### A download fails from a script with pre-signed downloads on
+
+The API answers 302 to the bucket, and the browser's `fetch()` of the bucket is cross-origin. Allow your frontend's origin on the bucket with a CORS rule: `GET` (and `HEAD`), the `Range` header, and `Content-Disposition`, `Content-Length` and `ETag` exposed. `<img>` and links don't need it. The bucket's address must also be one the browser can reach.
+
+### `FILE_STORAGE_UNAVAILABLE`
+
+The backend can't be reached: on local disk, the folder isn't writable by the application (in a container, the volume's owner); on S3, a wrong endpoint, bucket, region or keys, a bucket that doesn't exist, or `path-style` off for a store that needs it. The application's log has the cause. Java with `backend: s3` doesn't start at all without `software.amazon.awssdk:s3` on the classpath.
+
+### `ACCESS_DENIED` on a record's files
+
+The record's access policy said `DENY`, or `DEFAULT` and the caller lacks `egradx.file.read`, `.write` or `.delete`. Only Admin roles hold those by default. Check the policy for that `attachedType`, and that it finds the record in the caller's organization.
 
 ## Events
 

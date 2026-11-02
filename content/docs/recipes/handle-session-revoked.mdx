@@ -1,15 +1,15 @@
 ---
 title: Handle SESSION_REVOKED in the frontend
-description: When a session ends elsewhere — password changed, signed out everywhere, organization suspended — send the person to sign in, and say why.
+description: When a session ends elsewhere — password changed, signed out everywhere, ended from another device, organization suspended — send the person to sign in, and say why.
 ---
 
 ## What happens
 
-An access token lasts 60 minutes, but the SDK checks on every request that its session is still valid. When it isn't, the request gets 401 `SESSION_EXPIRED`. The client then tries to renew, once. The refresh is refused with the reason:
+An access token lasts 60 minutes, but the SDK checks on every request that its session (the token's `sid`) is still going. When it isn't, the request gets 401 `SESSION_EXPIRED`. The client then tries to renew, once. The refresh is refused with the reason:
 
 | Code | Why |
 |---|---|
-| `SESSION_REVOKED` | the person changed their password, reset it, or signed out everywhere |
+| `SESSION_REVOKED` | the person changed their password, reset it, or signed out everywhere; ended this session from another device ([list and end sessions](/docs/recipes/list-and-end-sessions)); or a replaced refresh token was sent again after the 30-second grace, which ends the whole session as a stolen copy |
 | `ORG_SUSPENDED` | their organization was suspended |
 | `AUTH_REFRESH_TOKEN_INVALID` | they were deactivated, or the refresh token expired (after 7 days), was revoked or is unknown |
 
@@ -30,12 +30,13 @@ Your page guard already sends the person there:
 ## Things not to do
 
 - **Don't retry on a 401 yourself.** The client renews once, and shares one renewal between all waiting requests. A loop of your own turns a revoked session into a storm of refreshes.
+- **Don't keep a refresh token of your own.** Every refresh replaces it, and the client stores the new one. A copy you kept and send later, past the grace, ends the session.
 - **Don't treat a coded 403 as a session problem.** `ACCESS_DENIED` is a decision about one action. The session is fine.
 - **Don't keep showing data.** When the session ends, clear what you cached for it (key caches by `sessionScope(session)`).
 
 ## With Next.js
 
-The backend-for-frontend renews in the server. When the API refuses, it answers with the header `X-Egradx-Session-Ended` and the API's refusal as the body. The client ends its session the same way and calls `onSessionEnded` with the same codes.
+The backend-for-frontend renews in the server — in `proxy.ts`'s guard before a page renders, and on a call that needs it — and never presents a replaced refresh token. A session the API has ended sends a page to sign in, its cookies cleared. On a call, when the API refuses, it answers with the header `X-Egradx-Session-Ended` and the API's refusal as the body. The client ends its session the same way and calls `onSessionEnded` with the same codes.
 
 ## See also
 

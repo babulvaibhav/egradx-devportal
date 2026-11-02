@@ -1,0 +1,398 @@
+openapi: 3.1.0
+info:
+  title: EGRADX files API
+  version: 1.0.0
+tags:
+- description: "Upload, list, download and delete files in the signed-in person's\
+    \ organization. Needs a signed-in session in an organization. Files of another\
+    \ organization answer 404."
+  name: Files
+paths:
+  /egradx/auth/my/profile/photo:
+    delete:
+      description: Deletes the photo and clears `photoUrl`. Needs a signed-in session.
+      operationId: remove
+      responses:
+        "204":
+          description: No Content
+      summary: Remove your profile photo
+      tags:
+      - Files
+    put:
+      description: "Multipart `file`: PNG, JPEG or WebP, at most 5 MB by default.\
+        \ Replaces the earlier photo and returns the profile, whose `photoUrl` is\
+        \ the photo's `/egradx/files/{id}/content`, readable by everyone in the organization.\
+        \ Needs a signed-in session in an organization. Refuses with `FILE_EMPTY`\
+        \ (400), `FILE_TOO_LARGE` (413) and `FILE_TYPE_NOT_ALLOWED` (415)."
+      operationId: set
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+              required:
+              - file
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxUserProfileDto"
+          description: OK
+      summary: Set your profile photo
+      tags:
+      - Files
+  /egradx/files:
+    get:
+      description: "The files attached to one application record and readable by the\
+        \ caller, newest first, at most 200."
+      operationId: list
+      parameters:
+      - in: query
+        name: attachedType
+        required: true
+        schema:
+          type: string
+      - in: query
+        name: attachedId
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EgradxFileDto"
+          description: OK
+      summary: List a record's files
+      tags:
+      - Files
+    post:
+      description: "Multipart: `file`, and optionally `purpose` (default `attachment`),\
+        \ `attachedType` and `attachedId` (the application record it belongs to; both\
+        \ or neither). Needs `egradx.file.write`, or the record's access check allowing\
+        \ it. Refuses with `FILE_EMPTY` (400), `FILE_TOO_LARGE` (413), `FILE_TYPE_NOT_ALLOWED`\
+        \ (415), `FILE_REJECTED` (422) and `FILE_STORAGE_UNAVAILABLE` (503)."
+      operationId: upload
+      parameters:
+      - in: query
+        name: purpose
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: attachedType
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: attachedId
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+              required:
+              - file
+      responses:
+        "201":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxFileDto"
+          description: Created
+      summary: Upload a file
+      tags:
+      - Files
+  /egradx/files/{fileId}:
+    delete:
+      description: The uploader may always delete their own; others need `egradx.file.delete`
+        or the record's access check allowing it. Refuses with `NOT_FOUND` (404) and
+        `ACCESS_DENIED` (403).
+      operationId: delete
+      parameters:
+      - in: path
+        name: fileId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "204":
+          description: No Content
+      summary: Delete a file
+      tags:
+      - Files
+    get:
+      description: Refuses with `NOT_FOUND` (404) and `ACCESS_DENIED` (403).
+      operationId: get
+      parameters:
+      - in: path
+        name: fileId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxFileDto"
+          description: OK
+      summary: Get a file's details
+      tags:
+      - Files
+  /egradx/files/{fileId}/content:
+    get:
+      description: "The bytes, with `Content-Disposition` (inline for images and PDF),\
+        \ `ETag` and `Accept-Ranges`; one `Range` answers 206. With pre-signed downloads\
+        \ on, a 302 to a short-lived URL instead. Refuses with `NOT_FOUND` (404),\
+        \ `ACCESS_DENIED` (403) and `FILE_STORAGE_UNAVAILABLE` (503)."
+      operationId: content
+      parameters:
+      - in: path
+        name: fileId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - in: header
+        name: Range
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                type: string
+                format: binary
+          description: OK
+      summary: Download a file
+      tags:
+      - Files
+components:
+  schemas:
+    EgradxContactDto:
+      type: object
+      properties:
+        address:
+          type:
+          - string
+          - "null"
+        channel:
+          type:
+          - string
+          - "null"
+        createdAt:
+          type:
+          - string
+          - "null"
+          format: date-time
+        id:
+          type:
+          - string
+          - "null"
+          format: uuid
+        label:
+          type:
+          - string
+          - "null"
+        organizationId:
+          type:
+          - string
+          - "null"
+          format: uuid
+        primary:
+          type:
+          - boolean
+          - "null"
+        updatedAt:
+          type:
+          - string
+          - "null"
+          format: date-time
+        verified:
+          type:
+          - boolean
+          - "null"
+        verifiedAt:
+          type:
+          - string
+          - "null"
+          format: date-time
+    EgradxFileDto:
+      type: object
+      properties:
+        attachedId:
+          type:
+          - string
+          - "null"
+        attachedType:
+          type:
+          - string
+          - "null"
+        contentType:
+          type:
+          - string
+          - "null"
+        contentUrl:
+          type:
+          - string
+          - "null"
+        createdAt:
+          type:
+          - string
+          - "null"
+          format: date-time
+        id:
+          type:
+          - string
+          - "null"
+          format: uuid
+        name:
+          type:
+          - string
+          - "null"
+        organizationId:
+          type:
+          - string
+          - "null"
+          format: uuid
+        purpose:
+          type:
+          - string
+          - "null"
+        sha256:
+          type:
+          - string
+          - "null"
+        size:
+          type:
+          - integer
+          - "null"
+          format: int64
+        uploadedBy:
+          type:
+          - string
+          - "null"
+          format: uuid
+    EgradxPostalAddressDto:
+      type: object
+      properties:
+        city:
+          type:
+          - string
+          - "null"
+          maxLength: 120
+          minLength: 0
+        countryCode:
+          type:
+          - string
+          - "null"
+          maxLength: 2
+          minLength: 0
+        line1:
+          type:
+          - string
+          - "null"
+          maxLength: 255
+          minLength: 0
+        line2:
+          type:
+          - string
+          - "null"
+          maxLength: 255
+          minLength: 0
+        postalCode:
+          type:
+          - string
+          - "null"
+          maxLength: 32
+          minLength: 0
+        region:
+          type:
+          - string
+          - "null"
+          maxLength: 120
+          minLength: 0
+    EgradxUserProfileDto:
+      type: object
+      properties:
+        address:
+          anyOf:
+          - $ref: "#/components/schemas/EgradxPostalAddressDto"
+          - type: "null"
+        attributes:
+          type:
+          - object
+          - "null"
+          additionalProperties: {}
+        contacts:
+          type:
+          - array
+          - "null"
+          items:
+            $ref: "#/components/schemas/EgradxContactDto"
+        displayName:
+          type:
+          - string
+          - "null"
+        email:
+          type:
+          - string
+          - "null"
+        firstName:
+          type:
+          - string
+          - "null"
+        jobTitle:
+          type:
+          - string
+          - "null"
+        lastName:
+          type:
+          - string
+          - "null"
+        locale:
+          type:
+          - string
+          - "null"
+        photoUrl:
+          type:
+          - string
+          - "null"
+        timeZone:
+          type:
+          - string
+          - "null"
+        updatedAt:
+          type:
+          - string
+          - "null"
+          format: date-time
+        userId:
+          type:
+          - string
+          - "null"
+          format: uuid
+        username:
+          type:
+          - string
+          - "null"

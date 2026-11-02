@@ -236,3 +236,24 @@ def order_routes(oim: Oim, inventory: InventoryOperations, router: APIRouter) ->
     router.add_api_route("/v1/orders/{id}", get, methods=["GET"])
     router.add_api_route("/v1/orders/{id}/status", change_status, methods=["PATCH"])
 
+
+
+def order_file_access(engine: Any) -> Any:
+    """Who may see and add an order's attachments (egradx-file-storage, attachedType ``order``), as Java's OrderFileAccess:
+    those who may see the order may see its files; those who may create orders may add and delete them. An id that is not
+    an order of the caller's organization is refused."""
+    from egradx.core import is_uuid
+    from egradx.files import FileAction, FileDecision
+
+    async def decide(request: Any) -> FileDecision:
+        if not is_uuid(request.attached_id):
+            return FileDecision.DENY
+        async with engine.connect() as connection:
+            found = (await connection.execute(text("SELECT 1 FROM orders WHERE id = CAST(:id AS uuid) AND organization_id = CAST(:org AS uuid)"),
+                                              {"id": request.attached_id, "org": request.organization_id})).first()
+        if found is None:
+            return FileDecision.DENY
+        needed = Permissions.ORDER_READ if request.action == FileAction.READ else Permissions.ORDER_CREATE
+        return FileDecision.ALLOW if needed in request.authorities else FileDecision.DENY
+
+    return decide

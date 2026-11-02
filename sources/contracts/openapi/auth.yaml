@@ -8,6 +8,10 @@ tags:
     \ are those that apply everywhere plus those scoped to the organization the session\
     \ is in."
   name: Your profile
+- description: "What a sign-in page can offer, signing up with a new organization,\
+    \ signing in with an emailed code, and signing in with Google, Zoho or another\
+    \ OpenID Connect provider. All public."
+  name: Sign-up and other sign-in methods
 - description: "The signed-in person's own account: password, sessions, organizations\
     \ and sign-in email. Needs only a signed-in session. Changing the password and\
     \ signing out everywhere end every session, this one included, and return a fresh\
@@ -70,6 +74,48 @@ paths:
       summary: Get which account flows this deployment offers
       tags:
       - Sign-in and sessions
+  /egradx/auth/email-code:
+    post:
+      description: "Sends a six-digit code to the account at the address, if there\
+        \ is an active one; the answer is 204 either way. Refuses with `EMAIL_CODE_UNAVAILABLE`\
+        \ (400) when codes are not offered here, and `AUTH_TOO_MANY_ATTEMPTS` (429)\
+        \ after too many requests."
+      operationId: sendSignInCode
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EgradxEmailCodeRequest"
+        required: true
+      responses:
+        "204":
+          description: No Content
+      summary: Email a sign-in code
+      tags:
+      - Sign-up and other sign-in methods
+  /egradx/auth/email-code/verify:
+    post:
+      description: "Signs in with the code and returns the session. Refuses with `EMAIL_CODE_INVALID`,\
+        \ `EMAIL_CODE_EXPIRED`, `EMAIL_CODE_TOO_MANY_ATTEMPTS` (400), `ORG_SELECTION_REQUIRED`\
+        \ (400, the code kept: send it again with `organizationId`), `ORG_ACCESS_DENIED`\
+        \ and `ORG_SUSPENDED` (403), and `AUTH_TOO_MANY_ATTEMPTS` (429)."
+      operationId: verifySignInCode
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EgradxVerifyEmailCodeRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxAuthResult"
+          description: OK
+      summary: Sign in with an emailed code
+      tags:
+      - Sign-up and other sign-in methods
   /egradx/auth/invitations/{token}:
     get:
       description: "What an invitation link is for: the organization, the address\
@@ -818,6 +864,25 @@ paths:
       summary: Replace a role's permissions in your organization
       tags:
       - "Your organization: roles"
+  /egradx/auth/my/sessions:
+    get:
+      description: "Where the signed-in person is signed in: every session still going,\
+        \ the most recently used first, with the device it said it was, its address,\
+        \ its organization and when it ends; the session asking is marked `current`.\
+        \ Needs a signed-in session."
+      operationId: sessions
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EgradxSessionDto"
+          description: OK
+      summary: List your sessions
+      tags:
+      - Your account
   /egradx/auth/my/sessions/revoke-all:
     post:
       description: "Ends every session the person has, on every device, and returns\
@@ -832,6 +897,87 @@ paths:
                 $ref: "#/components/schemas/EgradxAuthResult"
           description: OK
       summary: Sign out everywhere
+      tags:
+      - Your account
+  /egradx/auth/my/sessions/{sessionId}:
+    delete:
+      description: "Signs one device out: the session's refresh token stops working\
+        \ at once, and its access token on its next request. Ending the session asking\
+        \ signs this device out. Needs a signed-in session. Refuses with `NOT_FOUND`\
+        \ (404) when it is not one of the person's sessions still going."
+      operationId: endSession
+      parameters:
+      - in: path
+        name: sessionId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: OK
+      summary: End one of your sessions
+      tags:
+      - Your account
+  /egradx/auth/my/sign-in-methods:
+    get:
+      description: "Whether the person has a password, and the providers (Google,\
+        \ Zoho, …) linked to the account. Needs a signed-in session."
+      operationId: signInMethods
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxSignInMethodsDto"
+          description: OK
+      summary: List how you can sign in
+      tags:
+      - Your account
+  /egradx/auth/my/sign-in-methods/identities/{identityId}:
+    delete:
+      description: "Needs a signed-in session. Refuses with `SIGN_IN_METHOD_REQUIRED`\
+        \ (400) when it would leave no way to sign in, and `NOT_FOUND` (404)."
+      operationId: unlinkProvider
+      parameters:
+      - in: path
+        name: identityId
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "204":
+          description: No Content
+      summary: Remove a linked provider
+      tags:
+      - Your account
+  /egradx/auth/my/sign-in-methods/oidc/{provider}:
+    post:
+      description: "Returns the provider's address for the browser to go to; on coming\
+        \ back, the provider is linked to this account and the frontend's callback\
+        \ page gets `linked` (or `error`: `IDENTITY_IN_USE` when another account has\
+        \ it). Needs a signed-in session. Refuses with `OIDC_PROVIDER_UNKNOWN` (404)."
+      operationId: linkProvider
+      parameters:
+      - in: path
+        name: provider
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EgradxLinkProviderRequest"
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxAuthorizationUrlDto"
+          description: OK
+      summary: Link a provider
       tags:
       - Your account
   /egradx/auth/my/users:
@@ -1245,6 +1391,105 @@ paths:
       summary: Replace a member's communication preferences
       tags:
       - Member profiles
+  /egradx/auth/oidc/exchange:
+    post:
+      description: "Trades the `code` from the callback for a session. An account\
+        \ already linked, or with the same email when the provider is trusted, is\
+        \ signed in. Refuses with `OIDC_CODE_INVALID`, `OIDC_EMAIL_NOT_VERIFIED` and\
+        \ `ORG_SELECTION_REQUIRED` (400, the code kept), `AUTH_NO_ACCOUNT` (403),\
+        \ `IDENTITY_LINK_REQUIRED` (409) and `SIGNUP_REQUIRED` (409, the code kept;\
+        \ `details` carry the email and name to sign up with)."
+      operationId: exchange
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EgradxOidcExchangeRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxAuthResult"
+          description: OK
+      summary: Exchange a provider sign-in for a session
+      tags:
+      - Sign-up and other sign-in methods
+  /egradx/auth/oidc/signup:
+    post:
+      description: "After `SIGNUP_REQUIRED`: makes the account (no password), a new\
+        \ organization it administers, links the provider, and returns a session there.\
+        \ Refuses with `SIGNUP_DISABLED` (403), `OIDC_CODE_INVALID`, `OIDC_EMAIL_NOT_VERIFIED`,\
+        \ `SIGNUP_EMAIL_DOMAIN_NOT_ALLOWED` (400), and `EMAIL_IN_USE`, `ORGANIZATION_NAME_IN_USE`,\
+        \ `IDENTITY_IN_USE` (409)."
+      operationId: signup
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EgradxOidcSignupRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxAuthResult"
+          description: Created
+      summary: Sign up with a provider
+      tags:
+      - Sign-up and other sign-in methods
+  /egradx/auth/oidc/{provider}/callback:
+    get:
+      description: "Where the provider sends the browser back. Redirects (302) to\
+        \ the frontend's callback page with `code` to exchange, `linked` after linking\
+        \ from the profile, or `error` (`OIDC_CANCELLED`, `OIDC_STATE_INVALID`, `OIDC_FAILED`,\
+        \ `IDENTITY_IN_USE`), and `returnTo`."
+      operationId: callback
+      parameters:
+      - in: path
+        name: provider
+        required: true
+        schema:
+          type: string
+      - in: query
+        name: parameters
+        required: true
+        schema:
+          type: object
+          additionalProperties:
+            type: string
+      responses:
+        "302":
+          description: Found
+      summary: The provider's callback
+      tags:
+      - Sign-up and other sign-in methods
+  /egradx/auth/oidc/{provider}/start:
+    get:
+      description: "For the browser to navigate to: redirects (302) to the provider.\
+        \ `returnTo` is a path on the frontend handed back afterwards. Refuses with\
+        \ `OIDC_PROVIDER_UNKNOWN` (404), and `OIDC_FAILED` (400) when the provider\
+        \ cannot be reached."
+      operationId: start
+      parameters:
+      - in: path
+        name: provider
+        required: true
+        schema:
+          type: string
+      - in: query
+        name: returnTo
+        required: false
+        schema:
+          type: string
+      responses:
+        "302":
+          description: Found
+      summary: Start signing in with a provider
+      tags:
+      - Sign-up and other sign-in methods
   /egradx/auth/organizations:
     get:
       description: "A page of every organization, optionally narrowed by `search`\
@@ -2252,11 +2497,15 @@ paths:
       - Permissions
   /egradx/auth/refresh:
     post:
-      description: "Exchanges a refresh token for a new access token in the same organization;\
-        \ the refresh token itself comes back unchanged. Public. Refuses with `AUTH_REFRESH_TOKEN_INVALID`\
-        \ (401) for an unknown, expired or revoked token or a deactivated user, `SESSION_REVOKED`\
-        \ (401) when the person's sessions were ended by a password change or sign-out\
-        \ everywhere, and `ORG_SUSPENDED` (403)."
+      description: "Exchanges a refresh token for a new access token and a new refresh\
+        \ token, in the same session and organization; keep the new refresh token,\
+        \ since the one sent is replaced. A replaced token still renews the session\
+        \ for a short grace (two callers refreshing at once); sent after that, it\
+        \ ends the whole session. Public. Refuses with `AUTH_REFRESH_TOKEN_INVALID`\
+        \ (401) for an unknown, expired or revoked token, a signed-out session or\
+        \ a deactivated user, `SESSION_REVOKED` (401) when the session was ended elsewhere\
+        \ (a password change, sign-out everywhere, ended from another device, a replaced\
+        \ token sent again), and `ORG_SUSPENDED` (403)."
       operationId: refresh
       requestBody:
         content:
@@ -2276,10 +2525,12 @@ paths:
       - Sign-in and sessions
   /egradx/auth/register:
     post:
+      deprecated: true
       description: "Creates an account that belongs to no organization yet; an administrator\
-        \ adds it to one afterwards. Public. Refuses a password outside the length\
-        \ rule with `PASSWORD_INVALID` (400), and a username or email already in use\
-        \ with `CONFLICT` (409)."
+        \ adds it to one afterwards. Deprecated: use `POST /egradx/auth/signup`. Public,\
+        \ and only with `egradx.auth.signup.legacy-register: true`, else `SIGNUP_DISABLED`\
+        \ (403). Refuses a password outside the length rule with `PASSWORD_INVALID`\
+        \ (400), and a username or email already in use with `CONFLICT` (409)."
       operationId: register
       requestBody:
         content:
@@ -2294,9 +2545,72 @@ paths:
               schema:
                 $ref: "#/components/schemas/EgradxUserDto"
           description: OK
-      summary: Register a new user
+      summary: Register a new user (deprecated)
       tags:
       - Sign-in and sessions
+  /egradx/auth/sign-in-options:
+    get:
+      description: "Whether signing in with an emailed code is available, whether\
+        \ anyone may sign up (`signup`: `invitation` or `organization`), and the providers\
+        \ to show buttons for."
+      operationId: signInOptions
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxSignInOptionsDto"
+          description: OK
+      summary: What a sign-in page can offer
+      tags:
+      - Sign-up and other sign-in methods
+  /egradx/auth/signup:
+    post:
+      description: "Emails a code that completes the sign-up; asking again replaces\
+        \ it. Only when `egradx.auth.signup.mode` is `organization`, else `SIGNUP_DISABLED`\
+        \ (403). Refuses with `SIGNUP_EMAIL_DOMAIN_NOT_ALLOWED`, `PASSWORD_INVALID`,\
+        \ `EMAIL_CODE_RATE_LIMITED`, `EMAIL_CODE_UNAVAILABLE` (400), `EMAIL_IN_USE`\
+        \ and `ORGANIZATION_NAME_IN_USE` (409), and `AUTH_TOO_MANY_ATTEMPTS` (429)."
+      operationId: startSignup
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EgradxStartSignupRequest"
+        required: true
+      responses:
+        "202":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxSignupStartedDto"
+          description: Accepted
+      summary: Sign up
+      tags:
+      - Sign-up and other sign-in methods
+  /egradx/auth/signup/confirm:
+    post:
+      description: "Makes the account and a new organization it administers, and returns\
+        \ a session there. Refuses with `SIGNUP_DISABLED` (403), `EMAIL_CODE_INVALID`,\
+        \ `EMAIL_CODE_EXPIRED`, `EMAIL_CODE_TOO_MANY_ATTEMPTS` (400), `EMAIL_IN_USE`\
+        \ and `ORGANIZATION_NAME_IN_USE` (409), and `AUTH_TOO_MANY_ATTEMPTS` (429)."
+      operationId: confirmSignup
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EgradxConfirmSignupRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EgradxAuthResult"
+          description: Created
+      summary: Complete a sign-up
+      tags:
+      - Sign-up and other sign-in methods
 components:
   schemas:
     Account:
@@ -2473,11 +2787,20 @@ components:
           type:
           - string
           - "null"
+    EgradxAuthorizationUrlDto:
+      type: object
+      properties:
+        authorizationUrl:
+          type:
+          - string
+          - "null"
     EgradxChangePasswordRequest:
       type: object
       properties:
         currentPassword:
-          type: string
+          type:
+          - string
+          - "null"
           maxLength: 128
           minLength: 0
         newPassword:
@@ -2485,7 +2808,6 @@ components:
           maxLength: 128
           minLength: 8
       required:
-      - currentPassword
       - newPassword
     EgradxCommunicationPreferenceDto:
       type: object
@@ -2528,6 +2850,20 @@ components:
           minLength: 0
       required:
       - code
+    EgradxConfirmSignupRequest:
+      type: object
+      properties:
+        code:
+          type: string
+          maxLength: 32
+          minLength: 0
+        email:
+          type: string
+          maxLength: 255
+          minLength: 0
+      required:
+      - code
+      - email
     EgradxContactDto:
       type: object
       properties:
@@ -2684,7 +3020,9 @@ components:
           type: string
           minLength: 1
         password:
-          type: string
+          type:
+          - string
+          - "null"
           maxLength: 128
           minLength: 8
         roleId:
@@ -2697,7 +3035,6 @@ components:
       required:
       - email
       - name
-      - password
       - roleId
     EgradxCreateRoleRequest:
       type: object
@@ -2735,6 +3072,15 @@ components:
           - string
           - "null"
           format: date-time
+    EgradxEmailCodeRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          maxLength: 255
+          minLength: 0
+      required:
+      - email
     EgradxForgotPasswordRequest:
       type: object
       properties:
@@ -2841,6 +3187,15 @@ components:
           type:
           - string
           - "null"
+    EgradxLinkProviderRequest:
+      type: object
+      properties:
+        returnTo:
+          type:
+          - string
+          - "null"
+          maxLength: 1024
+          minLength: 0
     EgradxLoginRequest:
       type: object
       properties:
@@ -2891,6 +3246,40 @@ components:
           type:
           - string
           - "null"
+    EgradxOidcExchangeRequest:
+      type: object
+      properties:
+        code:
+          type: string
+          maxLength: 200
+          minLength: 0
+        invitationToken:
+          type:
+          - string
+          - "null"
+          maxLength: 200
+          minLength: 0
+        organizationId:
+          type:
+          - string
+          - "null"
+          format: uuid
+      required:
+      - code
+    EgradxOidcSignupRequest:
+      type: object
+      properties:
+        code:
+          type: string
+          maxLength: 200
+          minLength: 0
+        organizationName:
+          type: string
+          maxLength: 255
+          minLength: 0
+      required:
+      - code
+      - organizationName
     EgradxOrganizationDto:
       type: object
       properties:
@@ -3162,6 +3551,84 @@ components:
           - "null"
           items:
             $ref: "#/components/schemas/EgradxAuthorityDto"
+    EgradxSessionDto:
+      type: object
+      properties:
+        createdAt:
+          type:
+          - string
+          - "null"
+          format: date-time
+        current:
+          type:
+          - boolean
+          - "null"
+        expiresAt:
+          type:
+          - string
+          - "null"
+          format: date-time
+        id:
+          type:
+          - string
+          - "null"
+          format: uuid
+        ipAddress:
+          type:
+          - string
+          - "null"
+        lastUsedAt:
+          type:
+          - string
+          - "null"
+          format: date-time
+        organizationId:
+          type:
+          - string
+          - "null"
+          format: uuid
+        organizationName:
+          type:
+          - string
+          - "null"
+        userAgent:
+          type:
+          - string
+          - "null"
+    EgradxSignInMethodsDto:
+      type: object
+      properties:
+        identities:
+          type:
+          - array
+          - "null"
+          items:
+            $ref: "#/components/schemas/Identity"
+        password:
+          type:
+          - boolean
+          - "null"
+    EgradxSignInOptionsDto:
+      type: object
+      properties:
+        emailCode:
+          type:
+          - boolean
+          - "null"
+        password:
+          type:
+          - boolean
+          - "null"
+        providers:
+          type:
+          - array
+          - "null"
+          items:
+            $ref: "#/components/schemas/Provider"
+        signup:
+          type:
+          - string
+          - "null"
     EgradxSignupRequest:
       type: object
       properties:
@@ -3183,11 +3650,30 @@ components:
       - email
       - password
       - username
+    EgradxSignupStartedDto:
+      type: object
+      properties:
+        email:
+          type:
+          - string
+          - "null"
+        expiresAt:
+          type:
+          - string
+          - "null"
+          format: date-time
+        resendAvailableAt:
+          type:
+          - string
+          - "null"
+          format: date-time
     EgradxStartEmailChangeRequest:
       type: object
       properties:
         currentPassword:
-          type: string
+          type:
+          - string
+          - "null"
           maxLength: 128
           minLength: 0
         newEmail:
@@ -3195,8 +3681,33 @@ components:
           maxLength: 255
           minLength: 0
       required:
-      - currentPassword
       - newEmail
+    EgradxStartSignupRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          maxLength: 255
+          minLength: 0
+        name:
+          type:
+          - string
+          - "null"
+          maxLength: 255
+          minLength: 0
+        organizationName:
+          type: string
+          maxLength: 255
+          minLength: 0
+        password:
+          type:
+          - string
+          - "null"
+          maxLength: 128
+          minLength: 0
+      required:
+      - email
+      - organizationName
     EgradxSwitchOrganizationRequest:
       type: object
       properties:
@@ -3408,6 +3919,55 @@ components:
           type:
           - string
           - "null"
+    EgradxVerifyEmailCodeRequest:
+      type: object
+      properties:
+        code:
+          type: string
+          maxLength: 32
+          minLength: 0
+        email:
+          type: string
+          maxLength: 255
+          minLength: 0
+        organizationId:
+          type:
+          - string
+          - "null"
+          format: uuid
+      required:
+      - code
+      - email
+    Identity:
+      type: object
+      properties:
+        createdAt:
+          type:
+          - string
+          - "null"
+          format: date-time
+        email:
+          type:
+          - string
+          - "null"
+        id:
+          type:
+          - string
+          - "null"
+          format: uuid
+        lastUsedAt:
+          type:
+          - string
+          - "null"
+          format: date-time
+        provider:
+          type:
+          - string
+          - "null"
+        providerName:
+          type:
+          - string
+          - "null"
     Membership:
       type: object
       properties:
@@ -3608,6 +4168,17 @@ components:
           - string
           - "null"
           format: uuid
+    Provider:
+      type: object
+      properties:
+        id:
+          type:
+          - string
+          - "null"
+        name:
+          type:
+          - string
+          - "null"
     SortObject:
       type: object
       properties:

@@ -9,19 +9,63 @@ Sign-in and identity for Python, imported as `egradx.auth`. It is the counterpar
 
 | Export | What it is |
 |---|---|
-| `EgradxAuth(engine, AuthOptions(issuer=..., keystore_path=..., keystore_passphrase=...))` | Everything, on the application's SQLAlchemy `AsyncEngine`. Defaults are Java's: 60-minute access tokens, 7-day refresh tokens, a 60-second role cache, the `Admin` role, 5/100 wrong passwords per 15 minutes. |
-| `await auth.start()`, `close()`, `purge()` | `start()` seeds the platform organization and its administrator, then starts the cleanup of expired refresh tokens, reset links and email-change codes. |
-| `auth.auth_service` | Sign-in (asking which organization when there are several), register, refresh (not rotated, as in Java), sign-out, switching organization. |
-| `auth.organizations`, `provisioning`, `roles`, `users`, `sessions` | Organizations, and provisioning one with its administrator (with `on_organization_created` listeners in the same transaction); roles and the authority catalog; users; sign-out everywhere. |
+| `EgradxAuth(engine, AuthOptions(issuer=..., keystore_path=..., keystore_passphrase=...))` | Everything, on the application's SQLAlchemy `AsyncEngine`. Defaults are Java's: 60-minute access tokens, 7-day sessions, a 30-second reuse grace for a replaced refresh token (`refresh_token_reuse_grace_seconds`), a 60-second role cache, the `Admin` role, 5/100 wrong passwords per 15 minutes. |
+| `await auth.start()`, `close()`, `purge()` | `start()` seeds the platform organization and its administrator, then starts the cleanup of expired sessions, refresh tokens, reset links, email-change codes, emailed codes and provider sign-ins; `purge()` runs it once and returns what it deleted (`sessions`, `refreshTokens`, `passwordResets`, `emailChanges`, `emailCodes`, `oidcFlows`). |
+| `auth.auth_service` | Sign-in (asking which organization when there are several), register, refresh (rotated, as in Java: each refresh returns a new refresh token in the same session), sign-out (ending the session), switching organization (ending the session left). |
+| `auth.organizations`, `provisioning`, `roles`, `users`, `sessions` | Organizations, and provisioning one with its administrator (with `on_organization_created` listeners in the same transaction); roles and the authority catalog; users; a person's sessions: listing them, ending one, signing out everywhere. |
+| `auth.roles.on_authorities_changed(listener)`, `auth.roles.evict(role_id)` | For several instances: `listener(role_id)` (plain or a coroutine) is called once a change to a role's authorities has committed, after this instance's cache has dropped it, as Java's `EgradxRoleAuthoritiesChangedEvent`; `evict` drops a role from this instance's cache when another instance announces a change. [`egradx-redis`](/docs/reference/python/egradx-redis) connects both. |
+| `AuthOptions(limiter=...)` | Counts wrong passwords somewhere shared across instances instead of in memory (an `EgradxAttemptLimiter`; its methods may be coroutines, which the callers await), such as `egradx-redis`'s. |
 | `auth.passwords`, `email_changes`, `invitations`, `profiles` | Reset links, email change by code, invitations, and profiles with contacts verified by code and preferences. The messages go through `set_account_message_sender` / `set_contact_verification_sender`, which `egradx-notification-auth` provides. |
+| `auth.email_codes`, `auth.oidc` | Sign-up, signing in by an emailed code, and signing in with Google, Zoho or any other OpenID Connect provider, linked to accounts (sign-in methods). See below. |
 | `auth.people` | What other libraries ask about people: names, memberships, audiences. |
 | `auth.contribute(contributor)` | Adds a library's authorities to the catalog, as Java's `EgradxAuthorityContributor` beans. |
 | `await migrate_auth(database_url)` | Applies `contracts/db/postgresql/auth` into `egradx_auth_schema_history`, the history table Java uses. It adopts tables an application created itself. Run it before the application's own migrations, whose tables reference `egradx_organization`. The wheel carries the SQL. |
 | `argon2_password_encoder` | Spring's Argon2 encoding (`defaultsForSpringSecurity_v5_8`), through `cryptography`. |
 | `AuthOptions(keystore_path=…, keystore_passphrase=…)` | The signing key pair, from [`egradx-tls-provider`](/docs/reference/python/egradx-tls-provider)'s keystore, as Java's egradx-auth takes it from egradx-tls-provider. Or pass `keys=` a key pair (`SigningKeys`). |
-| `egradx.auth.fastapi`: `auth_routes(auth)`, `require_authority(...)`, `require_signed_in()`, `current_caller()` | The endpoints of `contracts/openapi/auth.yaml`, with Java's validation messages. Install with `install_egradx(app, verifier=auth.verifier, resolve=auth.resolve_caller)`, which reads the caller afresh on each request: current authorities, and refusal once the person is deactivated, the organization suspended, or sessions ended. Install with the `fastapi` extra. |
+| `egradx.auth.fastapi`: `auth_routes(auth)`, `require_authority(...)`, `require_signed_in()`, `current_caller()` | The endpoints of `contracts/openapi/auth.yaml`, with Java's validation messages. Install with `install_egradx(app, verifier=auth.verifier, resolve=auth.resolve_caller)`, which reads the caller afresh on each request: current authorities, and refusal once the person is deactivated, the organization suspended, sessions ended, or the token's own session (its `sid`) ended or expired. Install with the `fastapi` extra. |
+
+**Sign-up and sign-in methods** (docs/auth/sign-in-methods.md), set as Java's `egradx.auth.signup.*`, `email-code.*` and `oidc.*` are:
+
+| `AuthOptions` | Java | Default |
+|---|---|---|
+| `signup=SignupSettings(mode=...)` | `signup.mode` | `"invitation"`: accounts only by an administrator or an invitation. `"organization"`: anyone may also sign up (`POST /egradx/auth/signup`, then `/signup/confirm` with the emailed code), and administers a new organization. |
+| `SignupSettings(allowed_email_domains=[...])` | `signup.allowed-email-domains` | empty: any domain. |
+| `SignupSettings(legacy_register=True)` | `signup.legacy-register` | `False`: the deprecated `POST /egradx/auth/register` answers `SIGNUP_DISABLED`. |
+| `email_code=EmailCodeSettings(enabled, ttl_ms, max_attempts, resend_interval_ms)` | `email-code.*` | on, 10 minutes, 5 wrong tries, 60 s between sends. Codes need a sender that sends them (`egradx-notification-auth`), else `EMAIL_CODE_UNAVAILABLE`. |
+| `oidc=OidcSettings(callback_base_url, frontend_callback_path, flow_ttl_ms, providers, provider_factories, extra_providers)` | `oidc.*` | no providers; `/auth/callback`; 10 minutes. `callback_base_url` is this server as the provider reaches it; the redirect URI to register is `{callback_base_url}/egradx/auth/oidc/{id}/callback`. Providers also need `links.base_url`, where the browser lands afterwards. |
+| `OidcSettings(providers={"google": OidcProviderSettings(type="google", client_id=..., client_secret=...)})` | `oidc.providers.<id>.*` | `type` picks the provider class: `oidc` (the default, any OpenID Connect provider: give `issuer` and `name`; `trust_email=False`), `google` (`EgradxGoogleSignInProvider`) or `zoho` (`EgradxZohoSignInProvider`), which fill in the issuer, the name and `trust_email=True`, or a type the application adds. `scopes` defaults to `openid email profile`. A provider missing a setting is left out, with a warning. |
+
+**Adding a provider** is writing one class; nothing in egradx-auth changes (docs). A provider is an `EgradxSignInProvider`: `id`, `name`, `trust_email`, `authorization_url(request)` (where to send the browser; may be async) and `async complete(callback)`, which returns an `EgradxProviderIdentity(issuer, subject, email, email_verified, name)` or raises `EgradxSignInProviderException` (the browser then gets `OIDC_FAILED`). egradx-auth keeps the state, PKCE, nonce, linking and session; `request` carries `redirect_uri`, `state`, `nonce` and `code_challenge`, and `callback` carries `code`, every query parameter, `redirect_uri`, `code_verifier` and `nonce`. Register it in one of two ways:
+
+```python
+class GitHubSignIn:                      # 1. a provider object, in extra_providers
+    id, name, trust_email = "github", "GitHub", True
+
+    def authorization_url(self, request: SignInAuthorization) -> str:
+        return f"https://github.com/login/oauth/authorize?client_id={CLIENT_ID}&state={request.state}&redirect_uri={request.redirect_uri}"
+
+    async def complete(self, callback: SignInCallback) -> EgradxProviderIdentity:
+        ...  # exchange callback.code, read the user; raise EgradxSignInProviderException if it fails
+        return EgradxProviderIdentity("https://github.com", str(user["id"]), user["email"], True, user["name"])
+
+class GitHubFactory:                     # 2. a factory for a new type, then configured like any provider
+    type = "github"
+
+    def create(self, provider_id: str, settings: OidcProviderSettings) -> EgradxSignInProvider:
+        return GitHubSignIn(...)
+
+OidcSettings(callback_base_url=..., extra_providers=[GitHubSignIn()])
+OidcSettings(callback_base_url=..., provider_factories=[GitHubFactory()],
+             providers={"github": OidcProviderSettings(type="github", client_id=..., client_secret=...)})
+```
+
+A factory with the type of a built-in replaces it; two providers with one id are an error. An OpenID Connect provider with a quirk extends `EgradxOidcSignInProvider` and overrides what differs, as `EgradxZohoSignInProvider` overrides `issuer_for(callback_parameters)` for Zoho's data centres.
+
+The endpoints: `GET /egradx/auth/sign-in-options`; `POST /egradx/auth/email-code` and `/email-code/verify`; `POST /egradx/auth/signup` and `/signup/confirm`; `GET /egradx/auth/oidc/{provider}/start` and `/callback` (302s); `POST /egradx/auth/oidc/exchange` and `/oidc/signup`; and, signed in, `GET /egradx/auth/my/sign-in-methods`, `POST /egradx/auth/my/sign-in-methods/oidc/{provider}`, `DELETE /egradx/auth/my/sign-in-methods/identities/{identityId}`. ID tokens are checked with PyJWT (RS256 or ES256, issuer, audience = client id, nonce, 60 s leeway) against the provider's key set; discovery documents and key sets are fetched with httpx and cached for an hour. An account may have no password: a password sign-in to it fails as a wrong password would, and `POST /egradx/auth/my/password` without `currentPassword` sets its first.
 
 **Tokens** are RS256 with Java's claims. They carry no authorities; those are read from the database on each request, so a role change takes effect at once.
+
+**Sessions.** A session is one sign-in on one device (`egradx_session`); an access token's `sid` is its id, and every request checks it is still going, so ending a session refuses its access tokens on their next request. Refresh tokens rotate: each refresh replaces the token presented with a new one in the same session, and the session keeps the expiry it had at sign-in. A replaced token still renews the session for the reuse grace (two tabs refreshing at once); presented after that it is taken as stolen, the whole session ends (`SESSION_REVOKED`, audited as `auth.session.reused`). `GET /egradx/auth/my/sessions` lists the person's sessions, `DELETE /egradx/auth/my/sessions/{sessionId}` ends one.
 
 **Times.** Auth's `TIMESTAMP` columns hold UTC wall-clock time, as Java's Hibernate writes an `Instant`, whatever the server's zone.
 
@@ -36,6 +80,7 @@ Sign-in and identity for Python, imported as `egradx.auth`. It is the counterpar
 On PostgreSQL (`EGRADX_TEST_PG_*`):
 - **Unit:** the contract's Argon2 vector, link tokens, the attempt limiter, the catalog, pages, and Java's locale and time-zone rules.
 - **Flows:** Node's suite, case for case, every response checked against `auth.yaml` and every error against `error.json`.
+- **Sign-in methods:** Java's `EgradxSignInMethodsHttpTest`, case for case, against a stand-in OpenID Connect provider on a local port (`tests/stub_oidc_provider.py`, ID tokens signed with PyJWT, RS256 and ES256).
 - **Interop:** Java's keystore read (the key its certificate holds), and Java's people signed in on a copy of the OIM database (`egradx_oim`), when they exist.
 
 Import from `egradx.auth`.
@@ -102,12 +147,16 @@ class AuthOptions
 | `keystore_passphrase` | `str | None` | `None` |
 | `access_token_ttl_minutes` | `float` | `60` |
 | `refresh_token_ttl_days` | `float` | `7` |
+| `refresh_token_reuse_grace_seconds` | `float` | `30` |
 | `role_authorities_cache_ttl_seconds` | `float` | `60` |
 | `default_admin_role_name` | `str` | `'Admin'` |
 | `platform` | `PlatformSettings` | `field(default_factory=PlatformSettings)` |
 | `profile` | `ProfileSettings` | `field(default_factory=ProfileSettings)` |
 | `account` | `AccountSettings` | `field(default_factory=AccountSettings)` |
 | `links` | `LinkSettings` | `field(default_factory=LinkSettings)` |
+| `signup` | `SignupSettings` | `field(default_factory=SignupSettings)` |
+| `email_code` | `EmailCodeSettings` | `field(default_factory=EmailCodeSettings)` |
+| `oidc` | `OidcSettings` | `field(default_factory=OidcSettings)` |
 | `rate_limit` | `RateLimitSettings | None` | `field(default_factory=RateLimitSettings)` |
 | `limiter` | `EgradxAttemptLimiter | None` | `None` |
 | `cleanup_enabled` | `bool` | `True` |
@@ -123,7 +172,7 @@ class AuthOptions
 #### Constructor
 
 ```python
-def __init__(issuer: str, keys: SigningKeys | None = None, keystore_path: str | Path | None = None, keystore_passphrase: str | None = None, access_token_ttl_minutes: float = 60, refresh_token_ttl_days: float = 7, role_authorities_cache_ttl_seconds: float = 60, default_admin_role_name: str = 'Admin', platform: PlatformSettings = PlatformSettings(), profile: ProfileSettings = ProfileSettings(), account: AccountSettings = AccountSettings(), links: LinkSettings = LinkSettings(), rate_limit: RateLimitSettings | None = RateLimitSettings(), limiter: EgradxAttemptLimiter | None = None, cleanup_enabled: bool = True, cleanup_interval_seconds: float = 3600, password_encoder: PasswordEncoder | None = None, on_organization_created: list[OrganizationCreatedListener] = list(), authority_contributors: list[EgradxAuthorityContributor] = list(), account_messages: EgradxAccountMessageSender | None = None, contact_verification: EgradxContactVerificationSender | None = None, logger: logging.Logger | None = None, observations: EgradxObservations | None = None) -> None
+def __init__(issuer: str, keys: SigningKeys | None = None, keystore_path: str | Path | None = None, keystore_passphrase: str | None = None, access_token_ttl_minutes: float = 60, refresh_token_ttl_days: float = 7, refresh_token_reuse_grace_seconds: float = 30, role_authorities_cache_ttl_seconds: float = 60, default_admin_role_name: str = 'Admin', platform: PlatformSettings = PlatformSettings(), profile: ProfileSettings = ProfileSettings(), account: AccountSettings = AccountSettings(), links: LinkSettings = LinkSettings(), signup: SignupSettings = SignupSettings(), email_code: EmailCodeSettings = EmailCodeSettings(), oidc: OidcSettings = OidcSettings(), rate_limit: RateLimitSettings | None = RateLimitSettings(), limiter: EgradxAttemptLimiter | None = None, cleanup_enabled: bool = True, cleanup_interval_seconds: float = 3600, password_encoder: PasswordEncoder | None = None, on_organization_created: list[OrganizationCreatedListener] = list(), authority_contributors: list[EgradxAuthorityContributor] = list(), account_messages: EgradxAccountMessageSender | None = None, contact_verification: EgradxContactVerificationSender | None = None, logger: logging.Logger | None = None, observations: EgradxObservations | None = None) -> None
 ```
 
 ### `ContactChallenge`
@@ -210,6 +259,11 @@ class EgradxAccountMessageSender(Protocol)
 Delivers the messages accounts need. egradx-notification-auth provides one; without it, a forgotten password
 quietly sends nothing, and invitations and email changes say they are unavailable.
 
+A sender may also send the sign-in messages (docs/auth/sign-in-methods.md): `send_sign_in_code`,
+`send_signup_code` and `send_sign_in_method_added`, saying so with `sends_sign_in_messages()` returning True.
+They are optional, as Java's default methods are: a sender without them makes emailed codes unavailable
+(`EMAIL_CODE_UNAVAILABLE`) and sends no sign-in-method notice.
+
 #### `send_password_reset`
 
 ```python
@@ -250,10 +304,13 @@ Limits wrong passwords: per account from one address, and per address across all
 a success clears the count for that account from that address. There is deliberately no limit on an account alone,
 which would let anyone lock its owner out.
 
+Each method may be plain or a coroutine (`async def`): a limiter counting somewhere shared, such as egradx-redis's,
+awaits its store; the callers await whatever is awaitable.
+
 #### `retry_after`
 
 ```python
-def retry_after(key: str, client_address: str | None) -> float | None
+def retry_after(key: str, client_address: str | None) -> float | None | Awaitable[float | None]
 ```
 
 How long until another attempt is allowed, in ms; None if it is allowed now.
@@ -261,13 +318,13 @@ How long until another attempt is allowed, in ms; None if it is allowed now.
 #### `failed`
 
 ```python
-def failed(key: str, client_address: str | None) -> None
+def failed(key: str, client_address: str | None) -> None | Awaitable[None]
 ```
 
 #### `succeeded`
 
 ```python
-def succeeded(key: str, client_address: str | None) -> None
+def succeeded(key: str, client_address: str | None) -> None | Awaitable[None]
 ```
 
 ### `EgradxAuth`
@@ -327,7 +384,8 @@ Seeds the catalog, the platform organization and its administrator (unless disab
 async def purge() -> dict[str, int]
 ```
 
-Deletes what can no longer be used: expired refresh tokens, reset links, email-change codes.
+Deletes what can no longer be used: expired sessions and refresh tokens, reset links, email-change codes, emailed
+codes and provider sign-ins.
 
 #### `close`
 
@@ -355,7 +413,7 @@ separate service.
 #### Constructor
 
 ```python
-def __init__(engine: AsyncEngine, passwords: PasswordEncoder, issuer: EgradxTokenIssuer, verifier: TokenVerifier, roles: EgradxRoleService, organizations: EgradxOrganizationService, platform: EgradxPlatformOrganization, refresh_ttl_days: float, limiter: EgradxAttemptLimiter, observations: EgradxObservations | None = None) -> None
+def __init__(engine: AsyncEngine, passwords: PasswordEncoder, issuer: EgradxTokenIssuer, verifier: TokenVerifier, roles: EgradxRoleService, organizations: EgradxOrganizationService, platform: EgradxPlatformOrganization, refresh_ttl_days: float, limiter: EgradxAttemptLimiter, observations: EgradxObservations | None = None, refresh_token_reuse_grace_seconds: float = DEFAULT_REFRESH_TOKEN_REUSE_GRACE_SECONDS) -> None
 ```
 
 #### `register`
@@ -376,6 +434,16 @@ Checks the password, decides which organization the session is in, and issues th
 deactivated and wrong-password are one answer; an unknown account costs the same Argon2 check as a real one; a
 guesser over the limit costs none. With several organizations and none chosen, the choices are listed, but only
 once the password is proved.
+
+#### `sign_in_verified`
+
+```python
+async def sign_in_verified(user_id: str, organization_id: str | None, method: str, provider: str | None) -> dict[str, Any]
+```
+
+Signs in someone already proved to be who they are by another method than a password (an emailed code, or an
+OpenID Connect provider), choosing the organization as a password sign-in does, and recording `auth.login` with
+`method` (and `provider`, if given). As Java's EgradxAuthService.signInVerified.
 
 #### `issue_session`
 
@@ -400,8 +468,8 @@ Every organization the person belongs to, suspended ones included and flagged, b
 async def switch_organization(user_id: str, organization_id: str, current_refresh_token: str | None) -> dict[str, Any]
 ```
 
-Moves the session into another organization the person belongs to, checking everything afresh; the old refresh
-token is revoked.
+Moves the person into a new session in another organization they belong to, checking everything afresh; the
+session left (that of `current_refresh_token`, if given and theirs) ends.
 
 #### `refresh`
 
@@ -409,8 +477,13 @@ token is revoked.
 async def refresh(refresh_token: str) -> dict[str, Any]
 ```
 
-A new access token for the session a refresh token belongs to; the refresh token stays the same (no rotation,
-as Java).
+Continues the session a refresh token belongs to: a new access token, and a new refresh token in place of the
+one presented, which is retired (rotation). The session keeps its organization and its expiry.
+
+A retired token still renews the session for the reuse grace after it was replaced, so two callers refreshing
+with it at once both carry on. Presented after that, it is taken as stolen: the whole session ends, recorded as
+`auth.session.reused`. AUTH_REFRESH_TOKEN_INVALID for a token that does not exist, is expired or revoked;
+SESSION_REVOKED when its session was ended by someone else, or the token reused.
 
 #### `logout`
 
@@ -418,7 +491,8 @@ as Java).
 async def logout(refresh_token: str) -> None
 ```
 
-Revokes a refresh token; nothing, not an error, if it does not exist or already was.
+Ends the session a refresh token belongs to, with every token it has had; nothing, not an error, if it does not
+exist or was already revoked.
 
 #### `validate_token`
 
@@ -434,7 +508,16 @@ Verifies an access token issued here.
 async def current_user(token: EgradxUserTokenContext) -> dict[str, Any]
 ```
 
-The user a verified token belongs to; an ended session if they were deactivated or their sessions cut off since.
+The user a verified token belongs to; an ended session if they were deactivated or their sessions cut off since,
+or the token's own session has ended or expired.
+
+#### `is_live_session`
+
+```python
+async def is_live_session(session_id: str | None) -> bool
+```
+
+Whether `session_id` (an access token's `sid`) names a session neither ended nor expired.
 
 #### `user_by_id`
 
@@ -616,6 +699,104 @@ The change under way, if its code is still good.
 async def confirm(user_id: str, code: str) -> dict[str, Any]
 ```
 
+### `EgradxEmailCodeService`
+
+```python
+class EgradxEmailCodeService
+```
+
+Emailed sign-in codes, and signing up with a new organization.
+
+#### Constructor
+
+```python
+def __init__(engine: AsyncEngine, passwords: PasswordEncoder, provisioning: EgradxOrganizationProvisioningService, auth_service: EgradxAuthService, senders: SenderHolder, signup: SignupSettings, settings: EmailCodeSettings, limiter: EgradxAttemptLimiter, observations: EgradxObservations | None = None) -> None
+```
+
+#### `sign_in_available`
+
+```python
+def sign_in_available() -> bool
+```
+
+Whether signing in by an emailed code is offered here.
+
+#### `signup_open`
+
+```python
+def signup_open() -> bool
+```
+
+Whether anyone may sign up here: signup.mode organization.
+
+#### `send_sign_in_code`
+
+```python
+async def send_sign_in_code(email: str) -> None
+```
+
+Emails a sign-in code to the account at `email`, if there is an active one, replacing any earlier code. Says
+nothing either way: an unknown address, a request inside the resend interval and a message that could not be sent
+all return normally. EMAIL_CODE_UNAVAILABLE when codes are not offered here at all; AUTH_TOO_MANY_ATTEMPTS when
+this address has asked for too many codes.
+
+#### `verify_sign_in_code`
+
+```python
+async def verify_sign_in_code(email: str, code: str | None, organization_id: str | None = None) -> dict[str, Any]
+```
+
+Signs in with the code emailed to `email`. The code works once. When the person belongs to several
+organizations and chose none, ORG_SELECTION_REQUIRED is raised and the code is kept, to be sent again with
+`organization_id`. EMAIL_CODE_INVALID, EMAIL_CODE_EXPIRED, EMAIL_CODE_TOO_MANY_ATTEMPTS otherwise.
+
+#### `start_signup`
+
+```python
+async def start_signup(email: str, organization_name: str | None, name: str | None = None, password: str | None = None) -> dict[str, Any]
+```
+
+Starts a sign-up: checks it is allowed and emails a code to `email`, replacing any earlier one. SIGNUP_DISABLED,
+SIGNUP_EMAIL_DOMAIN_NOT_ALLOWED, PASSWORD_INVALID, EMAIL_CODE_RATE_LIMITED, EMAIL_CODE_UNAVAILABLE, EMAIL_IN_USE,
+ORGANIZATION_NAME_IN_USE.
+
+#### `confirm_signup`
+
+```python
+async def confirm_signup(email: str, code: str | None) -> dict[str, Any]
+```
+
+Completes a sign-up with its code: the account, a new organization it administers, and a session there.
+SIGNUP_DISABLED, EMAIL_CODE_INVALID, EMAIL_CODE_EXPIRED, EMAIL_CODE_TOO_MANY_ATTEMPTS, and EMAIL_IN_USE or
+ORGANIZATION_NAME_IN_USE when taken meanwhile.
+
+#### `require_signup_allowed`
+
+```python
+async def require_signup_allowed(connection: AsyncConnection, email: str, organization_name: str | None) -> None
+```
+
+Refuses a sign-up that may not go ahead: the domain is not allowed, the address has an account, or the
+organization name is taken. Shared with signing up through a provider.
+
+#### `create_organization_account`
+
+```python
+async def create_organization_account(tx: AsyncConnection, email: str, name: str | None, organization_name: str | None, password_hash: str | None) -> SignupCreated
+```
+
+Makes the account and the organization it administers, checking again that both are free. The account's
+username is its email; `password_hash` may be None.
+
+### `EgradxGoogleSignInProvider`
+
+```python
+class EgradxGoogleSignInProvider(EgradxOidcSignInProvider)
+```
+
+Sign in with Google (`type="google"`): OpenID Connect at https://accounts.google.com, whose verified emails are
+trusted. Only the client id and secret need configuring.
+
 ### `EgradxInMemoryAttemptLimiter`
 
 ```python
@@ -709,6 +890,179 @@ What an invitation link offers, before accepting it.
 async def accept(token: str, signed_in_user_id: str | None, name: str | None = None, password: str | None = None) -> dict[str, Any]
 ```
 
+### `EgradxOidcClient`
+
+```python
+class EgradxOidcClient
+```
+
+Reads providers' discovery documents, builds the authorization URL, exchanges the code for tokens and verifies the
+ID token against the provider's published keys (RS256 or ES256; iss, aud = client id, exp with 60 s leeway, nonce).
+Discovery documents and key sets are cached for an hour; a key set is fetched again for a key it does not hold.
+
+#### Constructor
+
+```python
+def __init__(http: httpx.AsyncClient | None = None) -> None
+```
+
+#### `authorization_url`
+
+```python
+async def authorization_url(issuer: str, client_id: str, scopes: tuple[str, ...] | list[str], request: SignInAuthorization) -> str
+```
+
+Where to send the browser: the provider's authorization endpoint, with PKCE, state and nonce.
+
+#### `exchange`
+
+```python
+async def exchange(issuer: str, client_id: str, client_secret: str, callback: SignInCallback) -> EgradxProviderIdentity
+```
+
+Exchanges the callback's code at the token endpoint of `issuer` and verifies the ID token it returns.
+OidcException if anything fails: the provider, the response, or any check on the ID token.
+
+### `EgradxOidcService`
+
+```python
+class EgradxOidcService
+```
+
+Signing in with providers, signing up through them, and linking and unlinking them from the profile.
+
+| Field | Type | Default |
+|---|---|---|
+| `providers` | `EgradxSignInProviders` |  |
+
+#### Constructor
+
+```python
+def __init__(engine: AsyncEngine, providers: EgradxSignInProviders, auth_service: EgradxAuthService, email_codes: EgradxEmailCodeService, invitations: EgradxInvitationService, senders: SenderHolder, settings: OidcSettings, links_base_url: str | None, signup_mode: Any, observations: EgradxObservations | None = None) -> None
+```
+
+#### `sign_in_options`
+
+```python
+def sign_in_options() -> dict[str, Any]
+```
+
+What a sign-in page can offer here.
+
+#### `start`
+
+```python
+async def start(provider_id: str, return_to: str | None, link_user_id: str | None = None) -> str
+```
+
+Starts a round trip to the provider and returns where to send the browser. `return_to`: a path on the frontend
+to come back to; anything else is dropped. `link_user_id`: to link the provider to this signed-in account, rather
+than sign in. OIDC_PROVIDER_UNKNOWN; OIDC_FAILED when the provider's discovery document cannot be read.
+
+#### `callback`
+
+```python
+async def callback(provider_id: str, parameters: Mapping[str, str]) -> str
+```
+
+The provider's callback: checks it and returns where on the frontend to send the browser, with `code` (to
+exchange), `linked` (a provider linked from the profile), or `error`. Never raises for what the provider sent.
+
+#### `exchange`
+
+```python
+async def exchange(code: str, organization_id: str | None = None, invitation_token: str | None = None) -> dict[str, Any]
+```
+
+Trades the result code for a session, or says why not. A code that ends in SIGNUP_REQUIRED or
+ORG_SELECTION_REQUIRED stays usable for the next step. OIDC_CODE_INVALID, OIDC_EMAIL_NOT_VERIFIED,
+ORG_SELECTION_REQUIRED (400); IDENTITY_LINK_REQUIRED, SIGNUP_REQUIRED (409); AUTH_NO_ACCOUNT, ORG_ACCESS_DENIED,
+ORG_SUSPENDED (403).
+
+#### `signup`
+
+```python
+async def signup(code: str, organization_name: str | None) -> dict[str, Any]
+```
+
+Signs up with the provider's verified email, after SIGNUP_REQUIRED: an account with no password, a new
+organization it administers, the provider linked, and a session there. SIGNUP_DISABLED (403); OIDC_CODE_INVALID,
+OIDC_EMAIL_NOT_VERIFIED, SIGNUP_EMAIL_DOMAIN_NOT_ALLOWED (400); EMAIL_IN_USE, ORGANIZATION_NAME_IN_USE,
+IDENTITY_IN_USE (409).
+
+#### `sign_in_methods`
+
+```python
+async def sign_in_methods(user_id: str) -> dict[str, Any]
+```
+
+How the person can sign in: whether they have a password, and the providers linked.
+
+#### `unlink`
+
+```python
+async def unlink(user_id: str, organization_id: str | None, identity_id: str) -> None
+```
+
+Removes a linked provider. NOT_FOUND when it is not one of the person's; SIGN_IN_METHOD_REQUIRED when it would
+leave them no way to sign in.
+
+### `EgradxOidcSignInProvider`
+
+```python
+class EgradxOidcSignInProvider
+```
+
+Any OpenID Connect provider: the authorization code flow with PKCE, `state` and `nonce`, and the ID token
+checked against the provider's published keys (EgradxOidcClient). Configured with `type="oidc"` (the default), an
+`issuer` and a client.
+
+A provider with something particular to it extends this class and overrides what differs: see
+EgradxGoogleSignInProvider (its defaults) and EgradxZohoSignInProvider (its data centres).
+
+| Field | Type | Default |
+|---|---|---|
+| `id` | `str` |  |
+| `name` | `str` |  |
+| `trust_email` | `bool` |  |
+| `issuer` | `str` |  |
+| `scopes` | `tuple[str, ...]` |  |
+
+#### Constructor
+
+```python
+def __init__(settings: EgradxOidcSignInProvider.Settings, client: EgradxOidcClient) -> None
+```
+
+#### `authorization_url`
+
+```python
+async def authorization_url(request: SignInAuthorization) -> str
+```
+
+#### `complete`
+
+```python
+async def complete(callback: SignInCallback) -> EgradxProviderIdentity
+```
+
+#### `issuer_for`
+
+```python
+def issuer_for(callback_parameters: Mapping[str, str]) -> str
+```
+
+The issuer to exchange the code with and to expect in the ID token: the configured one. A provider whose
+accounts live under several issuers overrides this (Zoho).
+
+#### `settings_from`
+
+```python
+def settings_from(provider_id: str, configured: OidcProviderSettings, default_issuer: str | None, default_name: str | None, default_trust_email: bool) -> EgradxOidcSignInProvider.Settings
+```
+
+Settings from configuration, with a provider type's defaults for what is left out. ValueError without an issuer.
+
 ### `EgradxOrganizationCreated`
 
 ```python
@@ -747,8 +1101,17 @@ def __init__(engine: AsyncEngine, organizations: EgradxOrganizationService, role
 #### `provision_organization`
 
 ```python
-async def provision_organization(name: str, admin_email: str, admin_password: str, admin_name: str, admin_username: str | None = None) -> dict[str, Any]
+async def provision_organization(name: str, admin_email: str, admin_password: str | None, admin_name: str, admin_username: str | None = None) -> dict[str, Any]
 ```
+
+#### `provision`
+
+```python
+async def provision(name: str, admin_email: str, admin_password: str | None, admin_name: str, admin_username: str | None = None) -> tuple[dict[str, Any], str]
+```
+
+provision_organization, returning the administrator's user id as well, for sign-up, which signs them in. The
+administrator's password may be None: they sign in by an emailed code or a provider.
 
 ### `EgradxOrganizationSelectionRequiredException`
 
@@ -1011,6 +1374,15 @@ async def get_profile(user_id: str, organization_id: str | None) -> dict[str, An
 async def update_profile(user_id: str, organization_id: str | None, request: ProfileUpdate) -> dict[str, Any]
 ```
 
+#### `set_photo_url`
+
+```python
+async def set_photo_url(user_id: str, organization_id: str | None, url: str | None) -> dict[str, Any]
+```
+
+Sets just the photo: egradx-file-storage calls this with the stored photo's path (`/egradx/files/{id}/content`),
+or None to clear it. As Java's EgradxProfileService.setPhotoUrl.
+
 #### `erase`
 
 ```python
@@ -1123,6 +1495,30 @@ sign-in email.
 async def locale(user_id: str) -> str | None
 ```
 
+### `EgradxProviderIdentity`
+
+```python
+class EgradxProviderIdentity
+```
+
+Who a provider says signed in. `(issuer, subject)` is the stable identity linked to an account; a provider that
+is not OpenID Connect uses a fixed issuer, such as `https://github.com`. `email_verified` None: the provider does
+not say, and its `trust_email` decides.
+
+| Field | Type | Default |
+|---|---|---|
+| `issuer` | `str` |  |
+| `subject` | `str` |  |
+| `email` | `str | None` |  |
+| `email_verified` | `bool | None` |  |
+| `name` | `str | None` |  |
+
+#### Constructor
+
+```python
+def __init__(issuer: str, subject: str, email: str | None, email_verified: bool | None, name: str | None) -> None
+```
+
 ### `EgradxRoleService`
 
 ```python
@@ -1138,6 +1534,26 @@ any role outside the platform organization.
 ```python
 def __init__(engine: AsyncEngine, platform: EgradxPlatformOrganization, catalog: Callable[[], EgradxAuthorityCatalog], cache_ttl_seconds: float) -> None
 ```
+
+#### `on_authorities_changed`
+
+```python
+def on_authorities_changed(listener: Callable[[str], Awaitable[None] | None]) -> None
+```
+
+Calls `listener(role_id)` once a change to a role's authorities has committed (never if it rolls back), after
+this instance's own cache has dropped the role: Java's EgradxRoleAuthoritiesChangedEvent, heard after commit. For
+telling the application's other instances, as egradx-redis does. A listener may be a coroutine; a failure is
+logged, not raised.
+
+#### `evict`
+
+```python
+def evict(role_id: str) -> None
+```
+
+Drops a role from this instance's role-authorities cache, so its next check reads the database: for a change
+committed on another instance (egradx-redis calls it when one is announced).
 
 #### `create_authority`
 
@@ -1258,7 +1674,9 @@ The role, if it belongs to the organization; NotFoundException otherwise.
 class EgradxSessionService
 ```
 
-Ends every session a person has, then starts this one again.
+A person's sessions: listing them, ending one, ending every one on every device at once. Ending a session revokes
+its refresh tokens and refuses its access tokens on their next request (`sid`); ending all of them also sets
+sessions_valid_after, so that access tokens already issued are refused.
 
 #### Constructor
 
@@ -1272,7 +1690,27 @@ def __init__(engine: AsyncEngine, auth_service: EgradxAuthService, observations:
 async def cut_off(tx: AsyncConnection, user_id: str, time: datetime) -> None
 ```
 
-sessions_valid_after now, and every refresh token revoked: every access token issued before is refused.
+sessions_valid_after now, every session ended and every refresh token revoked: every access token issued
+before is refused.
+
+#### `list_mine`
+
+```python
+async def list_mine(user_id: str, current_session_id: str | None) -> list[dict[str, Any]]
+```
+
+The person's sessions still going, the most recently used first, with `current_session_id` (the asking
+request's) marked.
+
+#### `end_mine`
+
+```python
+async def end_mine(user_id: str, organization_id: str | None, session_id: str) -> None
+```
+
+Ends one of the person's sessions (another device's, or this one): its refresh tokens stop working at once, its
+access tokens on their next request. NOT_FOUND when it is not one of theirs still going: the same answer for
+both, so an id says nothing about anyone else's sessions.
 
 #### `sign_out_everywhere`
 
@@ -1281,6 +1719,101 @@ async def sign_out_everywhere(user_id: str, organization_id: str | None) -> dict
 ```
 
 "Sign out everywhere", and a fresh session here.
+
+### `EgradxSignInProvider`
+
+```python
+class EgradxSignInProvider(Protocol)
+```
+
+One way of signing in elsewhere: Google, Zoho, any OpenID Connect provider, or one of an application's own.
+
+| Field | Type | Default |
+|---|---|---|
+| `id` | `str` |  |
+| `name` | `str` |  |
+| `trust_email` | `bool` |  |
+
+#### `authorization_url`
+
+```python
+def authorization_url(request: SignInAuthorization) -> str | Awaitable[str]
+```
+
+Where to send the browser to sign in. May be a coroutine (an OpenID Connect provider reads its discovery
+document); raises EgradxSignInProviderException if it cannot be worked out.
+
+#### `complete`
+
+```python
+async def complete(callback: SignInCallback) -> EgradxProviderIdentity
+```
+
+Who the provider says signed in, from its callback: exchange the code, check what comes back. Raises
+EgradxSignInProviderException if the provider cannot be reached, or its answer does not check out.
+
+### `EgradxSignInProviderException`
+
+```python
+class EgradxSignInProviderException(Exception)
+```
+
+A provider could not be reached, or what it answered did not check out. egradx-auth logs the message and sends the
+browser back with OIDC_FAILED; the person never sees the message.
+
+### `EgradxSignInProviders`
+
+```python
+class EgradxSignInProviders
+```
+
+The sign-in providers in use: those configured under `OidcSettings.providers`, each made by the factory of its
+`type`, and those an application registers. Knows nothing of any particular provider.
+
+Every provider needs `oidc.callback_base_url` (for its redirect URI) and `links.base_url` (where the browser
+lands afterwards); a configured one also needs its client id and secret. A provider missing any of them is left out,
+with a warning. `factories` in order of precedence: the first of a type wins, so an application's go first.
+
+#### Constructor
+
+```python
+def __init__(settings: OidcSettings, links_base_url: str | None, factories: Sequence[SignInProviderFactory] = (), registered: Sequence[EgradxSignInProvider] = ()) -> None
+```
+
+#### `list`
+
+```python
+def list() -> list[EgradxSignInProvider]
+```
+
+#### `find`
+
+```python
+def find(provider_id: str | None) -> EgradxSignInProvider | None
+```
+
+#### `redirect_uri`
+
+```python
+def redirect_uri(provider_id: str) -> str
+```
+
+The redirect URI to register with the provider.
+
+### `EgradxSignupRequiredException`
+
+```python
+class EgradxSignupRequiredException(DuplicateResourceException)
+```
+
+A provider proved who someone is, but they have no account, and signing up is open: a 409 whose `details` carry
+the email, name and provider to sign up with (`POST /egradx/auth/oidc/signup`).
+
+#### Constructor
+
+```python
+def __init__(email: str, name: str | None, provider: str) -> None
+```
 
 ### `EgradxTokenIssuer`
 
@@ -1300,8 +1833,11 @@ def __init__(keys: SigningKeys, issuer: str, ttl_minutes: float) -> None
 #### `issue`
 
 ```python
-def issue(user: UserRow, organization_id: str | None, role_id: str | None) -> tuple[str, datetime]
+def issue(user: UserRow, organization_id: str | None, role_id: str | None, session_id: str | None = None) -> tuple[str, datetime]
 ```
+
+An access token of session `session_id` (its `sid`): ending the session refuses it on its next request.
+Without one, a `sid` of its own, in no session: nothing ends it but its expiry.
 
 ### `EgradxTooManyAttemptsException`
 
@@ -1347,8 +1883,10 @@ async def get_user(organization_id: str, user_id: str) -> dict[str, Any]
 #### `create_user`
 
 ```python
-async def create_user(organization_id: str, email: str, password: str, name: str, role_id: str, username: str | None = None) -> dict[str, Any]
+async def create_user(organization_id: str, email: str, password: str | None, name: str, role_id: str, username: str | None = None) -> dict[str, Any]
 ```
+
+`password` may be None (or blank): the person signs in by an emailed code or a provider, and may set one later.
 
 #### `update_user`
 
@@ -1360,6 +1898,22 @@ async def update_user(organization_id: str, user_id: str, username: str | None =
 
 ```python
 async def deactivate_user(organization_id: str, user_id: str, acting_user_id: str) -> None
+```
+
+### `EgradxZohoSignInProvider`
+
+```python
+class EgradxZohoSignInProvider(EgradxOidcSignInProvider)
+```
+
+Sign in with Zoho (`type="zoho"`): OpenID Connect at https://accounts.zoho.com, whose verified emails are
+trusted. An account kept in another of Zoho's data centres comes back from the sign-in naming it
+(`accounts-server=https://accounts.zoho.in`); that data centre is then the issuer, if it is one of Zoho's.
+
+#### `issuer_for`
+
+```python
+def issuer_for(callback_parameters: Mapping[str, str]) -> str
 ```
 
 ### `EmailChangeCodeMessage`
@@ -1402,6 +1956,27 @@ class EmailChangedMessage
 def __init__(user_id: str, old_email: str, new_email: str, recipient_name: str, changed_at: datetime) -> None
 ```
 
+### `EmailCodeSettings`
+
+```python
+class EmailCodeSettings
+```
+
+Emailed codes (Java: egradx.auth.email-code.*).
+
+| Field | Type | Default |
+|---|---|---|
+| `enabled` | `bool` | `True` |
+| `ttl_ms` | `float` | `10 * 60000` |
+| `max_attempts` | `int` | `5` |
+| `resend_interval_ms` | `float` | `60000` |
+
+#### Constructor
+
+```python
+def __init__(enabled: bool = True, ttl_ms: float = 10 * 60000, max_attempts: int = 5, resend_interval_ms: float = 60000) -> None
+```
+
 ### `InvitationMessage`
 
 ```python
@@ -1441,6 +2016,66 @@ class LinkSettings
 
 ```python
 def __init__(base_url: str | None = None, password_reset_path: str = '/reset-password?token={token}', invitation_path: str = '/accept-invite?token={token}') -> None
+```
+
+### `OidcException`
+
+```python
+class OidcException(EgradxSignInProviderException)
+```
+
+An OpenID Connect provider could not be reached, or its answer did not check out.
+
+### `OidcProviderSettings`
+
+```python
+class OidcProviderSettings
+```
+
+One configured provider (Java: egradx.auth.oidc.providers.<id>.*). `type` picks the factory that makes it:
+`oidc` (the default: any OpenID Connect provider, from `issuer`), `google`, `zoho`, or one an application
+registers. Google and Zoho fill in the issuer, the name and `trust_email=True`; `oidc` defaults to
+`trust_email=False`.
+
+| Field | Type | Default |
+|---|---|---|
+| `type` | `str | None` | `None` |
+| `name` | `str | None` | `None` |
+| `issuer` | `str | None` | `None` |
+| `client_id` | `str | None` | `None` |
+| `client_secret` | `str | None` | `field(default=None, repr=False)` |
+| `scopes` | `tuple[str, ...]` | `('openid', 'email', 'profile')` |
+| `trust_email` | `bool | None` | `None` |
+| `enabled` | `bool` | `True` |
+
+#### Constructor
+
+```python
+def __init__(type: str | None = None, name: str | None = None, issuer: str | None = None, client_id: str | None = None, client_secret: str | None = None, scopes: tuple[str, ...] = ('openid', 'email', 'profile'), trust_email: bool | None = None, enabled: bool = True) -> None
+```
+
+### `OidcSettings`
+
+```python
+class OidcSettings
+```
+
+Sign-in providers (Java: egradx.auth.oidc.*). Providers also need `links.base_url`, where the browser lands
+afterwards.
+
+| Field | Type | Default |
+|---|---|---|
+| `callback_base_url` | `str | None` | `None` |
+| `frontend_callback_path` | `str` | `'/auth/callback'` |
+| `flow_ttl_ms` | `float` | `10 * 60000` |
+| `providers` | `Mapping[str, OidcProviderSettings]` | `field(default_factory=dict)` |
+| `provider_factories` | `Sequence[SignInProviderFactory]` | `()` |
+| `extra_providers` | `Sequence[EgradxSignInProvider]` | `()` |
+
+#### Constructor
+
+```python
+def __init__(callback_base_url: str | None = None, frontend_callback_path: str = '/auth/callback', flow_ttl_ms: float = 10 * 60000, providers: Mapping[str, OidcProviderSettings] = dict(), provider_factories: Sequence[SignInProviderFactory] = (), extra_providers: Sequence[EgradxSignInProvider] = ()) -> None
 ```
 
 ### `PageRequest`
@@ -1604,6 +2239,181 @@ class RateLimitSettings
 def __init__(max_failures_per_account: int = 5, max_failures_per_address: int = 100, window_ms: float = 15 * 60000, max_tracked: int = 100000) -> None
 ```
 
+### `SignInAuthorization`
+
+```python
+class SignInAuthorization
+```
+
+What egradx-auth has prepared for the round trip (Java: EgradxSignInProvider.Authorization). A provider puts
+`state` in the URL so the callback finds it again; one that supports them also uses `nonce` (OpenID Connect) and
+`code_challenge` (PKCE, S256). `redirect_uri`: {callback_base_url}/egradx/auth/oidc/{id}/callback.
+
+| Field | Type | Default |
+|---|---|---|
+| `redirect_uri` | `str` |  |
+| `state` | `str` |  |
+| `nonce` | `str` |  |
+| `code_challenge` | `str` |  |
+
+#### Constructor
+
+```python
+def __init__(redirect_uri: str, state: str, nonce: str, code_challenge: str) -> None
+```
+
+### `SignInCallback`
+
+```python
+class SignInCallback
+```
+
+The provider's callback (Java: EgradxSignInProvider.Callback): the code, every query parameter (for a provider
+that sends more, such as Zoho's `accounts-server`), and the PKCE verifier and nonce sent at the start.
+
+| Field | Type | Default |
+|---|---|---|
+| `code` | `str` |  |
+| `parameters` | `Mapping[str, str]` |  |
+| `redirect_uri` | `str` |  |
+| `code_verifier` | `str` |  |
+| `nonce` | `str` | `field(repr=False)` |
+
+#### Constructor
+
+```python
+def __init__(code: str, parameters: Mapping[str, str], redirect_uri: str, code_verifier: str, nonce: str) -> None
+```
+
+### `SignInCodeMessage`
+
+```python
+class SignInCodeMessage
+```
+
+A code for signing in without a password, to the account's email.
+
+| Field | Type | Default |
+|---|---|---|
+| `user_id` | `str` |  |
+| `email` | `str` |  |
+| `recipient_name` | `str` |  |
+| `code` | `str` | `field(repr=False)` |
+| `expires_at` | `datetime` |  |
+
+#### Constructor
+
+```python
+def __init__(user_id: str, email: str, recipient_name: str, code: str, expires_at: datetime) -> None
+```
+
+### `SignInMethodAddedMessage`
+
+```python
+class SignInMethodAddedMessage
+```
+
+A provider (`provider_name`: "Google") now signs in to the account.
+
+| Field | Type | Default |
+|---|---|---|
+| `user_id` | `str` |  |
+| `email` | `str` |  |
+| `recipient_name` | `str` |  |
+| `provider_name` | `str` |  |
+| `added_at` | `datetime` |  |
+
+#### Constructor
+
+```python
+def __init__(user_id: str, email: str, recipient_name: str, provider_name: str, added_at: datetime) -> None
+```
+
+### `SignInProviderFactory`
+
+```python
+class SignInProviderFactory(Protocol)
+```
+
+Makes providers of one `type` from configuration (Java: EgradxSignInProviderFactory). egradx-auth has `oidc`
+(the default), `google` and `zoho`; an application adds a type with `OidcSettings.provider_factories`, and
+replaces a built-in one with a factory of the same type.
+
+| Field | Type | Default |
+|---|---|---|
+| `type` | `str` |  |
+
+#### `create`
+
+```python
+def create(provider_id: str, settings: OidcProviderSettings) -> EgradxSignInProvider
+```
+
+A provider from its settings. The client id and secret are checked present before this is called. Raises
+ValueError if the settings are not enough; the provider is then left out, with a warning.
+
+### `SignupCodeMessage`
+
+```python
+class SignupCodeMessage
+```
+
+A code confirming a sign-up, to the address signing up; there is no account yet.
+
+| Field | Type | Default |
+|---|---|---|
+| `email` | `str` |  |
+| `recipient_name` | `str | None` |  |
+| `organization_name` | `str` |  |
+| `code` | `str` | `field(repr=False)` |
+| `expires_at` | `datetime` |  |
+
+#### Constructor
+
+```python
+def __init__(email: str, recipient_name: str | None, organization_name: str, code: str, expires_at: datetime) -> None
+```
+
+### `SignupCreated`
+
+```python
+class SignupCreated
+```
+
+The account and organization a sign-up made.
+
+| Field | Type | Default |
+|---|---|---|
+| `user_id` | `str` |  |
+| `organization_id` | `str` |  |
+
+#### Constructor
+
+```python
+def __init__(user_id: str, organization_id: str) -> None
+```
+
+### `SignupSettings`
+
+```python
+class SignupSettings
+```
+
+Who may sign up (Java: egradx.auth.signup.*). Not frozen, as Java's properties are not: an application (or a
+test) may change them while running.
+
+| Field | Type | Default |
+|---|---|---|
+| `mode` | `Literal['invitation', 'organization']` | `'invitation'` |
+| `allowed_email_domains` | `list[str]` | `field(default_factory=list)` |
+| `legacy_register` | `bool` | `False` |
+
+#### Constructor
+
+```python
+def __init__(mode: Literal['invitation', 'organization'] = 'invitation', allowed_email_domains: list[str] = list(), legacy_register: bool = False) -> None
+```
+
 ### `SortOrder`
 
 ```python
@@ -1628,6 +2438,14 @@ def __init__(property: str, direction: str = 'ASC') -> None
 ```python
 def auth_migrations() -> Path
 ```
+
+### `built_in_factories`
+
+```python
+def built_in_factories(client: EgradxOidcClient) -> list[SignInProviderFactory]
+```
+
+egradx-auth's own provider types: `oidc`, `google` and `zoho`.
 
 ### `check_password`
 
@@ -1679,6 +2497,15 @@ def normalize_address(enabled: list[str], channel: str, address: str | None) -> 
 
 Trims, normalizes (a phone number's spaces and punctuation), and checks an address for its channel.
 
+### `sends_sign_in_messages`
+
+```python
+def sends_sign_in_messages(sender: Any) -> bool
+```
+
+Whether `sender` sends the sign-in codes and the sign-in-method notice. As Java's sendsSignInMessages(), False
+for a sender that does not say it does.
+
 ### `session_current`
 
 ```python
@@ -1688,6 +2515,15 @@ def session_current(valid_after_micros: int | None, issued_at: datetime | None) 
 Whether a token issued at `issued_at` is still current after the person's sessions were ended at
 `valid_after`. Tokens carry whole seconds: as Java's EgradxSessionCutoff, one issued in the second of the cut-off
 is still current.
+
+### `sign_in_providers`
+
+```python
+def sign_in_providers(settings: OidcSettings, links_base_url: str | None, client: EgradxOidcClient | None = None) -> EgradxSignInProviders
+```
+
+The providers in use: the configured ones, made by the application's factories or else the built-ins, and the
+application's own (`settings.extra_providers`).
 
 ## Constants
 

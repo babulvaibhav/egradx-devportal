@@ -1,0 +1,84 @@
+---
+title: Link a provider from the profile
+description: A "Sign-in methods" card on the profile — link Google or Zoho to the signed-in account, unlink one, set a first password.
+---
+
+A provider is linked automatically only when its verified email matches the account and the provider is trusted for it. Otherwise, or to link a provider with a different email, the person links it from their profile while signed in. That is also the answer to `IDENTITY_LINK_REQUIRED`.
+
+The providers must be [set up](/docs/recipes/sign-in-with-google-and-zoho) and the `/auth/callback` page served.
+
+## 1. Show the methods
+
+`useSignInMethods()` loads `GET /egradx/auth/my/sign-in-methods`: whether the person has a password, and the providers linked.
+
+```tsx title="frontend/src/modules/profile/SignInMethods.tsx"
+import { useState } from 'react';
+import { useSignInMethods, useSignInOptions } from '@babulvaibhav/egradx-react';
+
+export function SignInMethods() {
+  const methods = useSignInMethods();
+  const { data: options } = useSignInOptions();
+  const [newPassword, setNewPassword] = useState('');
+  const linked = new Set(methods.data?.identities.map((identity) => identity.provider));
+
+  // Leaves for the provider; the callback links it to this account, whatever its email.
+  async function link(providerId: string) {
+    window.location.assign(await methods.link(providerId, '/profile'));
+  }
+
+  return (
+    <section>
+      {methods.data?.identities.map((identity) => (
+        <p key={identity.id}>
+          {identity.providerName} ({identity.email})
+          <button onClick={() => void methods.unlink(identity.id)}>Unlink</button>
+        </p>
+      ))}
+      {options?.providers.filter((provider) => !linked.has(provider.id)).map((provider) => (
+        <button key={provider.id} onClick={() => void link(provider.id)}>Link {provider.name}</button>
+      ))}
+      {methods.data && !methods.data.password && (
+        // No password yet: a first one needs no current password.
+        <form onSubmit={(event) => { event.preventDefault(); void methods.setPassword({ newPassword }); }}>
+          <input type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} />
+          <button>Set a password</button>
+        </form>
+      )}
+    </section>
+  );
+}
+```
+
+Or copy the finished card in:
+
+```sh
+npx shadcn@latest add https://<this portal>/r/sign-in-methods.json
+```
+
+## 2. Coming back
+
+`link` answers with the provider's URL (`POST /egradx/auth/my/sign-in-methods/oidc/{id}`). After the provider, the browser lands on `/auth/callback` with `?linked={id}&providerName=…&flow=link`, or with `?error=…&flow=link`. `readProviderCallback` reads that as `kind: 'linked'` (or `'error'` with `flow: 'link'`): send the person back to `returnTo`. The `auth-callback` copy-in screen does, through its `onLinked` callback:
+
+```tsx
+<AuthCallback
+  onSignedIn={(_, returnTo) => navigate(returnTo ?? '/')}
+  onLinked={(_, returnTo) => navigate(returnTo ?? '/profile')}
+/>
+```
+
+The account's owner is emailed that a sign-in method was added, and it is recorded as `auth.identity.linked` (`linkedBy: profile`).
+
+## What can go wrong
+
+| Code | When |
+|---|---|
+| `?error=IDENTITY_IN_USE` | another account already signs in with that provider account |
+| `?error=OIDC_CANCELLED`, `OIDC_STATE_INVALID`, `OIDC_FAILED` | as for a sign-in: declined, expired, or failed |
+| `SIGN_IN_METHOD_REQUIRED` (400) | unlinking would leave no way in (no password, no other provider, codes off): set a password first |
+| `NOT_FOUND` (404) | unlinking a provider that isn't the person's |
+
+Unlinking (`DELETE /egradx/auth/my/sign-in-methods/identities/{identityId}`) is recorded as `auth.identity.unlinked`.
+
+## See also
+
+- [Sign-up and sign-in methods](/docs/guides/sign-in-methods#trusting-a-providers-email) · [Add Sign in with Google and Zoho](/docs/recipes/sign-in-with-google-and-zoho)

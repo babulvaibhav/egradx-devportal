@@ -13,6 +13,7 @@ Every application needs people who sign in, the organizations they work for, and
 - A **role** is a named set of **authorities** (permissions) such as `note.write`. Your code checks authorities, never role names, so an administrator can reshape roles without a deployment.
 - A **session** acts in one organization at a time. Switching organization issues new tokens.
 - One organization is special: the **platform organization**, whose administrator manages the others.
+- People sign in with a password, an **emailed code**, or a provider such as **Google or Zoho**; with sign-up open, they make their own account and organization. See [sign-up and sign-in methods](/docs/guides/sign-in-methods).
 
 ## How it works
 
@@ -25,10 +26,10 @@ Every application needs people who sign in, the organizations they work for, and
   A-->>B: access token (RS256, 60 min) + refresh token (7 days)
   B->>A: GET /api/notes  Authorization: Bearer …
   A->>A: verify the signature locally (no network)
-  A->>D: still active? sessions cut off? organization active? role's authorities now?
+  A->>D: still active? session (sid) still going? organization active? role's authorities now?
   A-->>B: your endpoint runs with the caller resolved`} />
 
-The access token carries **who** (`sub`), the session's organization and role — never the authorities. On **every request** the SDK checks the signature, then reads from the database whether the person is still active, whether their sessions were cut off (password changed, "sign out everywhere"), whether the organization is still active, and what their role holds **now**. A permission granted or taken away applies on the next request, not at the next sign-in. A role's authorities are cached for 60 seconds per instance; the instance that made a change sees it at once.
+The access token carries **who** (`sub`), the session (`sid`), its organization and role — never the authorities. On **every request** the SDK checks the signature, then reads from the database whether the person is still active, whether the token's session is still going (not ended, expired, or cut off by a password change or "sign out everywhere"), whether the organization is still active, and what their role holds **now**. A permission granted or taken away applies on the next request, not at the next sign-in. A role's authorities are cached for 60 seconds per instance; the instance that made a change sees it at once, and with `egradx-redis` every instance does.
 
 ## Wiring it in
 
@@ -103,18 +104,36 @@ All of these are SDK endpoints; the [HTTP reference](/docs/reference/http) has e
 
 | Flow | Endpoints | Notes |
 |---|---|---|
-| Sign in, renew, sign out | `POST /egradx/auth/login`, `/refresh`, `/logout` | Someone in several organizations gets `400 ORG_SELECTION_REQUIRED` with `details.organizations`, then signs in again naming one. Refresh tokens are not rotated. |
+| What the sign-in page can offer | `GET /egradx/auth/sign-in-options` | Public: password, emailed code, sign-up mode, providers. |
+| Sign in, renew, sign out | `POST /egradx/auth/login`, `/refresh`, `/logout` | Someone in several organizations gets `400 ORG_SELECTION_REQUIRED` with `details.organizations`, then signs in again naming one. Every refresh returns a new refresh token: store it ([sessions](#sessions)). |
+| Sign in with an emailed code | `POST /egradx/auth/email-code`, `/email-code/verify` | Always 204 for the request, so it reveals no accounts. [Recipe](/docs/recipes/sign-in-with-an-emailed-code). |
+| Sign in with Google, Zoho, another provider | `GET /egradx/auth/oidc/{id}/start`, `/callback`; `POST /egradx/auth/oidc/exchange`, `/oidc/signup` | The browser lands on your `/auth/callback` page. [Recipe](/docs/recipes/sign-in-with-google-and-zoho). |
+| Sign up, with a new organization | `POST /egradx/auth/signup`, `/signup/confirm` | Only with `signup.mode: organization`; confirmed by an emailed code. [Recipe](/docs/recipes/let-people-sign-up). |
+| Your sign-in methods | `GET /egradx/auth/my/sign-in-methods`, `POST …/oidc/{id}`, `DELETE …/identities/{identityId}` | Link and unlink providers. [Recipe](/docs/recipes/link-a-provider). |
 | Who am I | `GET /egradx/auth/me`, `GET /egradx/auth/my/organization(s)` | |
-| Switch organization | `POST /egradx/auth/my/organizations/{id}/switch` | New tokens; send the old refresh token to retire it. |
-| Change password | `POST /egradx/auth/my/password` | Ends every other session; answers with fresh tokens. |
-| Sign out everywhere | `POST /egradx/auth/my/sessions/revoke-all` | |
+| Switch organization | `POST /egradx/auth/my/organizations/{id}/switch` | New tokens in a new session; the session left ends. |
+| Change password | `POST /egradx/auth/my/password` | Ends every other session; answers with fresh tokens. Without `currentPassword`, sets a first password on an account that has none. |
+| Your sessions | `GET /egradx/auth/my/sessions`, `DELETE /egradx/auth/my/sessions/{sessionId}` | Where you're signed in; end one (204, or 404 `NOT_FOUND`). [Recipe](/docs/recipes/list-and-end-sessions). |
+| Sign out everywhere | `POST /egradx/auth/my/sessions/revoke-all` | Answers with a fresh session for this device. |
 | Forgotten password | `POST /egradx/auth/password/forgot`, `/password/reset` | Always 202, so it reveals no accounts. Needs email and `links.base-url`. |
-| Invitations | `/egradx/auth/my/invitations`, `/egradx/auth/invitations/{token}` | A link by email; the invitee chooses a password, or signs in if they have an account. |
+| Invitations | `/egradx/auth/my/invitations`, `/egradx/auth/invitations/{token}` | A link by email; the invitee joins with a name (a password is optional) or a provider, or signs in if they have an account. |
 | Change sign-in email | `/egradx/auth/my/email`, `/my/email/confirm` | A six-digit code to the new address. |
-| Profiles, addresses, preferences | `/egradx/auth/my/profile/**` | Addresses are verified with a code before use. |
+| Profiles, addresses, preferences | `/egradx/auth/my/profile/**` | Addresses are verified with a code before use. `photoUrl` is an `http(s)` URL, or a photo stored by file storage. |
+| Your profile photo | `PUT` / `DELETE /egradx/auth/my/profile/photo` | Served by [`egradx-file-storage`](/docs/guides/files#profile-photos) when it is installed: an upload that sets `photoUrl`, one per person, readable in the organization. [Recipe](/docs/recipes/set-a-profile-photo). |
 | Users and roles of an organization | `/egradx/auth/my/users/**`, `/my/roles/**` | Its administrators manage them. |
 
-The emails these flows send (reset link, invitation, codes) are [notification types](/docs/guides/notifications) of the SDK's, sent through the same outbox as yours. The links point at `links.base-url` plus `/reset-password?token=…` and `/accept-invite?token=…`: your frontend serves those pages.
+The emails these flows send (reset link, invitation, sign-in and sign-up codes) are [notification types](/docs/guides/notifications) of the SDK's, sent through the same outbox as yours. The links point at `links.base-url` plus `/reset-password?token=…` and `/accept-invite?token=…`: your frontend serves those pages.
+
+## Sessions
+
+Sessions as described here come with the next republish of `egradx-auth` and `@babulvaibhav/egradx-next` 1.0.0 ([what's new](/docs/whats-new)).
+
+- **A session is one sign-in on one device.** It lasts 7 days from sign-in (`refresh-token-ttl-days`); refreshing never extends it. The access token's `sid` is the session's id, checked on every request.
+- **Every refresh replaces the refresh token.** `POST /egradx/auth/refresh` returns a new access token **and a new refresh token**; store both. The one sent still renews the session for 30 seconds (the reuse grace), so two tabs, or a Next.js page and its route handler, refreshing with it at once both carry on.
+- **A replaced token sent after the grace ends the whole session**, on every device holding any of its tokens: `401 SESSION_REVOKED`, recorded as `auth.session.reused`. It is taken as a stolen copy.
+- **Ending a session** — signing out, switching organization, ending it from the sessions list — refuses its refresh token at once (`SESSION_REVOKED`) and its access token on its next request (`SESSION_EXPIRED`). Ending one from the list is recorded as `auth.session.ended`.
+
+`@babulvaibhav/egradx-client` and `@babulvaibhav/egradx-next` handle rotation for you. A client of your own must keep only the newest refresh token, and share one refresh between requests that need it at once. People see where they are signed in, and end a session, with `GET` and `DELETE /egradx/auth/my/sessions[/{sessionId}]`: see [list and end sessions](/docs/recipes/list-and-end-sessions).
 
 ## Configuration
 
@@ -123,22 +142,26 @@ The emails these flows send (reset link, invitation, codes) are [notification ty
 | Issuer, stamped on every token | `issuer-uri` | `issuer` | `issuer` | required |
 | Signing keys | `egradx.security.crypto.keystorePath`, `.passphrase` | `keys: { keystorePath, passphrase }` | `keystore_path`, `keystore_passphrase` | required |
 | Access token lifetime | `access-token-ttl-minutes` | `accessTokenTtlMinutes` | `access_token_ttl_minutes` | 60 |
-| Refresh token lifetime | `refresh-token-ttl-days` | `refreshTokenTtlDays` | `refresh_token_ttl_days` | 7 |
+| Session lifetime, from sign-in | `refresh-token-ttl-days` | `refreshTokenTtlDays` | `refresh_token_ttl_days` | 7 |
+| Grace for a replaced refresh token | `refresh-token-reuse-grace-seconds` | `refreshTokenReuseGraceSeconds` | `refresh_token_reuse_grace_seconds` | 30 |
 | Role cache | `role-authorities-cache-ttl-seconds` | `roleAuthoritiesCacheTtlSeconds` | `role_authorities_cache_ttl_seconds` | 60 |
 | Links in emails | `links.base-url` | `links: { baseUrl }` | `links=LinkSettings(base_url=…)` | none: no reset or invitation emails |
 | Sign-in attempt limit | `rate-limit.*` (5 per account and address, 100 per address, 15 min) | `rateLimit: {…}` | `rate_limit=RateLimitSettings(…)` (`None` turns it off) | on |
 | Platform organization and administrator | `platform.*` | `platform: {…}` | `platform=PlatformSettings(…)` | see above |
+| Sign-up, emailed codes, providers | `signup.*`, `email-code.*`, `oidc.*` | `signup`, `emailCode`, `oidc` | `signup=SignupSettings(…)`, `email_code=EmailCodeSettings(…)`, `oidc=OidcSettings(…)` | invitation only; codes on; no providers ([details](/docs/guides/sign-in-methods#configuration)) |
 | Contact channels people may add | `profile.channels` | `profile: { channels }` | `profile=ProfileSettings(channels=…)` | email, sms, whatsapp, slack |
 
 Java reads environment variables through Spring (`EGRADX_AUTH_ISSUERURI`…); Node and Python read none themselves — the application passes values, as the examples do. The [configuration reference](/docs/reference/configuration) lists every key.
 
 ## Guarantees and limits
 
-- **Passwords** are hashed with Argon2id (the same parameters in every language), and a wrong username takes as long as a wrong password.
+- **Passwords** are hashed with Argon2id (the same parameters in every language), and a wrong username takes as long as a wrong password. An account may have no password; a password sign-in to it fails the same way.
 - **Effective at once, everywhere:** deactivating a person, ending their sessions, suspending an organization, changing someone's role. Changing what a role holds is immediate on the instance that made the change and takes up to 60 seconds elsewhere.
 - **Deactivation is global**: a person deactivated by one organization's administrator can no longer use any organization.
-- **Per instance:** the sign-in attempt limit counts on each instance separately.
-- **Not yet:** refresh-token rotation, a list of one's sessions to end one by one, sign-in by one-time code, single sign-on. `POST /egradx/auth/register` creates an account in no organization.
+- **Per instance, without `egradx-redis`:** the sign-in attempt limit counts on each instance separately ([two instances](/docs/recipes/two-instances)).
+- **Refresh tokens rotate**, with reuse detection; a stolen refresh token used after its replacement ends the session it belongs to ([sessions](#sessions)).
+- **Not yet:** single sign-on per organization (each organization bringing its own provider), SAML, a second factor. Sign-up, emailed codes and application-wide providers are built ([sign-in methods](/docs/guides/sign-in-methods)).
+- **`POST /egradx/auth/register` is deprecated.** It creates an account in no organization, and answers `SIGNUP_DISABLED` unless `signup.legacy-register` is on. Use [sign-up](/docs/recipes/let-people-sign-up).
 - **Several instances, several languages:** they must share the keys folder and the issuer. Then a token issued by one is accepted by all — even across Java, Node and Python. See [keys](/docs/guides/keys).
 
 ## In OIM
@@ -171,6 +194,8 @@ OIM has no sign-in code at all: both its frontends call the SDK's endpoints dire
 
 ## See also
 
+- [Sign-up and sign-in methods](/docs/guides/sign-in-methods): sign-up, emailed codes, Google, Zoho and other providers.
 - [Authorization](/docs/guides/authorization): your permissions and who holds them.
 - [Web](/docs/guides/web): sign-in, renewal and organization choice in the browser.
+- [Files](/docs/guides/files#profile-photos): profile photos, uploaded and shown.
 - [HTTP reference](/docs/reference/http) and [token claims](/docs/reference/headers-and-tokens).

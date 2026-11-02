@@ -379,6 +379,10 @@ const catalogNames = Object.keys(catalogs);
 if (catalogNames.length > 0) {
   const shapes = new Set(catalogNames.map((language) => JSON.stringify(catalogs[language])));
   if (shapes.size > 1) {
+    // EGRADX_CAPTURE_CATALOGS=<file> writes every language's catalog there, to see what differs.
+    if (process.env.EGRADX_CAPTURE_CATALOGS) {
+      writeFileSync(process.env.EGRADX_CAPTURE_CATALOGS, `${JSON.stringify(catalogs, null, 2)}\n`);
+    }
     const [first, ...others] = catalogNames;
     for (const other of others) {
       for (const part of ['permissions', 'adminRole', 'actions', 'types']) {

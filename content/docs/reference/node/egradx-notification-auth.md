@@ -10,7 +10,7 @@ Joins `@babulvaibhav/egradx-notification` to `@babulvaibhav/egradx-auth`, as the
 | Export | What it is |
 |---|---|
 | `notificationsWithAuth(auth, options)` | Completes the options for `createNotifications` with:<ul><li>the notification authorities, added to auth's catalog;</li><li>the account-message types and templates;</li><li>the resolvers below.</li></ul> |
-| `connectAccountMessages(auth, notifications)` | Sends auth's messages through notification, with Java's templates and the same model: password reset, invitation, email-change code, email changed, password changed and contact verification. |
+| `connectAccountMessages(auth, notifications)` | Sends auth's messages through notification, with Java's templates and the same model: password reset, invitation, email-change code, email changed, password changed, contact verification, and the sign-in code, sign-up code and sign-in-method-added notice (`egradx.auth.sign-in-code`, `.signup-code`, `.sign-in-method-added`; its sender answers `sendsSignInMessages()` true). |
 | `notificationResolvers(auth)` | The resolvers on their own:<ul><li>viewers and actors: who is calling;</li><li>recipients: a user's addresses, from their profile contacts;</li><li>the directory: who is in an organization, for bulk sends;</li><li>preferences: opt-outs.</li></ul> |
 | `accountMessageTypes()`, `ACCOUNT_TEMPLATES` | The types and the template folder, packaged from `contracts/notification-templates/egradx-notification-auth/`. |
 
@@ -49,6 +49,9 @@ The kinds of account message, as Java's EgradxNotificationAccountMessageSender d
 | <a id="property-invitation"></a> `INVITATION` | `"egradx.auth.invitation"` | `'egradx.auth.invitation'` |
 | <a id="property-password_changed"></a> `PASSWORD_CHANGED` | `"egradx.auth.password-changed"` | `'egradx.auth.password-changed'` |
 | <a id="property-password_reset"></a> `PASSWORD_RESET` | `"egradx.auth.password-reset"` | `'egradx.auth.password-reset'` |
+| <a id="property-sign_in_code"></a> `SIGN_IN_CODE` | `"egradx.auth.sign-in-code"` | `'egradx.auth.sign-in-code'` |
+| <a id="property-sign_in_method_added"></a> `SIGN_IN_METHOD_ADDED` | `"egradx.auth.sign-in-method-added"` | `'egradx.auth.sign-in-method-added'` |
+| <a id="property-signup_code"></a> `SIGNUP_CODE` | `"egradx.auth.signup-code"` | `'egradx.auth.signup-code'` |
 
 ***
 

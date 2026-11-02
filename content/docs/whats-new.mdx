@@ -5,6 +5,73 @@ description: What changed in the SDK and the portal, by date — while every pac
 
 Every package is published as **1.0.0** until the SDK is complete, so changes are listed here by date. To pick up a republished package, see [upgrading](/docs/operate/upgrading).
 
+## 2026-10-31
+
+**Sign-in providers are strategies, and `preset` is now `type`**, in all three languages ([adding a provider](/docs/guides/sign-in-methods#adding-a-provider)):
+
+- **Rename `preset` to `type`** in each provider's settings: `egradx.auth.oidc.providers.<id>.type` (Node `{ type: 'google' }`, Python `OidcProviderSettings(type="google")`). The types are `oidc` (the default: any OpenID Connect provider, from its `issuer`), `google`, `zoho`, or one of your own. `preset` is no longer read: Java and Node would take the provider as type `oidc` and leave it out for want of an issuer (a warning at startup), and Python refuses the argument.
+- **A provider egradx-auth lacks is one class of yours.** Implement `EgradxSignInProvider` (where to send the browser; who came back) and register it as a bean (Node and Python: `oidc.extraProviders` / `extra_providers`), or register an `EgradxSignInProviderFactory` for a new `type` (`oidc.providerFactories` / `provider_factories`) and configure it like Google. egradx-auth still runs the round trip, the linking and the session. Google and Zoho are built the same way: `EgradxGoogleSignInProvider` and `EgradxZohoSignInProvider` extend `EgradxOidcSignInProvider` ([recipe: add another sign-in provider](/docs/recipes/add-a-sign-in-provider)).
+
+## 2026-10-30
+
+**Sign-up and sign-in methods**, in all three languages and the web packages, in the next republish of the 1.0.0 packages ([the guide](/docs/guides/sign-in-methods)):
+
+- **Sign-up.** `egradx.auth.signup.mode: organization` (Node `signup: { mode }`, Python `SignupSettings(mode=…)`) lets anyone make an account, confirmed by an emailed code, as the administrator of a new organization of their own. The default, `invitation`, keeps accounts to administrators and invitations ([recipe](/docs/recipes/let-people-sign-up)).
+- **Signing in with an emailed code.** `POST /egradx/auth/email-code` and `/email-code/verify`: six digits, 10 minutes, 5 tries, on wherever email works (`email-code.*`) ([recipe](/docs/recipes/sign-in-with-an-emailed-code)).
+- **Google, Zoho and any OpenID Connect provider.** `egradx.auth.oidc.callback-base-url` and `oidc.providers.<id>`, with the `google` and `zoho` types (Zoho's data centres included; the setting was first called `preset`, see 2026-10-31). Register `{callback-base-url}/egradx/auth/oidc/{id}/callback` with the provider; the browser comes back to your `/auth/callback` page ([recipe](/docs/recipes/sign-in-with-google-and-zoho)).
+- **Linking.** A trusted provider's verified email links to the matching account, and the owner is emailed. Otherwise `IDENTITY_LINK_REQUIRED`, and the person links it from the profile: `/egradx/auth/my/sign-in-methods` ([recipe](/docs/recipes/link-a-provider)).
+- **Accounts without a password.** Accounts made by a code, a provider or an invitation may have none. `POST /egradx/auth/my/password` without `currentPassword` sets a first one, and accepting an invitation no longer needs a password.
+- **The web packages.** `signInOptions`, `requestEmailCode`, `verifyEmailCode`, `startSignup`, `confirmSignup`, `providerSignInUrl`, `exchangeProviderCode` and `signUpWithProvider` on the client and `useAuth()`. Also `useSignInOptions()` and `useSignInMethods()`. The Next.js backend-for-frontend passes them all through, provider start included. New copy-in screens: `sign-in`, `sign-up`, `auth-callback` and `sign-in-methods` ([web](/docs/guides/web#signing-in-other-ways-and-signing-up)).
+- **New error codes** (`SIGNUP_*`, `EMAIL_CODE_*`, `OIDC_*`, `IDENTITY_*`, `AUTH_NO_ACCOUNT`, `ORGANIZATION_NAME_IN_USE`, `SIGN_IN_METHOD_REQUIRED`) and **audit actions** (`auth.signup.completed`, `auth.identity.linked`, `auth.identity.unlinked`; `auth.login` gains `method`). Auth migration V7 adds the tables.
+- **`POST /egradx/auth/register` is deprecated** and answers `SIGNUP_DISABLED` unless `signup.legacy-register` is true. If you call it, move to sign-up or set the flag.
+
+**Choosing which sign-in methods to show.** The server still decides what is on; a page now decides which of those it shows, in what order and with what words, and can never show one that is off ([the guide](/docs/guides/sign-in-methods#choosing-which-methods-to-show)):
+
+- `resolveSignInMethods(options, { methods, order, labels })` on the client, framework-free, and `session.startProviderSignIn(id, { returnTo, invitationToken })`, which keeps an invitation's token for the callback page; `exchangeProviderCode` sends it by itself.
+- `useSignInMethodList(...)` in React: the methods, the steps and the actions, for a sign-in page of your own design. `useProviderSignIn(...)` for just the provider buttons.
+- A new copy-in screen, `sign-in-methods-picker` (`SignInMethodsPicker`), with `methods`, `order`, `labels`, `layout`, `icons` and `classNames`. `SignIn` now wraps it and takes the same props.
+
+**File storage**, new in all three languages and the web packages, in the next republish of the 1.0.0 packages ([the guide](/docs/guides/files)):
+
+- **The library:** `egradx-file-storage` (Java, beside `egradx-sdk`), `@babulvaibhav/egradx-file-storage` (Node, passed to `createEgradx` as `files`), `egradx-file-storage` (Python, `egradx-sdk[files]` and `SdkOptions(files=…)`). It migrates its own table, `egradx_file`.
+- **Endpoints:** `POST`/`GET /egradx/files`, `GET`/`DELETE /egradx/files/{id}`, `GET /egradx/files/{id}/content` (streamed, with `Range`, `ETag` and `Content-Disposition`), and `PUT`/`DELETE /egradx/auth/my/profile/photo` ([HTTP](/docs/reference/http/files)).
+- **Backends:** local disk (`egradx.files.local.root`), or any S3-compatible store — AWS S3, MinIO, Cloudflare R2, Wasabi — with `backend: s3` and the AWS SDK added; pre-signed downloads optional ([recipe](/docs/recipes/store-files-in-s3)).
+- **Access:** files belong to an organization; the permissions `egradx.file.read`, `.write` and `.delete` are on every Admin role; the uploader may always read and delete. For files attached to your records, an access policy of yours decides (`EgradxFileAccessPolicy`) ([recipe](/docs/recipes/attach-files-to-records)).
+- **Profile photos:** `photoUrl` can now be a stored photo, readable by everyone in the organization ([recipe](/docs/recipes/set-a-profile-photo)).
+- **A scanning hook,** `EgradxFileScanner`, refuses a file before it is kept ([recipe](/docs/recipes/scan-uploads)).
+- **The web packages:** `client.files`, `createAttachments`, `createProfilePhoto` and `checkFile`; `useAttachments`, `useFileUpload`, `useFileObjectUrl` and `useProfilePhoto`; the Next.js backend-for-frontend passes uploads and downloads (keep its path out of `proxy.ts`'s matcher). New copy-in screens: `file-upload`, `attachments` and `avatar-upload`.
+- **New error codes** `FILE_TOO_LARGE`, `FILE_TYPE_NOT_ALLOWED`, `FILE_EMPTY`, `FILE_REJECTED`, `FILE_STORAGE_UNAVAILABLE`, and **audit actions** `files.file.uploaded`, `files.file.deleted`, `files.file.download_denied`.
+- **Not yet:** resumable, chunked uploads — the next step, on the same API.
+
+OIM uses it in all three backends: order attachments, and a profile photo in the header. Behind a proxy, raise its body limit above `max-size` (OIM's nginx: `client_max_body_size 30m`).
+
+**Clean-up that affects your code:**
+
+- `EgradxUserTokenContext.isTokenExpired()` works (Java); it always answered `false` before.
+- `migrateEgradx` / `migrate_egradx` migrate the events tables too when the events package is installed; a separate `migrateEvents` / `migrate_events` call is no longer needed.
+- A non-UUID audit record id answers 400 `INVALID_REQUEST` in every language; Node and Python answered 404.
+- Java writes the private key files owner-only where POSIX permissions exist.
+
+**SDK, in the next republish of the 1.0.0 packages:** the new `egradx-redis` (all three languages), `egradx-sdk` (Java), `egradx-auth` (Java, `@babulvaibhav/egradx-auth` for Node, the `egradx-auth` wheel for Python) and `@babulvaibhav/egradx-next`. Until you fetch them again, the published 1.0.0 behaves as before.
+
+- **Your Java endpoints answer in the error envelope with no advice of your own.** `egradx-sdk` registers `EgradxApplicationExceptionHandler`, ordered last: the core exceptions, request errors, a refused `@PreAuthorize`, an unknown path, anything unexpected. An advice of yours answers first, whatever its order; a bean extending the handler replaces it; `egradx.errors.fallback.enabled: false` removes it. The generated `ApiExceptionHandler` becomes optional — the place for your own answers. A catch-all advice of your own must handle `AccessDeniedException` too, or refusals become 500s ([errors](/docs/guides/errors#wiring-the-envelope-in)).
+- **Refresh tokens rotate, in all three languages.** Every refresh returns a new refresh token: store it. A replaced one still renews within a 30-second grace (`refresh-token-reuse-grace-seconds`, `refreshTokenReuseGraceSeconds`, `refresh_token_reuse_grace_seconds`); sent after that, it ends the whole session (`SESSION_REVOKED`, audited as `auth.session.reused`). The web packages handle this; a client of your own keeps only the newest token ([sessions](/docs/guides/identity#sessions)).
+- **Sessions you can see and end.** A session per sign-in; the access token's `sid` is its id, checked on every request. `GET /egradx/auth/my/sessions` lists them, `DELETE /egradx/auth/my/sessions/{sessionId}` ends one (204; 404 `NOT_FOUND`), audited as `auth.session.ended` ([recipe](/docs/recipes/list-and-end-sessions)). Auth migration V6 makes every existing refresh token a session of its own, so nobody is signed out by the upgrade.
+- **Several instances act as one, through Redis: `egradx-redis`**, new in all three languages (`egradx-redis`, `@babulvaibhav/egradx-redis`, `egradx-redis` / `egradx-sdk[redis]`). Sign-in attempt limits are counted together, a role's changed permissions apply on every instance at once, and in-app notifications are pushed live on every instance. It fails open: without Redis each instance carries on alone ([two instances](/docs/recipes/two-instances)).
+- **Next.js: the guard renews before the page renders.** `bff.guard` in `proxy.ts` is now async (return or `await` it); it refreshes an expiring token and sets the cookies on the response and on the page's request, so server components don't refresh. The backend-for-frontend never presents a replaced refresh token ([web](/docs/guides/web#nextjs-with-the-backend-for-frontend)).
+
+**Portal**
+
+- A new guide, [files](/docs/guides/files), and four recipes: [attach files to your records](/docs/recipes/attach-files-to-records), [let people set a profile photo](/docs/recipes/set-a-profile-photo), [store files in S3 or MinIO](/docs/recipes/store-files-in-s3), [scan uploads](/docs/recipes/scan-uploads). The identity, web, frontend, operating and parity pages, the HTTP, error, database and configuration references, the Node, Python and Java API references and the AI context pack follow them. The sign-in guide and recipes show the methods picker.
+- A new guide, [sign-up and sign-in methods](/docs/guides/sign-in-methods), and four recipes: [let people sign up](/docs/recipes/let-people-sign-up), [add Sign in with Google and Zoho](/docs/recipes/sign-in-with-google-and-zoho), [sign in with an emailed code](/docs/recipes/sign-in-with-an-emailed-code), [link a provider from the profile](/docs/recipes/link-a-provider). The identity, web, invitation and operating pages, the references and the AI context pack follow them.
+- The docs now match the SDK guide rewritten on 2026-10-29: the identity guide, security checklist, known limitations, troubleshooting and the AI context pack; a new recipe, [list and end sessions](/docs/recipes/list-and-end-sessions).
+
+## 2026-10-06
+
+**Initializr**
+
+- **Every generated project has one layout, whatever you choose.** At the root: a `README.md` with the tree for your combination and how to run each part, `docker-compose.yml` and `docker/`, the CI workflow, and `AGENTS.md`/`CLAUDE.md` with the AI context pack. The backend is always in `backend/` (with its own README and `.env.example`), its code grouped by feature (`note/`, `common/`) as OIM's is; a Python backend is now a package, `src/<module>/`, run with `python -m <module>`. A chosen frontend is in `frontend/` (`app/`, `lib/`, `components/`, `modules/<feature>/`). The example applications and every snippet on this portal follow it.
+
 ## 2026-10-05
 
 **SDK, republished (Java)**

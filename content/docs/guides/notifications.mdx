@@ -201,7 +201,7 @@ Set `management.health.mail.enabled: false` in Java: a mail server outage delays
 ## Guarantees and limits
 
 - **At least once:** a delivery can be sent twice if an instance dies mid-send; webhooks carry an `Idempotency-Key`.
-- **Live push is per instance:** a notice published on one instance reaches the streams open on that instance. Nothing is lost — the others see it on their next load — and a broadcaster of your own (Redis pub/sub) makes it live everywhere.
+- **Live push is per instance:** a notice published on one instance reaches the streams open on that instance. Nothing is lost — the others see it on their next load — and `egradx-redis` makes it live everywhere ([two instances](/docs/recipes/two-instances)).
 - **Five streams per person per instance**, each reconnecting every five minutes.
 - **Slack, SMS, WhatsApp and webhooks** are tested against local stand-ins of those services, not the live ones.
 - **One outbox for every language:** a message queued by Java can be delivered by a Node instance, and the other way round.

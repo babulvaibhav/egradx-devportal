@@ -8,10 +8,12 @@
     "egradx-core",
     "egradx-events",
     "egradx-express",
+    "egradx-file-storage",
     "egradx-migrations",
     "egradx-notification",
     "egradx-notification-auth",
     "egradx-observability",
+    "egradx-redis",
     "egradx-sdk",
     "egradx-security",
     "egradx-tls-provider"

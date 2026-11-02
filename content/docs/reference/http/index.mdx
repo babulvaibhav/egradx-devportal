@@ -9,6 +9,7 @@ An application on the SDK serves these endpoints itself, under its own base path
   <Card title="Sign-in & identity" href="/docs/reference/http/auth">`/egradx/auth/**`: sign-in, sessions, accounts, organizations, users, roles, invitations, profiles.</Card>
   <Card title="Audit trail" href="/docs/reference/http/audit">`/egradx/audit/**`: records, history, export, the action catalog.</Card>
   <Card title="Notifications" href="/docs/reference/http/notification">`/egradx/notifications/**`: the inbox, its stream, preferences, and administration.</Card>
+  <Card title="File storage" href="/docs/reference/http/files">`/egradx/files/**` and the profile photo: uploads, a record's files, downloads, deletes.</Card>
 </Cards>
 
 ## For every endpoint
@@ -16,6 +17,7 @@ An application on the SDK serves these endpoints itself, under its own base path
 - **Signed in** with `Authorization: Bearer <access token>`; sign-in, renewal, the forgotten-password flow and invitation links are open. See [headers and tokens](/docs/reference/headers-and-tokens).
 - **Refusals** are the [error envelope](/docs/reference/errors): 401 `NOT_AUTHENTICATED` or `SESSION_EXPIRED`, 403 `ACCESS_DENIED`, 404 for anything outside the caller's organization.
 - **Request ids:** send `X-Request-ID`; every answer carries one.
-- **Lists** page with `page` and `size` (sign-in and notifications) or with an opaque `cursor` (the audit trail).
+- **Lists** page with `page` and `size` (sign-in and notifications) or with an opaque `cursor` (the audit trail). A record's files come in one list of at most 200.
+- **Uploads** are `multipart/form-data`, with the file in the `file` part.
 
-The contracts behind these pages are `contracts/openapi/auth.yaml`, `audit.yaml` and `notification.yaml` in the SDK's repository; the [browser client](/docs/guides/web) has typed calls generated from them.
+The contracts behind these pages are `contracts/openapi/auth.yaml`, `audit.yaml`, `notification.yaml` and `files.yaml` in the SDK's repository; the [browser client](/docs/guides/web) has typed calls generated from them.

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://egradx.com/contracts/schemas/error.json",
   "title": "EgradxErrorResponse",
-  "description": "Body of every non-2xx response from the egradx auth, audit and notification endpoints (/egradx/**). Java: com.egradx.auth.web.EgradxErrorResponse, com.egradx.notification.web.EgradxNotificationErrorResponse, com.egradx.audit.web.EgradxAuditExceptionHandler.ErrorResponse. Clients switch on error.code, never on message text; a non-2xx body without error.code is not an EGRADX error (a proxy page, a framework default).",
+  "description": "Body of every non-2xx response from the egradx auth, audit and notification endpoints (/egradx/**). Java: com.egradx.core.error.EgradxErrorResponse, built by com.egradx.core.error.EgradxErrors and answered by each library's exception handler (EgradxAuthExceptionHandler, EgradxAuditExceptionHandler, EgradxNotificationExceptionHandler), all extending com.egradx.core.web.EgradxExceptionHandlerSupport. Clients switch on error.code, never on message text; a non-2xx body without error.code is not an EGRADX error (a proxy page, a framework default).",
   "type": "object",
   "required": [
     "success",

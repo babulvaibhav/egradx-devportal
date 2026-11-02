@@ -15,7 +15,7 @@ Signing in as someone with several organizations fails with `ORG_SELECTION_REQUI
 
 <RepoSnippet file="apps/egradx-devportal/examples/web-vite/src/recipes/OrganizationSwitcher.tsx" region="switch-organization" title="frontend/src/recipes/OrganizationSwitcher.tsx" />
 
-`switchOrganization(id)` calls `POST /egradx/auth/my/organizations/{id}/switch`, replaces the tokens, and retires the old refresh token.
+`switchOrganization(id)` calls `POST /egradx/auth/my/organizations/{id}/switch`, replaces the tokens with those of a new session in the other organization, and ends the session left: its refresh token stops working at once.
 
 ## Leave nothing behind
 

@@ -44,6 +44,8 @@ class Oim:
     dashboard: "DashboardCache"
     log: logging.Logger
     low_stock_channels: list[str]
+    # egradx-file-storage: its endpoints join egradx_router(oim).
+    files: Any = None
 
 
 @asynccontextmanager

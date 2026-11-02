@@ -11,7 +11,7 @@ Each library owns its tables and migrates them itself, recording what it applied
 
 | Library | Its tables | Its history table |
 |---|---|---|
-| Sign-in & identity | `egradx_organization`, `egradx_user`, `egradx_role`, `egradx_authority`, memberships, refresh tokens, profiles, contacts, invitations, password resets, email changes | `egradx_auth_schema_history` |
+| Sign-in & identity | `egradx_organization`, `egradx_user`, `egradx_role`, `egradx_authority`, memberships, sessions, refresh tokens, profiles, contacts, invitations, password resets, email changes | `egradx_auth_schema_history` |
 | Audit | `egradx_audit_event` | `egradx_audit_schema_history` |
 | Notifications | messages, deliveries, attachments, templates, channel settings, bulk sends, in-app notices and read state | `egradx_notification_schema_history` |
 | Events | `egradx_event_outbox`, `egradx_event_inbox` | `egradx_events_schema_history` |

@@ -1,0 +1,96 @@
+---
+title: Scan uploads
+description: Refuse a file before it is kept — a virus scanner or a content check plugged into egradx-file-storage, answered with FILE_REJECTED.
+---
+
+A scanner sees each uploaded file **after its bytes are stored and before its row is committed**. It answers with a reason to refuse the file, or nothing to keep it. A refusal deletes the bytes and answers `422 FILE_REJECTED`; nothing is listed or recorded as uploaded. The SDK ships the hook, not a scanner: you bring ClamAV, a cloud scanning API, or a check of your own.
+
+## 1. Write the scanner
+
+The example refuses anything a ClamAV daemon flags; `clamAv` stands for the client you use.
+
+<Languages>
+<Tab value="Java">
+
+A bean; every `EgradxFileScanner` bean is called, in order.
+
+```java title="common/files/ClamAvScanner.java"
+@Component
+class ClamAvScanner implements EgradxFileScanner {
+
+    private final ClamAvClient clamAv;
+
+    ClamAvScanner(ClamAvClient clamAv) {
+        this.clamAv = clamAv;
+    }
+
+    @Override
+    public Optional<String> scan(Upload upload) throws IOException {
+        try (InputStream bytes = upload.open()) {          // the stored bytes, from the start, each time
+            return clamAv.isClean(bytes) ? Optional.empty() : Optional.of("A virus was found");
+        }
+    }
+}
+```
+
+</Tab>
+<Tab value="Node">
+
+```ts title="src/files/clamav-scanner.ts"
+import type { EgradxFileScanner } from '@babulvaibhav/egradx-file-storage';
+
+export const clamAvScanner = (clamAv: ClamAvClient): EgradxFileScanner => ({
+  async scan(upload) {
+    const bytes = await upload.open();                     // a Readable of the stored bytes, from the start
+    return (await clamAv.isClean(bytes)) ? undefined : 'A virus was found';
+  },
+});
+
+// createFileStorage({ …, scanners: [clamAvScanner(clamAv)] })
+```
+
+</Tab>
+<Tab value="Python">
+
+```python title="src/<module>/files/clamav_scanner.py"
+from egradx.files import ScannedUpload
+
+
+class ClamAvScanner:
+    def __init__(self, clam_av) -> None:
+        self._clam_av = clam_av
+
+    async def scan(self, upload: ScannedUpload) -> str | None:
+        chunks = await upload.open()                       # an async iterator of the stored bytes
+        return None if await self._clam_av.is_clean(chunks) else "A virus was found"
+
+# FilesOptions(..., scanners=[ClamAvScanner(clam_av)])
+```
+
+</Tab>
+</Languages>
+
+Besides the bytes, `upload` gives the organization, the cleaned name, the content type and the size: enough for a check such as "only real PDFs" or "no executables".
+
+## 2. Decide what happens when the scanner is down
+
+An exception from the scanner fails the upload and the bytes are removed: an I/O error answers `FILE_STORAGE_UNAVAILABLE` (503), so the person can try again. Prefer that to returning nothing, which would keep a file nobody checked.
+
+## 3. Word the refusal
+
+The copy-in screens already say "refused by a scan" for `FILE_REJECTED` (`components/egradx/files/file-format.ts`). With the hooks:
+
+```tsx
+{upload.error?.code === 'FILE_REJECTED' && <p>That file was refused by the virus check.</p>}
+```
+
+## How it behaves
+
+- **Every upload is scanned**: attachments, files without a record, and profile photos.
+- **The scan runs inside the upload request.** A slow scanner makes uploads slow; keep it under the timeouts of the proxies in front.
+- **Nothing is kept on a refusal**: no row, no bytes, no `files.file.uploaded` record.
+- **Files already stored are not rescanned** when you add a scanner.
+
+## See also
+
+- [Files: scanning uploads](/docs/guides/files#scanning-uploads) · [Attach files to your records](/docs/recipes/attach-files-to-records)

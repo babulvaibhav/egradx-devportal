@@ -215,6 +215,331 @@
           "target": "components/egradx/notifications/notification-bell.tsx"
         }
       ]
+    },
+    {
+      "name": "sign-in",
+      "type": "registry:block",
+      "title": "Sign in",
+      "description": "The sign-in page: a card around the sign-in methods picker (a button per provider, email and password, \"email me a code\", choosing an organization when the person belongs to several) and a link to sign up when anyone may. Takes every picker prop: methods, order, labels, layout, icons, defaultEmail, invitationToken, onBeforeNavigate, renderLink.",
+      "dependencies": [
+        "@babulvaibhav/egradx-client",
+        "@babulvaibhav/egradx-react",
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "alert-dialog",
+        "button",
+        "card",
+        "input",
+        "label",
+        "skeleton"
+      ],
+      "files": [
+        {
+          "path": "registry/egradx/egradx-ui.ts",
+          "type": "registry:lib",
+          "target": "components/egradx/egradx-ui.ts"
+        },
+        {
+          "path": "registry/egradx/egradx-common.tsx",
+          "type": "registry:component",
+          "target": "components/egradx/egradx-common.tsx"
+        },
+        {
+          "path": "registry/egradx/auth/auth-shared.tsx",
+          "type": "registry:component",
+          "target": "components/egradx/auth/auth-shared.tsx"
+        },
+        {
+          "path": "registry/egradx/auth/sign-in-methods-picker.tsx",
+          "type": "registry:component",
+          "target": "components/egradx/auth/sign-in-methods-picker.tsx"
+        },
+        {
+          "path": "registry/egradx/auth/sign-in.tsx",
+          "type": "registry:component",
+          "target": "components/egradx/auth/sign-in.tsx"
+        }
+      ]
+    },
+    {
+      "name": "sign-in-methods-picker",
+      "type": "registry:component",
+      "title": "Sign-in methods picker",
+      "description": "The sign-in methods, drop-in, for a sign-in page of your own: choose which appear (methods, order, labels) among those the server enabled, lay them out as buttons, a list or compact icons, and theme them by slot. Handles the emailed code and the organization picker. Built on useSignInMethodList.",
+      "dependencies": [
+        "@babulvaibhav/egradx-client",
+        "@babulvaibhav/egradx-react",
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "alert-dialog",
+        "button",
+        "input",
+        "label",
+        "skeleton"
+      ],
+      "files": [
+        {
+          "path": "registry/egradx/egradx-ui.ts",
+          "type": "registry:lib",
+          "target": "components/egradx/egradx-ui.ts"
+        },
+        {
+          "path": "registry/egradx/egradx-common.tsx",
+          "type": "registry:component",
+          "target": "components/egradx/egradx-common.tsx"
+        },
+        {
+          "path": "registry/egradx/auth/auth-shared.tsx",
+          "type": "registry:component",
+          "target": "components/egradx/auth/auth-shared.tsx"
+        },
+        {
+          "path": "registry/egradx/auth/sign-in-methods-picker.tsx",
+          "type": "registry:component",
+          "target": "components/egradx/auth/sign-in-methods-picker.tsx"
+        }
+      ]
+    },
+    {
+      "name": "sign-up",
+      "type": "registry:block",
+      "title": "Sign up",
+      "description": "Signing up with a new organization the person administers: email, name, organization name and an optional password, then the emailed code. The providers sign up too, through the auth callback.",
+      "dependencies": [
+        "@babulvaibhav/egradx-client",
+        "@babulvaibhav/egradx-react",
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "alert-dialog",
+        "button",
+        "card",
+        "input",
+        "label",
+        "skeleton"
+      ],
+      "files": [
+        {
+          "path": "registry/egradx/egradx-ui.ts",
+          "type": "registry:lib",
+          "target": "components/egradx/egradx-ui.ts"
+        },
+        {
+          "path": "registry/egradx/egradx-common.tsx",
+          "type": "registry:component",
+          "target": "components/egradx/egradx-common.tsx"
+        },
+        {
+          "path": "registry/egradx/auth/auth-shared.tsx",
+          "type": "registry:component",
+          "target": "components/egradx/auth/auth-shared.tsx"
+        },
+        {
+          "path": "registry/egradx/auth/sign-up.tsx",
+          "type": "registry:component",
+          "target": "components/egradx/auth/sign-up.tsx"
+        }
+      ]
+    },
+    {
+      "name": "auth-callback",
+      "type": "registry:block",
+      "title": "Auth callback",
+      "description": "The page a provider sign-in comes back to: exchanges the code for a session, picks the organization, asks for an organization name to sign up, confirms a provider linked from the profile, and explains every refusal.",
+      "dependencies": [
+        "@babulvaibhav/egradx-client",
+        "@babulvaibhav/egradx-react",
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "button",
+        "card",
+        "input",
+        "label"
+      ],
+      "files": [
+        {
+          "path": "registry/egradx/egradx-ui.ts",
+          "type": "registry:lib",
+          "target": "components/egradx/egradx-ui.ts"
+        },
+        {
+          "path": "registry/egradx/auth/auth-shared.tsx",
+          "type": "registry:component",
+          "target": "components/egradx/auth/auth-shared.tsx"
+        },
+        {
+          "path": "registry/egradx/auth/auth-callback.tsx",
+          "type": "registry:component",
+          "target": "components/egradx/auth/auth-callback.tsx"
+        }
+      ]
+    },
+    {
+      "name": "sign-in-methods",
+      "type": "registry:block",
+      "title": "Sign-in methods",
+      "description": "A person's sign-in methods, for their profile: the password (or setting a first one), the providers linked with unlinking, and linking another.",
+      "dependencies": [
+        "@babulvaibhav/egradx-client",
+        "@babulvaibhav/egradx-react",
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "alert-dialog",
+        "badge",
+        "button",
+        "card",
+        "dialog",
+        "input",
+        "label",
+        "skeleton"
+      ],
+      "files": [
+        {
+          "path": "registry/egradx/egradx-ui.ts",
+          "type": "registry:lib",
+          "target": "components/egradx/egradx-ui.ts"
+        },
+        {
+          "path": "registry/egradx/egradx-common.tsx",
+          "type": "registry:component",
+          "target": "components/egradx/egradx-common.tsx"
+        },
+        {
+          "path": "registry/egradx/auth/auth-shared.tsx",
+          "type": "registry:component",
+          "target": "components/egradx/auth/auth-shared.tsx"
+        },
+        {
+          "path": "registry/egradx/auth/sign-in-methods-card.tsx",
+          "type": "registry:component",
+          "target": "components/egradx/auth/sign-in-methods-card.tsx"
+        }
+      ]
+    },
+    {
+      "name": "file-upload",
+      "type": "registry:component",
+      "title": "File upload",
+      "description": "A drop zone and a button that upload a file (or several) with progress and cancel, check accept and maxSize before sending, and word each refusal by its code (too large, type not allowed, empty, refused, storage unavailable). Optionally attached to a record.",
+      "dependencies": [
+        "@babulvaibhav/egradx-client",
+        "@babulvaibhav/egradx-react",
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "alert-dialog",
+        "button",
+        "input"
+      ],
+      "files": [
+        {
+          "path": "registry/egradx/egradx-ui.ts",
+          "type": "registry:lib",
+          "target": "components/egradx/egradx-ui.ts"
+        },
+        {
+          "path": "registry/egradx/egradx-common.tsx",
+          "type": "registry:component",
+          "target": "components/egradx/egradx-common.tsx"
+        },
+        {
+          "path": "registry/egradx/files/file-format.ts",
+          "type": "registry:lib",
+          "target": "components/egradx/files/file-format.ts"
+        },
+        {
+          "path": "registry/egradx/files/file-upload.tsx",
+          "type": "registry:component",
+          "target": "components/egradx/files/file-upload.tsx"
+        }
+      ]
+    },
+    {
+      "name": "attachments",
+      "type": "registry:block",
+      "title": "Attachments",
+      "description": "A record's files (an order's, a ticket's): name, size and date, download with the session, delete with a confirmation, and an upload with progress above the list.",
+      "dependencies": [
+        "@babulvaibhav/egradx-client",
+        "@babulvaibhav/egradx-react",
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "alert-dialog",
+        "button",
+        "card",
+        "input",
+        "skeleton"
+      ],
+      "files": [
+        {
+          "path": "registry/egradx/egradx-ui.ts",
+          "type": "registry:lib",
+          "target": "components/egradx/egradx-ui.ts"
+        },
+        {
+          "path": "registry/egradx/egradx-common.tsx",
+          "type": "registry:component",
+          "target": "components/egradx/egradx-common.tsx"
+        },
+        {
+          "path": "registry/egradx/files/file-format.ts",
+          "type": "registry:lib",
+          "target": "components/egradx/files/file-format.ts"
+        },
+        {
+          "path": "registry/egradx/files/file-upload.tsx",
+          "type": "registry:component",
+          "target": "components/egradx/files/file-upload.tsx"
+        },
+        {
+          "path": "registry/egradx/files/attachments.tsx",
+          "type": "registry:component",
+          "target": "components/egradx/files/attachments.tsx"
+        }
+      ]
+    },
+    {
+      "name": "avatar-upload",
+      "type": "registry:component",
+      "title": "Avatar upload",
+      "description": "The signed-in person's profile photo: a preview while it uploads, choosing or dropping a new one, removing it. Also ProfilePhoto, the photo or initials for a header or menu, which follows a change at once.",
+      "dependencies": [
+        "@babulvaibhav/egradx-client",
+        "@babulvaibhav/egradx-react",
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "alert-dialog",
+        "button",
+        "input"
+      ],
+      "files": [
+        {
+          "path": "registry/egradx/egradx-ui.ts",
+          "type": "registry:lib",
+          "target": "components/egradx/egradx-ui.ts"
+        },
+        {
+          "path": "registry/egradx/egradx-common.tsx",
+          "type": "registry:component",
+          "target": "components/egradx/egradx-common.tsx"
+        },
+        {
+          "path": "registry/egradx/files/file-format.ts",
+          "type": "registry:lib",
+          "target": "components/egradx/files/file-format.ts"
+        },
+        {
+          "path": "registry/egradx/files/avatar-upload.tsx",
+          "type": "registry:component",
+          "target": "components/egradx/files/avatar-upload.tsx"
+        }
+      ]
     }
   ]
 }

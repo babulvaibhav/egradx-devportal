@@ -71,15 +71,28 @@ Node and Python exceptions also take `details`. Better than a code at each throw
 <Languages>
 <Tab value="Java">
 
-The SDK's endpoints answer this way already. For **your** endpoints, add one advice extending the SDK's — every generated project has it:
+Nothing to write. `egradx-sdk` registers a fallback advice, `EgradxApplicationExceptionHandler`, ordered last, that answers your endpoints in the envelope: the core exceptions, Bean Validation (`@Valid`), a missing parameter, a malformed value or body, a refused `@PreAuthorize` (401 `NOT_AUTHENTICATED`, 401 `SESSION_EXPIRED` for a refused token, 403 `ACCESS_DENIED`), an unknown path or a wrong method, and anything unexpected (a logged 500). The SDK's own endpoints answer the same way.
 
-<RepoSnippet file="apps/egradx-devportal/examples/java/backend/src/main/java/com/acme/notes/common/exception/ApiExceptionHandler.java" region="error-advice" title="backend/…/common/exception/ApiExceptionHandler.java" />
+You keep the last word:
 
-<Callout type="warn" title="Without it">
-  A Java application on `egradx-sdk` alone answers its own endpoints' failures in Spring Boot's format: a `NotFoundException` becomes a 500, a validation failure Spring's `/error` body. The advice above (or `egradx-webservice`, which carries one) fixes that.
+| You want | Do |
+|---|---|
+| your own answer for some exceptions, the SDK's for the rest | an advice of your own handling only those; it answers first, whatever its order |
+| your own envelope for everything | an advice of your own handling `Exception` **and** `AccessDeniedException` |
+| the SDK's handler, changed | a bean extending `EgradxApplicationExceptionHandler`; it replaces the SDK's |
+| no fallback at all | `egradx.errors.fallback.enabled: false` |
+
+Generated projects have an advice of their own, `ApiExceptionHandler`. It is optional — the fallback answers the same without it — and is the place for your own answers; keep it, change it, or delete it:
+
+<RepoSnippet file="apps/egradx-devportal/examples/java/backend/src/main/java/com/acme/notes/common/exception/ApiExceptionHandler.java" region="error-advice" title="backend/…/common/exception/ApiExceptionHandler.java (optional)" />
+
+<Callout type="warn" title="A catch-all advice of your own">
+  An `@ExceptionHandler(Exception.class)` in your own advice answers before the fallback, so it also catches Spring Security's `AccessDeniedException`: every refused `@PreAuthorize` becomes your 500. Handle `AccessDeniedException` too, as the advice above does, or handle only your own exceptions and leave the rest to the fallback.
 </Callout>
 
-`EgradxExceptionHandlerSupport` already answers the core exceptions, Bean Validation (`@Valid`), a missing parameter, a malformed value or body, and Spring MVC's own refusals (unknown path, wrong method) with their statuses. Override `handleBeanValidation` for your own wording; add handlers for exceptions of yours that don't extend the core ones, using `respond(status, code, message[, details])`.
+An advice of yours extends `EgradxExceptionHandlerSupport` to answer by the same rules: override `handleBeanValidation` for your own wording; add handlers for exceptions of yours that don't extend the core ones, using `respond(status, code, message[, details])`.
+
+The fallback comes with the next republish of `egradx-sdk` 1.0.0 ([what's new](/docs/whats-new)). Until your build has it, keep the generated advice: without one, `egradx-sdk` answers your endpoints' failures in Spring Boot's format (a `NotFoundException` becomes a 500).
 
 </Tab>
 <Tab value="Node">

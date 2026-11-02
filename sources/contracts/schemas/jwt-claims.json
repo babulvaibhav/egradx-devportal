@@ -11,7 +11,7 @@
     "iat": { "type": "integer", "description": "Issued at, seconds since the epoch." },
     "exp": { "type": "integer", "description": "Expires at, seconds since the epoch." },
     "typ": { "const": "access" },
-    "sid": { "type": "string", "format": "uuid", "description": "Session id, new for every issued token." },
+    "sid": { "type": "string", "format": "uuid", "description": "The session's id (egradx_session): the same for every access token of one sign-in, across refreshes. A verifier on the SDK refuses the token once that session has ended." },
     "userType": { "$ref": "enums.json#/$defs/UserType" },
     "primaryAccountId": { "type": "string", "format": "uuid" },
     "activeAccountId": { "type": "string", "format": "uuid" },

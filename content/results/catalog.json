@@ -1,5 +1,5 @@
 {
-  "capturedAt": "2026-10-06T10:57:52.495Z",
+  "capturedAt": "2026-11-02T06:23:55.023Z",
   "sdkVersion": "1.0.0",
   "languages": [
     "java",
@@ -144,6 +144,24 @@
         "entityType": "user"
       },
       {
+        "action": "auth.email_code.sent",
+        "category": "auth",
+        "description": "Asked for a sign-in or sign-up code by email",
+        "entityType": "user"
+      },
+      {
+        "action": "auth.identity.linked",
+        "category": "auth",
+        "description": "Linked a sign-in provider to their account",
+        "entityType": "user"
+      },
+      {
+        "action": "auth.identity.unlinked",
+        "category": "auth",
+        "description": "Removed a sign-in provider from their account",
+        "entityType": "user"
+      },
+      {
         "action": "auth.invitation.accepted",
         "category": "auth",
         "description": "Accepted an invitation",
@@ -276,15 +294,33 @@
         "entityType": "role"
       },
       {
+        "action": "auth.session.ended",
+        "category": "auth",
+        "description": "Ended a session on another device",
+        "entityType": "user"
+      },
+      {
         "action": "auth.session.refresh",
         "category": "auth",
         "description": "A session could not be continued",
         "entityType": "user"
       },
       {
+        "action": "auth.session.reused",
+        "category": "auth",
+        "description": "A replaced refresh token was used again; its session was ended",
+        "entityType": "user"
+      },
+      {
         "action": "auth.sessions.revoked",
         "category": "auth",
         "description": "Signed out everywhere",
+        "entityType": "user"
+      },
+      {
+        "action": "auth.signup.completed",
+        "category": "auth",
+        "description": "Signed up, with a new organization",
         "entityType": "user"
       },
       {
@@ -464,6 +500,43 @@
         "required": [
           "expiresInMinutes",
           "link"
+        ],
+        "optional": [
+          "recipientName"
+        ],
+        "userCanOptOut": false
+      },
+      {
+        "key": "egradx.auth.sign-in-code",
+        "description": "A code for signing in without a password",
+        "required": [
+          "code",
+          "expiresInMinutes"
+        ],
+        "optional": [
+          "recipientName"
+        ],
+        "userCanOptOut": false
+      },
+      {
+        "key": "egradx.auth.sign-in-method-added",
+        "description": "A notice that a provider such as Google can now sign in to the account",
+        "required": [
+          "addedAt",
+          "providerName"
+        ],
+        "optional": [
+          "recipientName"
+        ],
+        "userCanOptOut": false
+      },
+      {
+        "key": "egradx.auth.signup-code",
+        "description": "A code confirming a sign-up, which makes the account and its new organization",
+        "required": [
+          "code",
+          "expiresInMinutes",
+          "organizationName"
         ],
         "optional": [
           "recipientName"

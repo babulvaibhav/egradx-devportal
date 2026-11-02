@@ -11,16 +11,94 @@ React bindings for [`@babulvaibhav/egradx-client`](/docs/reference/web/egradx-cl
 |---|---|
 | `<EgradxProvider client={...}>` | Makes the application's client available, and restores a stored session on mount. |
 | `useSession()` | `{ status, session }`, re-rendered on every change, including in other tabs. |
-| `useAuth()` | The session, plus `login`, `logout`, `switchOrganization`, `adopt`, `hasAuthority` and `hasAnyAuthority`. |
+| `useAuth()` | The session, plus `login`, `logout`, `switchOrganization`, `adopt`, `hasAuthority` and `hasAnyAuthority`; and the other ways in: `requestEmailCode`, `verifyEmailCode`, `startSignup`, `confirmSignup`, `providerSignInUrl`, `startProviderSignIn`, `exchangeProviderCode`, `signUpWithProvider` and `changePassword`. |
+| `useSignInMethodList(options)` | Headless sign-in methods: which to render (the app's `methods`, `order`, `labels` intersected with the server's options), their actions (`startProvider`, `requestEmailCode`, `resendEmailCode`, `verifyEmailCode`, `signInWithPassword`, `chooseOrganization`, `back`) and state (`loading`, `step`, `pending`, `error`, `retryAfter`, `signupOpen`). See below. |
+| `useProviderSignIn({ returnTo?, invitationToken?, onBeforeNavigate?, disabled? })` | Just the provider buttons' part: `{ going, start(id) }`. `onBeforeNavigate` runs before the browser leaves, and returning `false` keeps it on the page; the invitation is kept for the callback page. |
+| `useSignInOptions()` | What the sign-in page can offer (`data.password`, `data.emailCode`, `data.signup`, `data.providers`), with `loading`, `error` and `reload`. It is public, so unlike the data hooks it loads while signed out. |
 | `<Can authority="..." fallback={...}>` | Shows its children only to a session holding the authority (or any of a list). It is a UX affordance; the server enforces the rule. |
 | `useInbox({ pageSize?, onNotification? })` | The notification inbox: items, unread count, stream status, `loadMore`, `reload`, `markRead` and `markAllRead`. |
 | `useAuditLog(options)`, `useAuditTimeline(type, id)`, `useAuditActions()`, `useAuditRecord()`, `useAuditExport()` | The audit trail with `setFilter` and `loadMore`; one thing's history; the action catalog; one record and the CSV export on demand. |
 | `useNotificationChannels()`, `useNotificationTypes()`, `useDeliveryLog(options)` | Notification administration: channels with `save`, `remove`, `clearSecret`, `test`; the message types; the delivery log with `setFilter`, `setPage`, `requeue`. Each takes `{ platform: true }` for the platform's own. |
 | `useContacts()`, `useNotificationPreferences()` | The signed-in person's addresses (add, remove, make primary, verify) and notification preferences (`save`). |
+| `useSignInMethods()` | The signed-in person's sign-in methods: `data.password`, `data.identities`; `link` (resolves with the URL to send the browser to), `unlink`, `setPassword`. |
+| `useAttachments({ attachedType, attachedId })`, `useFileUpload(options)`, `useFileObjectUrl(file)`, `useProfilePhoto()` | Files: a record's files with `upload`, `remove` and `download`; one upload's `progress`, `error` and `cancel`; a URL to show a file at; the signed-in person's photo with `set` and `remove`. See **Files** below. |
 | `useAction(fn)` | A change the person makes: `{ run, pending, error, reset }` for its button and message. `error` is an `EgradxApiError`. |
 | `useStore(create, key)` | Binds any `@babulvaibhav/egradx-client` store, including an application's own `createQuery`, the way the hooks above do. |
 
 The data hooks return the store's snapshot (`data` or `items`, `loading`, `error`) spread together with its actions. They follow sign-in, sign-out and organization switches by themselves, so there is nothing to invalidate. Screens built on them, styled with the application's own components, are in `@babulvaibhav/egradx-ui` as copy-in recipes.
+
+## Files
+
+```tsx
+// An order's files: list, upload with progress, download, delete.
+const attachments = useAttachments({ attachedType: 'order', attachedId: order.id });
+const upload = useFileUpload({ attachedType: 'order', attachedId: order.id, maxSize: 25 * 1024 * 1024, onUploaded: () => attachments.reload() });
+<input type="file" onChange={(e) => e.target.files?.[0] && upload.upload(e.target.files[0]).catch(() => {})} />
+{upload.uploading && <progress value={upload.progress?.fraction} />}
+{upload.error?.code === 'FILE_TOO_LARGE' && <p>That file is too large.</p>}
+{attachments.files.map((file) => <button key={file.id} onClick={() => attachments.download(file)}>{file.name}</button>)}
+
+// The person's photo, anywhere: every use follows a change made in another.
+const photo = useProfilePhoto();
+{photo.url ? <img src={photo.url} alt="" /> : initials}
+```
+
+- **Errors.** `upload.error` and `photo.changeError` carry the server's code: `FILE_TOO_LARGE`, `FILE_TYPE_NOT_ALLOWED`, `FILE_EMPTY`, `FILE_REJECTED`, `FILE_STORAGE_UNAVAILABLE`, `ACCESS_DENIED`. `accept` and `maxSize` are checked before sending, with the same codes, so one wording covers both. `cancel()` stops an upload without an error.
+- **Showing a file.** A download needs the session. `useFileObjectUrl(idOrContentUrl)` gives a URL for `src` or `href`: with the token in the browser it fetches the bytes with it into an object URL, revoked when the file changes or the component unmounts; behind [`@babulvaibhav/egradx-next`](/docs/reference/web/egradx-next) the cookie goes with the plain URL, which it uses as it is. A Content-Security-Policy must allow `blob:` in `img-src` (and `frame-src` for PDFs) for object URLs.
+- **Progress** comes from XMLHttpRequest in the browser (see the client's **Files**).
+
+## Customize the sign-in methods
+
+The server decides what is enabled (`GET /egradx/auth/sign-in-options`). The application decides which of those to show, in what order and with what words. `useSignInMethodList` combines the two, so a page never shows a method the server has not enabled. Method ids are `password`, `email-code` and provider ids (`google`, `zoho`, …), and `providers` stands for every enabled provider not named. The actions never throw: they resolve `false` or `undefined` and set `error`.
+
+```tsx
+// Only Google.
+useSignInMethodList({ methods: ['google'] })
+// Google, then a code by email.
+useSignInMethodList({ methods: ['google', 'email-code'] })
+// Everything, in a custom order and with custom words.
+useSignInMethodList({
+  order: ['email-code', 'zoho'],
+  labels: { 'email-code': 'Send me a sign-in code', google: 'Sign in with Google' },
+})
+```
+
+Headless, with your own buttons:
+
+```tsx
+function MySignIn() {
+  const list = useSignInMethodList({
+    methods: ['google', 'email-code'],
+    returnTo: '/orders',
+    onBeforeNavigate: ({ providerId }) => analytics.track('sign-in-start', { providerId }),
+    onSignedIn: () => router.replace('/orders'),
+  })
+  const [email, setEmail] = useState('')
+  const [code, setCode] = useState('')
+  if (list.loading) return <Spinner />
+  if (list.step.kind === 'code') {
+    return (
+      <form onSubmit={(event) => { event.preventDefault(); void list.verifyEmailCode(code) }}>
+        <MyInput value={code} onChange={setCode} /> <MyButton type="submit">Sign in</MyButton>
+      </form>
+    )
+  }
+  return (
+    <>
+      {list.providers.map((m) => <MyButton key={m.id} onClick={() => list.startProvider(m.id)}>{m.label}</MyButton>)}
+      {list.emailCode && (
+        <>
+          <MyInput value={email} onChange={setEmail} />
+          <MyButton onClick={() => list.requestEmailCode(email)}>{list.emailCode.label}</MyButton>
+        </>
+      )}
+      {list.error && <p>{list.error.message}</p>}
+    </>
+  )
+}
+```
+
+`list.step` is `methods`, `code` (with `email` and `resendAvailableAt`) or `organization` (with `organizations`, for someone in several; `chooseOrganization(id)` sends the same credentials again). To accept an invitation with a provider, pass `invitationToken`: the callback page's `exchangeProviderCode` sends it by itself. A drawn version, configurable by props, is `SignInMethodsPicker` in `@babulvaibhav/egradx-ui`.
 
 `@babulvaibhav/egradx-client` and `react` (18 or later) are peer dependencies. The application owns its single client.
 
@@ -129,6 +207,180 @@ Takes over a session the server issued: after accepting an invitation, changing 
 | `tokenType?` | `string` \| `null` | - |
 | `user?` | \| \{ `active?`: `boolean` \| `null`; `createdAt?`: `string` \| `null`; `displayName?`: `string` \| `null`; `email?`: `string` \| `null`; `id?`: `string` \| `null`; `username?`: `string` \| `null`; \} \| `null` | - |
 
+##### changePassword()
+
+```ts
+changePassword(request): Promise<{
+  accessToken?: string | null;
+  authorities?: string[] | null;
+  expiresAt?: string | null;
+  organizationId?: string | null;
+  organizationName?: string | null;
+  platformOrganization?: boolean | null;
+  refreshToken?: string | null;
+  roleId?: string | null;
+  roleName?: string | null;
+  tokenType?: string | null;
+  user?:   | {
+     active?: boolean | null;
+     createdAt?: string | null;
+     displayName?: string | null;
+     email?: string | null;
+     id?: string | null;
+     username?: string | null;
+   }
+     | null;
+}>;
+```
+
+Changes the password, or sets a first one without `currentPassword`; carries on with the new session.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `request` | `ChangePasswordRequest` |
+
+###### Returns
+
+`Promise`\<\{
+  `accessToken?`: `string` \| `null`;
+  `authorities?`: `string`[] \| `null`;
+  `expiresAt?`: `string` \| `null`;
+  `organizationId?`: `string` \| `null`;
+  `organizationName?`: `string` \| `null`;
+  `platformOrganization?`: `boolean` \| `null`;
+  `refreshToken?`: `string` \| `null`;
+  `roleId?`: `string` \| `null`;
+  `roleName?`: `string` \| `null`;
+  `tokenType?`: `string` \| `null`;
+  `user?`:   \| \{
+     `active?`: `boolean` \| `null`;
+     `createdAt?`: `string` \| `null`;
+     `displayName?`: `string` \| `null`;
+     `email?`: `string` \| `null`;
+     `id?`: `string` \| `null`;
+     `username?`: `string` \| `null`;
+   \}
+     \| `null`;
+\}\>
+
+##### confirmSignup()
+
+```ts
+confirmSignup(request): Promise<{
+  accessToken?: string | null;
+  authorities?: string[] | null;
+  expiresAt?: string | null;
+  organizationId?: string | null;
+  organizationName?: string | null;
+  platformOrganization?: boolean | null;
+  refreshToken?: string | null;
+  roleId?: string | null;
+  roleName?: string | null;
+  tokenType?: string | null;
+  user?:   | {
+     active?: boolean | null;
+     createdAt?: string | null;
+     displayName?: string | null;
+     email?: string | null;
+     id?: string | null;
+     username?: string | null;
+   }
+     | null;
+}>;
+```
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `request` | \{ `code`: `string`; `email`: `string`; \} |
+| `request.code` | `string` |
+| `request.email` | `string` |
+
+###### Returns
+
+`Promise`\<\{
+  `accessToken?`: `string` \| `null`;
+  `authorities?`: `string`[] \| `null`;
+  `expiresAt?`: `string` \| `null`;
+  `organizationId?`: `string` \| `null`;
+  `organizationName?`: `string` \| `null`;
+  `platformOrganization?`: `boolean` \| `null`;
+  `refreshToken?`: `string` \| `null`;
+  `roleId?`: `string` \| `null`;
+  `roleName?`: `string` \| `null`;
+  `tokenType?`: `string` \| `null`;
+  `user?`:   \| \{
+     `active?`: `boolean` \| `null`;
+     `createdAt?`: `string` \| `null`;
+     `displayName?`: `string` \| `null`;
+     `email?`: `string` \| `null`;
+     `id?`: `string` \| `null`;
+     `username?`: `string` \| `null`;
+   \}
+     \| `null`;
+\}\>
+
+##### exchangeProviderCode()
+
+```ts
+exchangeProviderCode(request): Promise<{
+  accessToken?: string | null;
+  authorities?: string[] | null;
+  expiresAt?: string | null;
+  organizationId?: string | null;
+  organizationName?: string | null;
+  platformOrganization?: boolean | null;
+  refreshToken?: string | null;
+  roleId?: string | null;
+  roleName?: string | null;
+  tokenType?: string | null;
+  user?:   | {
+     active?: boolean | null;
+     createdAt?: string | null;
+     displayName?: string | null;
+     email?: string | null;
+     id?: string | null;
+     username?: string | null;
+   }
+     | null;
+}>;
+```
+
+Trades the callback page's `code` for a session.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `request` | `ProviderExchangeRequest` |
+
+###### Returns
+
+`Promise`\<\{
+  `accessToken?`: `string` \| `null`;
+  `authorities?`: `string`[] \| `null`;
+  `expiresAt?`: `string` \| `null`;
+  `organizationId?`: `string` \| `null`;
+  `organizationName?`: `string` \| `null`;
+  `platformOrganization?`: `boolean` \| `null`;
+  `refreshToken?`: `string` \| `null`;
+  `roleId?`: `string` \| `null`;
+  `roleName?`: `string` \| `null`;
+  `tokenType?`: `string` \| `null`;
+  `user?`:   \| \{
+     `active?`: `boolean` \| `null`;
+     `createdAt?`: `string` \| `null`;
+     `displayName?`: `string` \| `null`;
+     `email?`: `string` \| `null`;
+     `id?`: `string` \| `null`;
+     `username?`: `string` \| `null`;
+   \}
+     \| `null`;
+\}\>
+
 ##### hasAnyAuthority()
 
 ```ts
@@ -229,6 +481,138 @@ logout(): Promise<void>;
 
 `Promise`\<`void`\>
 
+##### providerSignInUrl()
+
+```ts
+providerSignInUrl(providerId, returnTo?): string;
+```
+
+Where to send the browser to sign in with a provider (a navigation, not a fetch).
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `providerId` | `string` |
+| `returnTo?` | `string` \| `null` |
+
+###### Returns
+
+`string`
+
+##### requestEmailCode()
+
+```ts
+requestEmailCode(email): Promise<void>;
+```
+
+Emails a sign-in code; resolves alike whether or not the address has an account.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `email` | `string` |
+
+###### Returns
+
+`Promise`\<`void`\>
+
+##### signUpWithProvider()
+
+```ts
+signUpWithProvider(request): Promise<{
+  accessToken?: string | null;
+  authorities?: string[] | null;
+  expiresAt?: string | null;
+  organizationId?: string | null;
+  organizationName?: string | null;
+  platformOrganization?: boolean | null;
+  refreshToken?: string | null;
+  roleId?: string | null;
+  roleName?: string | null;
+  tokenType?: string | null;
+  user?:   | {
+     active?: boolean | null;
+     createdAt?: string | null;
+     displayName?: string | null;
+     email?: string | null;
+     id?: string | null;
+     username?: string | null;
+   }
+     | null;
+}>;
+```
+
+After SIGNUP_REQUIRED: signs up with the provider's email and a new organization.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `request` | `ProviderSignupRequest` |
+
+###### Returns
+
+`Promise`\<\{
+  `accessToken?`: `string` \| `null`;
+  `authorities?`: `string`[] \| `null`;
+  `expiresAt?`: `string` \| `null`;
+  `organizationId?`: `string` \| `null`;
+  `organizationName?`: `string` \| `null`;
+  `platformOrganization?`: `boolean` \| `null`;
+  `refreshToken?`: `string` \| `null`;
+  `roleId?`: `string` \| `null`;
+  `roleName?`: `string` \| `null`;
+  `tokenType?`: `string` \| `null`;
+  `user?`:   \| \{
+     `active?`: `boolean` \| `null`;
+     `createdAt?`: `string` \| `null`;
+     `displayName?`: `string` \| `null`;
+     `email?`: `string` \| `null`;
+     `id?`: `string` \| `null`;
+     `username?`: `string` \| `null`;
+   \}
+     \| `null`;
+\}\>
+
+##### startProviderSignIn()
+
+```ts
+startProviderSignIn(providerId, start?): string;
+```
+
+Keeps `invitationToken` for the callback page (or forgets a leftover one) and returns where to send the browser.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `providerId` | `string` |
+| `start?` | `ProviderSignInStart` |
+
+###### Returns
+
+`string`
+
+##### startSignup()
+
+```ts
+startSignup(request): Promise<SignupStarted>;
+```
+
+Signs up with a new organization: emails the code that `confirmSignup` completes it with.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `request` | `SignupRequest` |
+
+###### Returns
+
+`Promise`\<`SignupStarted`\>
+
 ##### switchOrganization()
 
 ```ts
@@ -285,6 +669,64 @@ switchOrganization(organizationId): Promise<{
      \| `null`;
 \}\>
 
+##### verifyEmailCode()
+
+```ts
+verifyEmailCode(request): Promise<{
+  accessToken?: string | null;
+  authorities?: string[] | null;
+  expiresAt?: string | null;
+  organizationId?: string | null;
+  organizationName?: string | null;
+  platformOrganization?: boolean | null;
+  refreshToken?: string | null;
+  roleId?: string | null;
+  roleName?: string | null;
+  tokenType?: string | null;
+  user?:   | {
+     active?: boolean | null;
+     createdAt?: string | null;
+     displayName?: string | null;
+     email?: string | null;
+     id?: string | null;
+     username?: string | null;
+   }
+     | null;
+}>;
+```
+
+Signs in with the emailed code. ORG_SELECTION_REQUIRED keeps the code: send it again with `organizationId`.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `request` | `EmailCodeSignInRequest` |
+
+###### Returns
+
+`Promise`\<\{
+  `accessToken?`: `string` \| `null`;
+  `authorities?`: `string`[] \| `null`;
+  `expiresAt?`: `string` \| `null`;
+  `organizationId?`: `string` \| `null`;
+  `organizationName?`: `string` \| `null`;
+  `platformOrganization?`: `boolean` \| `null`;
+  `refreshToken?`: `string` \| `null`;
+  `roleId?`: `string` \| `null`;
+  `roleName?`: `string` \| `null`;
+  `tokenType?`: `string` \| `null`;
+  `user?`:   \| \{
+     `active?`: `boolean` \| `null`;
+     `createdAt?`: `string` \| `null`;
+     `displayName?`: `string` \| `null`;
+     `email?`: `string` \| `null`;
+     `id?`: `string` \| `null`;
+     `username?`: `string` \| `null`;
+   \}
+     \| `null`;
+\}\>
+
 ***
 
 ### CanProps
@@ -311,6 +753,479 @@ switchOrganization(organizationId): Promise<{
 
 ***
 
+### FileObjectUrl
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-error-1"></a> `error` | `EgradxApiError` \| `undefined` | - |
+| <a id="property-loading"></a> `loading` | `boolean` | - |
+| <a id="property-url"></a> `url` | `string` \| `undefined` | What to put in `src` or `href`; undefined until it is ready, and for no file. |
+
+***
+
+### ProviderNavigation
+
+A provider sign-in about to leave the page.
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-invitationtoken"></a> `invitationToken` | `string` \| `null` | - |
+| <a id="property-providerid"></a> `providerId` | `string` | - |
+| <a id="property-returnto"></a> `returnTo` | `string` \| `null` | - |
+| <a id="property-url-1"></a> `url` | `string` | Where the browser is about to go. |
+
+***
+
+### ProviderSignIn
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-going"></a> `going` | `string` \| `null` | The provider the page is leaving for, or null. |
+
+#### Methods
+
+##### start()
+
+```ts
+start(providerId): Promise<boolean>;
+```
+
+Leaves for the provider. Resolves false when nothing started (disabled, already going, or `onBeforeNavigate` said no).
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `providerId` | `string` |
+
+###### Returns
+
+`Promise`\<`boolean`\>
+
+***
+
+### SignInMethodList
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-disabled"></a> `disabled` | `boolean` | - |
+| <a id="property-emailcode"></a> `emailCode` | `SignInMethod` \| `undefined` | - |
+| <a id="property-error-2"></a> `error` | `EgradxApiError` \| `undefined` | Why the last action failed. |
+| <a id="property-loaderror"></a> `loadError` | `EgradxApiError` \| `undefined` | Why the sign-in options could not be loaded. |
+| <a id="property-loading-1"></a> `loading` | `boolean` | The sign-in options are loading. |
+| <a id="property-methods"></a> `methods` | `SignInMethod`[] | The methods to render, in order: the application's choice, only those enabled. |
+| <a id="property-options"></a> `options` | `SignInOptions` \| `undefined` | What the server enabled, as it said. |
+| <a id="property-password"></a> `password` | `SignInMethod` \| `undefined` | - |
+| <a id="property-pending-1"></a> `pending` | `SignInMethodId` \| `"organization"` \| `null` | What is in flight: a method's id, or `organization`. A provider stays pending while the page leaves. |
+| <a id="property-providers"></a> `providers` | `SignInMethod`[] | `methods`' providers, in the same order. |
+| <a id="property-retryafter"></a> `retryAfter` | `number` \| `undefined` | Seconds to wait, when the last action was rate limited (AUTH_TOO_MANY_ATTEMPTS). |
+| <a id="property-signupopen"></a> `signupOpen` | `boolean` | Anyone may sign up (`signup: 'organization'`): link a sign-up page. |
+| <a id="property-step"></a> `step` | [`SignInStep`](#signinstep) | - |
+
+#### Methods
+
+##### back()
+
+```ts
+back(): void;
+```
+
+Back from the `code` or `organization` step.
+
+###### Returns
+
+`void`
+
+##### chooseOrganization()
+
+```ts
+chooseOrganization(organizationId): Promise<
+  | {
+  accessToken?: string | null;
+  authorities?: string[] | null;
+  expiresAt?: string | null;
+  organizationId?: string | null;
+  organizationName?: string | null;
+  platformOrganization?: boolean | null;
+  refreshToken?: string | null;
+  roleId?: string | null;
+  roleName?: string | null;
+  tokenType?: string | null;
+  user?:   | {
+     active?: boolean | null;
+     createdAt?: string | null;
+     displayName?: string | null;
+     email?: string | null;
+     id?: string | null;
+     username?: string | null;
+   }
+     | null;
+}
+| undefined>;
+```
+
+On the `organization` step: sends the same credentials again with the organization chosen.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `organizationId` | `string` |
+
+###### Returns
+
+`Promise`\<
+  \| \{
+  `accessToken?`: `string` \| `null`;
+  `authorities?`: `string`[] \| `null`;
+  `expiresAt?`: `string` \| `null`;
+  `organizationId?`: `string` \| `null`;
+  `organizationName?`: `string` \| `null`;
+  `platformOrganization?`: `boolean` \| `null`;
+  `refreshToken?`: `string` \| `null`;
+  `roleId?`: `string` \| `null`;
+  `roleName?`: `string` \| `null`;
+  `tokenType?`: `string` \| `null`;
+  `user?`:   \| \{
+     `active?`: `boolean` \| `null`;
+     `createdAt?`: `string` \| `null`;
+     `displayName?`: `string` \| `null`;
+     `email?`: `string` \| `null`;
+     `id?`: `string` \| `null`;
+     `username?`: `string` \| `null`;
+   \}
+     \| `null`;
+\}
+  \| `undefined`\>
+
+##### clearError()
+
+```ts
+clearError(): void;
+```
+
+###### Returns
+
+`void`
+
+##### reload()
+
+```ts
+reload(): void;
+```
+
+###### Returns
+
+`void`
+
+##### requestEmailCode()
+
+```ts
+requestEmailCode(email): Promise<boolean>;
+```
+
+Emails a code and moves to the `code` step. Resolves false when it failed (see `error`).
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `email` | `string` |
+
+###### Returns
+
+`Promise`\<`boolean`\>
+
+##### resendEmailCode()
+
+```ts
+resendEmailCode(): Promise<boolean>;
+```
+
+Asks for another code to the same address, on the `code` step.
+
+###### Returns
+
+`Promise`\<`boolean`\>
+
+##### signInWithPassword()
+
+```ts
+signInWithPassword(username, password): Promise<
+  | {
+  accessToken?: string | null;
+  authorities?: string[] | null;
+  expiresAt?: string | null;
+  organizationId?: string | null;
+  organizationName?: string | null;
+  platformOrganization?: boolean | null;
+  refreshToken?: string | null;
+  roleId?: string | null;
+  roleName?: string | null;
+  tokenType?: string | null;
+  user?:   | {
+     active?: boolean | null;
+     createdAt?: string | null;
+     displayName?: string | null;
+     email?: string | null;
+     id?: string | null;
+     username?: string | null;
+   }
+     | null;
+}
+| undefined>;
+```
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `username` | `string` |
+| `password` | `string` |
+
+###### Returns
+
+`Promise`\<
+  \| \{
+  `accessToken?`: `string` \| `null`;
+  `authorities?`: `string`[] \| `null`;
+  `expiresAt?`: `string` \| `null`;
+  `organizationId?`: `string` \| `null`;
+  `organizationName?`: `string` \| `null`;
+  `platformOrganization?`: `boolean` \| `null`;
+  `refreshToken?`: `string` \| `null`;
+  `roleId?`: `string` \| `null`;
+  `roleName?`: `string` \| `null`;
+  `tokenType?`: `string` \| `null`;
+  `user?`:   \| \{
+     `active?`: `boolean` \| `null`;
+     `createdAt?`: `string` \| `null`;
+     `displayName?`: `string` \| `null`;
+     `email?`: `string` \| `null`;
+     `id?`: `string` \| `null`;
+     `username?`: `string` \| `null`;
+   \}
+     \| `null`;
+\}
+  \| `undefined`\>
+
+##### startProvider()
+
+```ts
+startProvider(providerId): Promise<boolean>;
+```
+
+Leaves for the provider (see `useProviderSignIn`).
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `providerId` | `string` |
+
+###### Returns
+
+`Promise`\<`boolean`\>
+
+##### verifyEmailCode()
+
+```ts
+verifyEmailCode(code): Promise<
+  | {
+  accessToken?: string | null;
+  authorities?: string[] | null;
+  expiresAt?: string | null;
+  organizationId?: string | null;
+  organizationName?: string | null;
+  platformOrganization?: boolean | null;
+  refreshToken?: string | null;
+  roleId?: string | null;
+  roleName?: string | null;
+  tokenType?: string | null;
+  user?:   | {
+     active?: boolean | null;
+     createdAt?: string | null;
+     displayName?: string | null;
+     email?: string | null;
+     id?: string | null;
+     username?: string | null;
+   }
+     | null;
+}
+| undefined>;
+```
+
+Signs in with the emailed code. Resolves undefined when it failed or an organization must be chosen.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `code` | `string` |
+
+###### Returns
+
+`Promise`\<
+  \| \{
+  `accessToken?`: `string` \| `null`;
+  `authorities?`: `string`[] \| `null`;
+  `expiresAt?`: `string` \| `null`;
+  `organizationId?`: `string` \| `null`;
+  `organizationName?`: `string` \| `null`;
+  `platformOrganization?`: `boolean` \| `null`;
+  `refreshToken?`: `string` \| `null`;
+  `roleId?`: `string` \| `null`;
+  `roleName?`: `string` \| `null`;
+  `tokenType?`: `string` \| `null`;
+  `user?`:   \| \{
+     `active?`: `boolean` \| `null`;
+     `createdAt?`: `string` \| `null`;
+     `displayName?`: `string` \| `null`;
+     `email?`: `string` \| `null`;
+     `id?`: `string` \| `null`;
+     `username?`: `string` \| `null`;
+   \}
+     \| `null`;
+\}
+  \| `undefined`\>
+
+***
+
+### SignInOptionsState
+
+#### Properties
+
+| Property | Type |
+| ------ | ------ |
+| <a id="property-data"></a> `data` | `SignInOptions` \| `undefined` |
+| <a id="property-error-3"></a> `error` | `EgradxApiError` \| `undefined` |
+| <a id="property-loading-2"></a> `loading` | `boolean` |
+
+#### Methods
+
+##### reload()
+
+```ts
+reload(): void;
+```
+
+###### Returns
+
+`void`
+
+***
+
+### UploadState
+
+#### Extended by
+
+- [`UploadTask`](#uploadtask)
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-error-4"></a> `error` | `EgradxApiError` \| `undefined` | The last upload's refusal (FILE_TOO_LARGE, FILE_TYPE_NOT_ALLOWED…), or the limits' own check. |
+| <a id="property-progress"></a> `progress` | `UploadProgress` \| `undefined` | How far the current upload is; undefined when none is running. |
+| <a id="property-uploading"></a> `uploading` | `boolean` | - |
+
+***
+
+### UploadTask
+
+#### Extends
+
+- [`UploadState`](#uploadstate)
+
+#### Type Parameters
+
+| Type Parameter |
+| ------ |
+| `T` |
+
+#### Properties
+
+| Property | Type | Description | Inherited from |
+| ------ | ------ | ------ | ------ |
+| <a id="property-error-5"></a> `error` | `EgradxApiError` \| `undefined` | The last upload's refusal (FILE_TOO_LARGE, FILE_TYPE_NOT_ALLOWED…), or the limits' own check. | [`UploadState`](#uploadstate).`error` |
+| <a id="property-progress-1"></a> `progress` | `UploadProgress` \| `undefined` | How far the current upload is; undefined when none is running. | [`UploadState`](#uploadstate).`progress` |
+| <a id="property-uploading-1"></a> `uploading` | `boolean` | - | [`UploadState`](#uploadstate).`uploading` |
+
+#### Methods
+
+##### cancel()
+
+```ts
+cancel(): void;
+```
+
+Stops the upload under way.
+
+###### Returns
+
+`void`
+
+##### reset()
+
+```ts
+reset(): void;
+```
+
+Forgets the last error.
+
+###### Returns
+
+`void`
+
+##### upload()
+
+```ts
+upload(file, options?): Promise<T>;
+```
+
+Checks the file against the limits, then uploads it. Rejects with the EgradxApiError (also kept in `error`), or the
+AbortError after `cancel()` (which leaves `error` empty).
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `file` | `Blob` |
+| `options?` | `UploadOptions` |
+
+###### Returns
+
+`Promise`\<`T`\>
+
+***
+
+### UseFileUploadOptions
+
+#### Extends
+
+- `FileLimits`
+
+#### Properties
+
+| Property | Type | Description | Inherited from |
+| ------ | ------ | ------ | ------ |
+| <a id="property-accept"></a> `accept?` | `string` \| readonly `string`[] | What the file may be, as an `<input accept>` lists it: media types (`image/png`), families (`image/*`) and extensions (`.pdf`), comma-separated or as an array. | `FileLimits.accept` |
+| <a id="property-attachedid"></a> `attachedId?` | `string` | - | - |
+| <a id="property-attachedtype"></a> `attachedType?` | `string` | The record the files belong to: both or neither. | - |
+| <a id="property-maxsize"></a> `maxSize?` | `number` | The largest size in bytes. | `FileLimits.maxSize` |
+| <a id="property-onuploaded"></a> `onUploaded?` | (`file`) => `void` | Called with each file stored. The latest callback is used. | - |
+| <a id="property-purpose"></a> `purpose?` | `string` | `attachment` when left out. | - |
+
+***
+
 ### UseInboxOptions
 
 #### Properties
@@ -320,7 +1235,132 @@ switchOrganization(organizationId): Promise<{
 | <a id="property-onnotification"></a> `onNotification?` | (`item`) => `void` | Called for each item arriving on the live stream, e.g. to show a toast. The latest callback is used. |
 | <a id="property-pagesize"></a> `pageSize?` | `number` | - |
 
+***
+
+### UseProfilePhotoOptions
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-accept-1"></a> `accept?` | `string` \| readonly `string`[] | Default: PNG, JPEG or WebP, as the server's default. |
+| <a id="property-maxsize-1"></a> `maxSize?` | `number` | Default 5 MB, as the server's default. |
+
+***
+
+### UseProviderSignInOptions
+
+#### Extended by
+
+- [`UseSignInMethodListOptions`](#usesigninmethodlistoptions)
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-disabled-1"></a> `disabled?` | `boolean` | Nothing starts while true. |
+| <a id="property-invitationtoken-1"></a> `invitationToken?` | `string` \| `null` | An invitation to accept with the provider's verified email. It is kept (sessionStorage) for the callback page, whose exchange sends it by itself. Without it, a leftover invitation is forgotten. |
+| <a id="property-navigate"></a> `navigate?` | (`url`) => `void` | How to leave for the provider. Default: `window.location.assign(url)`; it must be a full navigation. |
+| <a id="property-onbeforenavigate"></a> `onBeforeNavigate?` | [`BeforeNavigate`](#beforenavigate) | - |
+| <a id="property-returnto-1"></a> `returnTo?` | `string` \| `null` | A path on this site to land on after the provider. |
+
+***
+
+### UseSignInMethodListOptions
+
+#### Extends
+
+- `SignInMethodChoice`.[`UseProviderSignInOptions`](#useprovidersigninoptions)
+
+#### Properties
+
+| Property | Type | Description | Inherited from |
+| ------ | ------ | ------ | ------ |
+| <a id="property-disabled-2"></a> `disabled?` | `boolean` | Nothing starts while true. | [`UseProviderSignInOptions`](#useprovidersigninoptions).`disabled` |
+| <a id="property-invitationtoken-2"></a> `invitationToken?` | `string` \| `null` | An invitation to accept with the provider's verified email. It is kept (sessionStorage) for the callback page, whose exchange sends it by itself. Without it, a leftover invitation is forgotten. | [`UseProviderSignInOptions`](#useprovidersigninoptions).`invitationToken` |
+| <a id="property-labels"></a> `labels?` | `Readonly`\<`Partial`\<`Record`\<`SignInMethodId`, `string`\>\>\> | Button text by method id, e.g. `{ google: 'Sign in with Google', 'email-code': 'Send me a code' }`. | `SignInMethodChoice.labels` |
+| <a id="property-methods-1"></a> `methods?` | readonly `SignInMethodId`[] | Which methods to show, in this order. Only those the server enabled are kept: a page can hide a method, never add one. Default: every provider, then the password, then the emailed code. | `SignInMethodChoice.methods` |
+| <a id="property-navigate-1"></a> `navigate?` | (`url`) => `void` | How to leave for the provider. Default: `window.location.assign(url)`; it must be a full navigation. | [`UseProviderSignInOptions`](#useprovidersigninoptions).`navigate` |
+| <a id="property-onbeforenavigate-1"></a> `onBeforeNavigate?` | [`BeforeNavigate`](#beforenavigate) | - | [`UseProviderSignInOptions`](#useprovidersigninoptions).`onBeforeNavigate` |
+| <a id="property-onsignedin"></a> `onSignedIn?` | (`session`) => `void` | Called after every successful sign-in (password, code, organization chosen). | - |
+| <a id="property-order"></a> `order?` | readonly `SignInMethodId`[] | Moves these to the front, in this order; the rest keep their places after them. | `SignInMethodChoice.order` |
+| <a id="property-resendintervalms"></a> `resendIntervalMs?` | `number` | The wait before another code may be asked for. Default 60 s, the server's `email-code.resend-interval`. | - |
+| <a id="property-returnto-2"></a> `returnTo?` | `string` \| `null` | A path on this site to land on after the provider. | [`UseProviderSignInOptions`](#useprovidersigninoptions).`returnTo` |
+
 ## Type Aliases
+
+### AttachmentsState
+
+```ts
+type AttachmentsState = ReturnType<typeof useAttachments>;
+```
+
+What `useAttachments` returns.
+
+***
+
+### BeforeNavigate
+
+```ts
+type BeforeNavigate = (navigation) => void | boolean | Promise<void | boolean>;
+```
+
+Runs just before the browser leaves for a provider: save a draft, record an event, ask to confirm. Return `false`
+(or a promise of it) to stay on the page.
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `navigation` | [`ProviderNavigation`](#providernavigation) |
+
+#### Returns
+
+`void` \| `boolean` \| `Promise`\<`void` \| `boolean`\>
+
+***
+
+### ProfilePhotoState
+
+```ts
+type ProfilePhotoState = ReturnType<typeof useProfilePhoto>;
+```
+
+What `useProfilePhoto` returns.
+
+***
+
+### SignInMethodsState
+
+```ts
+type SignInMethodsState = ReturnType<typeof useSignInMethods>;
+```
+
+What `useSignInMethods` returns: pass it to a component that should share this page's copy.
+
+***
+
+### SignInStep
+
+```ts
+type SignInStep = 
+  | {
+  kind: "methods";
+}
+  | {
+  email: string;
+  kind: "code";
+  resendAvailableAt: number;
+}
+  | {
+  kind: "organization";
+  organizations: OrganizationChoice[];
+};
+```
+
+Where the sign-in stands: choosing a method, typing the emailed code, or choosing an organization.
+
+***
 
 ### UseInbox
 
@@ -395,6 +1435,37 @@ latest `fn` is used.
 #### Returns
 
 [`Action`](#action)\<`A`, `R`\>
+
+***
+
+### useAttachments()
+
+```ts
+function useAttachments(attachedTo): object;
+```
+
+The files attached to one record, newest first: `files`, `loading`, `error`; `upload(file)` and `remove(id)` reload
+the list; `download(file)` saves one under its name. A new `attachedType`/`attachedId` loads that record's.
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `attachedTo` | `AttachedTo` |
+
+#### Returns
+
+| Name | Type | Default value | Description |
+| ------ | ------ | ------ | ------ |
+| `data` | `EgradxFile`[] \| `undefined` | - | The latest answer; undefined before the first one, and after the session changed. |
+| `download()` | (`file`) => `Promise`\<`void`\> | - | - |
+| `error` | `EgradxApiError` \| `undefined` | - | - |
+| `fetching` | `boolean` | - | True while any request is on its way, the first included. |
+| `files` | `EgradxFile`[] | - | - |
+| `loading` | `boolean` | - | True until the first answer for the current session has arrived (or failed). |
+| `reload()` | () => `Promise`\<`void`\> | `store.reload` | - |
+| `remove()` | (`fileId`) => `Promise`\<`void`\> | `store.remove` | Deletes one of them, then reloads. |
+| `upload()` | (`file`, `options?`) => `Promise`\<`EgradxFile`\> | `store.upload` | Uploads a file to the record, then reloads. Same errors as `client.files.upload`. |
 
 ***
 
@@ -612,6 +1683,50 @@ function useEgradxClient(): EgradxClient;
 
 ***
 
+### useFileObjectUrl()
+
+```ts
+function useFileObjectUrl(file): FileObjectUrl;
+```
+
+A URL to show a file at, from its id or content URL (a profile's `photoUrl`, a file's `contentUrl`). With the token in
+the browser, the bytes are fetched with it and shown through an object URL, revoked when the file changes or the
+component unmounts. Behind a backend-for-frontend the cookie goes with the plain URL, which is used as it is.
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `file` | `string` \| `null` \| `undefined` |
+
+#### Returns
+
+[`FileObjectUrl`](#fileobjecturl)
+
+***
+
+### useFileUpload()
+
+```ts
+function useFileUpload(options?): UploadTask<EgradxFile>;
+```
+
+Uploads files with progress: `upload(file)`, `uploading`, `progress.fraction`, `error`, `cancel()`. `accept` and
+`maxSize` are checked here first, with the codes the server answers (FILE_TYPE_NOT_ALLOWED, FILE_TOO_LARGE,
+FILE_EMPTY), so one wording covers both. The server still decides.
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `options` | [`UseFileUploadOptions`](#usefileuploadoptions) |
+
+#### Returns
+
+[`UploadTask`](#uploadtask)\<`EgradxFile`\>
+
+***
+
 ### useInbox()
 
 ```ts
@@ -711,6 +1826,62 @@ The kinds of message the application sends.
 
 ***
 
+### useProfilePhoto()
+
+```ts
+function useProfilePhoto(options?): object;
+```
+
+The signed-in person's profile photo: `url` to show it (undefined when there is none), `photoUrl` as the profile has
+it, `set(file)` with `uploading`/`progress`, `remove()`. Every use of it follows the others, so the header's avatar
+changes when the settings page sets a new photo.
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `options` | [`UseProfilePhotoOptions`](#useprofilephotooptions) |
+
+#### Returns
+
+| Name | Type | Default value | Description |
+| ------ | ------ | ------ | ------ |
+| `cancel()` | () => `void` | `task.cancel` | Stops the upload under way. |
+| `changeError` | `EgradxApiError` \| `undefined` | - | The last `set` or `remove` refusal. |
+| `error` | `EgradxApiError` \| `undefined` | - | Loading the profile or the photo failed. |
+| `loading` | `boolean` | - | True until the profile, and then the photo, have loaded. |
+| `photoUrl` | `string` \| `null` | - | - |
+| `progress` | `UploadProgress` \| `undefined` | `task.progress` | - |
+| `reload()` | () => `Promise`\<`void`\> | `store.reload` | - |
+| `remove()` | (...`args`) => `Promise`\<`void`\> | `removal.run` | Runs it; rejects with the EgradxApiError, which `error` also holds until the next run. |
+| `removing` | `boolean` | `removal.pending` | - |
+| `resetError()` | () => `void` | - | - |
+| `set()` | (`file`, `options?`) => `Promise`\<\{ `address?`: \| \{ `city?`: `string` \| `null`; `countryCode?`: `string` \| `null`; `line1?`: `string` \| `null`; `line2?`: `string` \| `null`; `postalCode?`: `string` \| `null`; `region?`: `string` \| `null`; \} \| `null`; `attributes?`: \| \{ \[`key`: `string`\]: `unknown`; \} \| `null`; `contacts?`: `object`[] \| `null`; `displayName?`: `string` \| `null`; `email?`: `string` \| `null`; `firstName?`: `string` \| `null`; `jobTitle?`: `string` \| `null`; `lastName?`: `string` \| `null`; `locale?`: `string` \| `null`; `photoUrl?`: `string` \| `null`; `timeZone?`: `string` \| `null`; `updatedAt?`: `string` \| `null`; `userId?`: `string` \| `null`; `username?`: `string` \| `null`; \}\> | `task.upload` | Checks the file against the limits, then uploads it. Rejects with the EgradxApiError (also kept in `error`), or the AbortError after `cancel()` (which leaves `error` empty). |
+| `uploading` | `boolean` | `task.uploading` | - |
+| `url` | `string` \| `undefined` | `shown.url` | - |
+
+***
+
+### useProviderSignIn()
+
+```ts
+function useProviderSignIn(options?): ProviderSignIn;
+```
+
+Starting a provider sign-in: `onBeforeNavigate`, the invitation kept for the callback page, then the navigation.
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `options` | [`UseProviderSignInOptions`](#useprovidersigninoptions) |
+
+#### Returns
+
+[`ProviderSignIn`](#providersignin)
+
+***
+
 ### useSession()
 
 ```ts
@@ -722,6 +1893,66 @@ The current session and its status; re-renders when either changes, in this tab 
 #### Returns
 
 `SessionSnapshot`
+
+***
+
+### useSignInMethodList()
+
+```ts
+function useSignInMethodList(options?): SignInMethodList;
+```
+
+The sign-in methods to show and everything to run them, for a sign-in page drawn with any design system. The
+application chooses (`methods`, `order`, `labels`); the server decides what is enabled, and a method it has not
+enabled never appears. Actions never throw: they resolve false or undefined and set `error`.
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `options` | [`UseSignInMethodListOptions`](#usesigninmethodlistoptions) |
+
+#### Returns
+
+[`SignInMethodList`](#signinmethodlist)
+
+***
+
+### useSignInMethods()
+
+```ts
+function useSignInMethods(): object;
+```
+
+The signed-in person's sign-in methods: `data.password`, `data.identities`; `link`, `unlink`, `setPassword`.
+
+#### Returns
+
+| Name | Type | Default value | Description |
+| ------ | ------ | ------ | ------ |
+| `data` | `SignInMethodsData` \| `undefined` | - | The latest answer; undefined before the first one, and after the session changed. |
+| `error` | `EgradxApiError` \| `undefined` | - | - |
+| `fetching` | `boolean` | - | True while any request is on its way, the first included. |
+| `link()` | (`providerId`, `returnTo?`) => `Promise`\<`string`\> | `store.link` | The provider's address to send the browser to (`location.assign(url)`), to link it to this account. The browser comes back to the frontend's callback page with `linked` or `error` (`IDENTITY_IN_USE`). `returnTo` is a path on this site to come back to afterwards. |
+| `loading` | `boolean` | - | True until the first answer for the current session has arrived (or failed). |
+| `reload()` | () => `Promise`\<`void`\> | `store.reload` | - |
+| `setPassword()` | (`request`) => `Promise`\<`void`\> | `store.setPassword` | Sets the password: a first one without `currentPassword` when the person has none. Every session ends and the session continues as the new one the server returns. Reloads. |
+| `unlink()` | (`identityId`) => `Promise`\<`void`\> | `store.unlink` | Removes a linked provider. SIGN_IN_METHOD_REQUIRED when it would leave no way in. Reloads. |
+
+***
+
+### useSignInOptions()
+
+```ts
+function useSignInOptions(): SignInOptionsState;
+```
+
+What the sign-in page can offer: password, an emailed code, sign-up, the providers. Public, so unlike the stores above
+it loads signed out too.
+
+#### Returns
+
+[`SignInOptionsState`](#signinoptionsstate)
 
 ***
 

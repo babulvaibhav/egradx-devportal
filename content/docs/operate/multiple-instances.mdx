@@ -3,15 +3,16 @@ title: Several instances
 description: Every behaviour of the SDK across instances — coordinated through PostgreSQL, or per instance — and the settings that tune it.
 ---
 
-The SDK keeps no state that instances must share, except the keys folder. Everything else either goes through the database, where it is coordinated, or is a per-instance cache or connection.
+The SDK keeps no state that instances must share, except the keys folder — and uploaded files, when they are on local disk. Everything else either goes through the database, where it is coordinated, or is a per-instance cache or connection.
 
 ## Before the second instance
 
 1. One keys folder and passphrase for every instance; the same issuer.
-2. The first instance has started once, so the keys exist.
-3. The load balancer: no sticky sessions; buffering off and long idle timeouts for `/egradx/notifications/stream`.
+2. With [file storage](/docs/guides/files#backends) on local disk, one files folder every instance mounts; or a bucket (`backend: s3`).
+3. The first instance has started once, so the keys exist.
+4. The load balancer: no sticky sessions; buffering off and long idle timeouts for `/egradx/notifications/stream`.
 
-The [two-instances recipe](/docs/recipes/two-instances) walks through it.
+The [two-instances recipe](/docs/recipes/two-instances) walks through it, and how `egradx-redis` shares the three things that are otherwise per instance. Without Redis, `egradx-redis` fails open: each instance carries on alone.
 
 ## Coordinated through the database
 
@@ -25,15 +26,17 @@ The [two-instances recipe](/docs/recipes/two-instances) walks through it.
 | Event handling | the inbox makes each handler run once per event and database | — |
 | Audit retention purge | one instance at a time | `retention.enabled: false` on the others |
 | Expired sign-in data clean-up | every hour, idempotent | `egradx.auth.cleanup.*` |
+| Uploaded files | rows in the database; bytes in the shared folder or the bucket | `egradx.files.backend`, `local.root` |
+| Clean-up of bytes a delete left | every hour on each instance, idempotent | `egradx.files.cleanup.enabled: false` on the others |
 
 ## Per instance
 
 | Behaviour | Effect | What to do |
 |---|---|---|
-| Role authorities cache | a change to what a role holds takes up to 60 s on other instances | `role-authorities-cache-ttl-seconds` |
-| Live notification streams | a notice reaches streams open on the instance that published it; others see it on their next load | a broadcaster of your own (Redis pub/sub) |
+| Role authorities cache | a change to what a role holds takes up to 60 s on other instances | `egradx-redis` evicts it everywhere at once; or `role-authorities-cache-ttl-seconds` |
+| Live notification streams | a notice reaches streams open on the instance that published it; others see it on their next load | `egradx-redis` pushes it on every instance |
 | Streams per person | five per person per instance | — |
-| Sign-in attempt limit | counted per instance | a limit at the load balancer as well |
+| Sign-in attempt limit | counted per instance | `egradx-redis` counts it in Redis; a limit at the load balancer as well |
 | Log shipping queue | per instance, best effort | `queue-capacity` |
 | Your own caches | — | key by organization; share them (OIM uses Redis) |
 

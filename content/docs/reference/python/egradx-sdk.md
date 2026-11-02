@@ -22,7 +22,8 @@ sdk.install(app)   # request ids and context, the caller from a bearer token, th
 |---|---|
 | `EgradxSdk(engine, SdkOptions(...))` | Creates auth, the auditor and notifications on the application's `AsyncEngine`, connected, as Java's auto-configuration does. `auth` is egradx-auth's `AuthOptions` (only the issuer and the keys are required). `audit` holds `EgradxAuditor`'s keyword arguments, and `notifications` is egradx-notification's `NotificationsOptions`. `sdk.auth`, `sdk.auditor` and `sdk.notifications` are the libraries. `start()` seeds the platform organization and its administrator and starts the periodic work, the dispatcher included; `close()` stops it. |
 | `sdk.install(app, routes=True, max_page_size=2000)` | Everything an application needs of the SDK on its FastAPI app; `routes=False` leaves the endpoints for `sdk.router()` or `egradx_router(parts)`, which takes anything with `auth`, `auditor` and `notifications`. |
-| `migrate_egradx(database_url, application=None, after_audit=None)` | Every library's tables, in Java's order, into the history tables Java uses. egradx-auth's come first, then the application's own, then egradx-audit's, `after_audit` (Java's `EgradxAuditSchemaCallback`) and egradx-notification's. |
+| `migrate_egradx(database_url, application=None, after_audit=None)` | Every library's tables, in Java's order, into the history tables Java uses. egradx-auth's come first, then the application's own, then egradx-audit's, `after_audit` (Java's `EgradxAuditSchemaCallback`) and egradx-notification's, then egradx-events' if it is installed (`egradx-sdk[events]`). |
+| `SdkOptions(redis=EgradxRedisCoordination(...))` | Several instances acting as one, as adding Java's `egradx-redis` does: install `egradx-sdk[redis]`. Sign-in attempts are counted in Redis (unless `auth.limiter` is set, or `auth.rate_limit` is None), in-app notifications pushed through it to every instance (unless `notifications.broadcaster` is set), and role changes evicted from every instance's cache; `start()` and `close()` start and stop it, and the application starts with Redis down. See [egradx-redis](/docs/reference/python/egradx-redis). |
 | `AuditRetentionSettings`, `NotificationRetentionSettings` | egradx-audit's and egradx-notification's `RetentionSettings`, which share a name; `egradx.sdk` gives each its own. |
 | Observability | Each library is timed and traced through `egradx-observability`. As in Java, registering an OpenTelemetry SDK and its exporters is the application's choice; OIM's `telemetry.py` is an example. |
 
@@ -72,6 +73,10 @@ auth before auth starts::
     sdk.install(app)
     # in the lifespan: await sdk.start() ... await sdk.close()
 
+| Field | Type | Default |
+|---|---|---|
+| `files` | `EgradxFiles | None` | `None` |
+
 #### Constructor
 
 ```python
@@ -85,8 +90,9 @@ async def start() -> None
 ```
 
 Seeds the authority catalog, the platform organization and its administrator, and starts the periodic work:
-the clean-up of expired tokens and links, the audit retention and the notification dispatcher. Call it from the
-application's lifespan, once the database is migrated (migrate_egradx).
+the clean-up of expired tokens and links, the audit retention and the notification dispatcher, and with `redis`
+its subscriptions (in the background: Redis need not be up). Call it from the application's lifespan, once the
+database is migrated (migrate_egradx).
 
 #### `close`
 
@@ -128,11 +134,13 @@ class SdkOptions
 | `logger` | `logging.Logger | None` | `None` |
 | `observations` | `EgradxObservations | None` | `None` |
 | `metrics` | `EgradxMetrics | None` | `None` |
+| `redis` | `EgradxRedisCoordination | None` | `None` |
+| `files` | `FilesOptions | None` | `None` |
 
 #### Constructor
 
 ```python
-def __init__(auth: AuthOptions, audit: dict[str, Any] = dict(), notifications: NotificationsOptions = NotificationsOptions(), logger: logging.Logger | None = None, observations: EgradxObservations | None = None, metrics: EgradxMetrics | None = None) -> None
+def __init__(auth: AuthOptions, audit: dict[str, Any] = dict(), notifications: NotificationsOptions = NotificationsOptions(), logger: logging.Logger | None = None, observations: EgradxObservations | None = None, metrics: EgradxMetrics | None = None, redis: EgradxRedisCoordination | None = None, files: FilesOptions | None = None) -> None
 ```
 
 ## Functions
@@ -146,7 +154,9 @@ async def migrate_egradx(database_url: str, application: Callable[[str], Awaitab
 Creates and upgrades every library's tables, in Java's order, into the history tables Java uses: egradx-auth's,
 then the application's own (`application`, whose tables may reference egradx_organization), then egradx-audit's,
 then `after_audit` (Java's EgradxAuditSchemaCallback, e.g. moving an old audit table in), then
-egradx-notification's. So any SDK's application can start first on a database another SDK's created.
+egradx-notification's, egradx-file-storage's when it is installed (the `files` extra), and egradx-events' when egradx-events is installed (the `events` extra), as Java migrates
+egradx-platform-events' tables whenever it is on the classpath. So any SDK's application can start first on a
+database another SDK's created.
 
 ## Re-exported
 

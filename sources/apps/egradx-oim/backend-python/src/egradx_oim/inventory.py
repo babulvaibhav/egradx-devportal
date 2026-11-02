@@ -240,8 +240,11 @@ def inventory_routes(oim: Oim, operations: InventoryOperations, router: APIRoute
                 raise insufficient_inventory("Insufficient inventory for adjustment")
             saved = await require(session, body.inventoryId, organization_id)
             result = inventory_response(saved)
-            await oim.auditor.record(audit(AuditActions.INVENTORY_ADJUSTED).organization(organization_id).entity("inventory", saved.id)
-                                     .before(plain(before)).after(plain(result)).build())
+            # The reason is kept on the adjustment's audit record, which holds the before and after quantities, as Java does.
+            adjusted = audit(AuditActions.INVENTORY_ADJUSTED).organization(organization_id).entity("inventory", saved.id).before(plain(before)).after(plain(result))
+            if body.reason is not None and body.reason.strip():
+                adjusted.detail("reason", body.reason)
+            await oim.auditor.record(adjusted.build())
             await operations.notifications.inventory_updated(organization_id, result)
             await operations.notify_if_low_stock_crossed(organization_id, saved, -body.quantity)
             oim.dashboard.evict(organization_id)

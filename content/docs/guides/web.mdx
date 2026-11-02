@@ -9,10 +9,10 @@ description: The browser side — a client that signs in and renews tokens, Reac
 
 | Package | What it gives | Use it in |
 |---|---|---|
-| `@babulvaibhav/egradx-client` | the session (sign in, renew, sign out, switch organization), a fetch that adds the token and an `X-Request-ID` and renews once on a 401, typed calls for every SDK endpoint, the live notification stream, stores for the inbox, audit trail and settings | any browser code, any framework |
-| `@babulvaibhav/egradx-react` | `EgradxProvider`, `useAuth`, `useSession`, `<Can>`, `useInbox`, `useAuditLog`, and hooks for every store | React |
+| `@babulvaibhav/egradx-client` | the session (sign in with a password, an emailed code or a provider, sign up, renew, sign out, switch organization), a fetch that adds the token and an `X-Request-ID` and renews once on a 401, typed calls for every SDK endpoint, the live notification stream, stores for the inbox, audit trail and settings, file uploads with progress and downloads with the session | any browser code, any framework |
+| `@babulvaibhav/egradx-react` | `EgradxProvider`, `useAuth`, `useSession`, `<Can>`, `useSignInOptions`, `useSignInMethodList`, `useSignInMethods`, `useInbox`, `useAuditLog`, `useAttachments`, `useFileUpload`, `useProfilePhoto`, and hooks for every store | React |
 | `@babulvaibhav/egradx-next` | a backend-for-frontend: route handlers that hold the tokens in HttpOnly cookies, a page guard, `getSession`, `serverFetch` | Next.js |
-| copy-in screens | the bell, the audit log, notification settings, channel settings — source you copy in with shadcn | React with shadcn/ui |
+| copy-in screens | sign-in (and its methods picker), sign-up, the provider callback page, sign-in methods, the bell, the audit log, notification settings, channel settings, file upload, attachments, the profile photo — source you copy in with shadcn | React with shadcn/ui |
 
 The [Initializr](/start) generates either frontend wired to your backend. The code below is what it generates.
 
@@ -60,10 +60,47 @@ The browser never holds a token. It talks to `/bff/**` on the Next.js server, wh
 
 Everything else — the sign-in form, the bell, your own API calls — is the same code as with Vite: the client sends to `/bff`, and the backend-for-frontend adds the token. On the server, `bff.getSession()` reads who is signed in (from the cookies, unverified: the API decides), and `bff.serverFetch('/api/notes')` calls the API as them.
 
+**The guard renews before the page renders.** `bff.guard` is async: return it, or `await bff.guard(...)`, from `proxy.ts`. When the access token is about to expire, it refreshes there and sets the new cookies on the response and on the page's own request, so server components — which cannot set cookies — rarely need to refresh at all. A session the API has ended goes to the sign-in page with its cookies cleared.
+
+**The backend-for-frontend never presents a replaced refresh token.** The API replaces the refresh token on every refresh and ends the whole session if a replaced one comes back after a 30-second grace ([sessions](/docs/guides/identity#sessions)). So a page's parallel requests share one refresh, and while the new access token lasts, a caller still holding the old cookie gets the new tokens from the server process instead. That holds within one Next.js process; with several behind a load balancer, the guard refreshing before each page, and the grace, cover the rest.
+
+## Signing in other ways, and signing up
+
+When the API offers them ([sign-up and sign-in methods](/docs/guides/sign-in-methods)), the same client and hooks do the rest:
+
+- **What to show.** `useSignInOptions()` (or `client.session.signInOptions()`) loads the public `GET /egradx/auth/sign-in-options`: `password`, `emailCode`, `signup` (`invitation` or `organization`) and `providers`.
+- **Which of them, in what order, with what words.** `useSignInMethodList({ methods, order, labels })` intersects your choice with what the server has on, so a page never shows a method that is off. Method ids are `password`, `email-code` and provider ids; `providers` stands for every enabled provider you didn't name. It also holds the steps (`methods`, `code`, `organization`) and the actions (`startProvider`, `requestEmailCode`, `verifyEmailCode`, `signInWithPassword`, `chooseOrganization`), for a page of your own design. Framework-free: `resolveSignInMethods(options, { methods, order, labels })`. The drawn version is the copy-in `SignInMethodsPicker` ([sign-in methods](/docs/guides/sign-in-methods#choosing-which-methods-to-show)).
+- **An emailed code.** `useAuth().requestEmailCode(email)`, then `verifyEmailCode({ email, code, organizationId? })`.
+- **Sign-up.** `startSignup({ email, name?, organizationName, password? })`, then `confirmSignup({ email, code })`: signed in, in the new organization.
+- **A provider.** Navigate the browser (not a fetch) to `providerSignInUrl(id, returnTo)`, or to what `startProviderSignIn(id, { returnTo, invitationToken })` returns: it also keeps an invitation's token for the callback page. The API sends it back to your `/auth/callback` page, which reads the query with `readProviderCallback(location.search)` and calls `exchangeProviderCode({ code })`. After `SIGNUP_REQUIRED`, it calls `signUpWithProvider({ code, organizationName })` with the same code. After `ORG_SELECTION_REQUIRED`, it sends the same code again with `organizationId`.
+- **The profile.** `useSignInMethods()`: `data.password`, `data.identities`, `link(id, returnTo?)` (resolves with the URL to send the browser to), `unlink(identityId)`, and `setPassword({ newPassword })` for a first password.
+- **Reading refusals.** `organizationChoices(error)`, `providerSignupDetails(error)` and `retryAfterSeconds(error)` give what `ORG_SELECTION_REQUIRED`, `SIGNUP_REQUIRED` and `AUTH_TOO_MANY_ATTEMPTS` carry.
+
+Each call that returns a session stores it, as `login` does.
+
+**With Next.js** nothing more is wired. The catch-all route sets the cookies for `email-code/verify`, `signup/confirm`, `oidc/exchange` and `oidc/signup`. It sends the public sign-in endpoints to the API without the current session, so a stale cookie never answers for them. The provider's start goes through the backend-for-frontend too (`providerSignInUrl` is under its prefix), which passes the API's redirect on. Two settings on the API must agree with it:
+
+- `egradx.auth.oidc.callback-base-url` is the BFF's public prefix, e.g. `https://app.example.com/bff`, so the provider's callback comes through it as well. The API's own public address works too.
+- `egradx.auth.links.base-url` is the Next app, `https://app.example.com`.
+
+Register `{callback-base-url}/egradx/auth/oidc/{id}/callback` with each provider, and make `/auth/callback` and `/sign-up` public: `bff.guard(request, { signInPath: '/login', publicPaths: ['/auth/callback', '/sign-up'] })`.
+
+## Files
+
+When the API has [file storage](/docs/guides/files), the same client uploads and downloads with the session:
+
+- **Uploading.** `client.files.upload(file, { attachedType, attachedId, onProgress, signal })`, or `useFileUpload(options)` with `progress`, `error` and `cancel`. Progress comes from XMLHttpRequest in the browser.
+- **A record's files.** `useAttachments({ attachedType, attachedId })` (`createAttachments` without React): `files`, `upload`, `remove`, `download`, `reload`.
+- **Showing one.** A plain `<img src>` carries no bearer token. `useFileObjectUrl(file)` (`client.files.displayUrl`) downloads it into a `blob:` URL, revoked when it changes or unmounts; allow `blob:` in the Content-Security-Policy's `img-src`. Behind the Next.js backend-for-frontend the cookie goes with the plain URL, which is used as it is.
+- **The profile photo.** `useProfilePhoto()`: `url`, `set(file)`, `remove()`; every use follows a change made in another.
+- **Before sending.** `checkFile(file, { accept, maxSize })`, and the hooks' `accept` and `maxSize`, refuse with the server's own codes (`FILE_TOO_LARGE`, `FILE_TYPE_NOT_ALLOWED`, `FILE_EMPTY`).
+
+**With Next.js**, uploads and downloads pass through the catch-all route: a multipart body goes on byte for byte, and a download streams back with its headers, `Range` and 206 included. Keep the BFF's path out of `proxy.ts`'s matcher, as the generated one does (`/((?!bff/|_next/|favicon.ico).*)`): a request the proxy matches has its body cut at `experimental.proxyClientMaxBodySize` (10 MB by default). The BFF holds an upload in memory while it passes, so that it can send it again after a refresh.
+
 ## What the client does for you
 
-- **Renewal:** a 401 (or a 403 without the error envelope) renews the token once — one renewal shared by every request waiting — and retries. A coded 403 is a decision and is returned as it is.
-- **Sessions ended elsewhere:** when a renewal is refused (password changed, signed out everywhere, organization suspended), the session ends and `onSessionEnded(reason)` tells you why: show it on the sign-in page.
+- **Renewal:** a 401 (or a 403 without the error envelope) renews the token once — one renewal shared by every request waiting — and retries. A coded 403 is a decision and is returned as it is. Each renewal stores the new refresh token the API returns; another tab's newer session wins.
+- **Sessions ended elsewhere:** when a renewal is refused (password changed, signed out everywhere, the session ended from another device, organization suspended), the session ends and `onSessionEnded(reason)` tells you why: show it on the sign-in page.
 - **Organization choice:** signing in as someone in several organizations throws `ORG_SELECTION_REQUIRED` with the list; sign in again with the chosen `organizationId`. `useAuth().switchOrganization(id)` changes later; every hook starts over for the new organization. Clear your own caches when `sessionScope(session)` changes.
 - **The live stream:** `useInbox()` loads the inbox, opens the stream, reloads when it reopens, and lets go of the connection while the tab is hidden. Use it once, high in the tree: each use opens a stream.
 - **Request ids:** every call carries a fresh `X-Request-ID`; an `EgradxApiError` has the `requestId` to show.
@@ -78,12 +115,20 @@ npx shadcn@latest add https://<this portal>/r/notification-bell.json
 
 | Item | What you get |
 |---|---|
+| [`/r/sign-in.json`](/r/sign-in.json) | `SignIn`: a card around `SignInMethodsPicker` — a button per provider, email and password, "email me a code", the organization picker — and a link to sign up when it is open. Follows the server's sign-in options and takes every picker prop |
+| [`/r/sign-in-methods-picker.json`](/r/sign-in-methods-picker.json) | `SignInMethodsPicker`: just the sign-in methods, for a sign-in page of your own. `methods`, `order`, `labels`, `layout`, `icons` and `classNames` choose which appear and how; never one the server has off. Handles the emailed code and the organization choice |
+| [`/r/sign-up.json`](/r/sign-up.json) | `SignUp`: email, name, organization name and an optional password, then the emailed code; the provider buttons sign up too |
+| [`/r/auth-callback.json`](/r/auth-callback.json) | `AuthCallback`: the `/auth/callback` page. Exchanges the code once, asks for the organization or an organization name, confirms a provider linked from the profile, words every refusal. Make it public |
+| [`/r/sign-in-methods.json`](/r/sign-in-methods.json) | `SignInMethodsCard`, for the profile: the password (or a first one), the linked providers with unlink, a button to link each other provider |
 | [`/r/notification-bell.json`](/r/notification-bell.json) | `NotificationBell`: unread count, live arrivals, older pages, read state |
 | [`/r/audit-log.json`](/r/audit-log.json) | `AuditLog` with search and filters (kept in the address if you like), each record in full, the CSV export; `AuditTimeline` and `AuditHistoryButton` for detail pages |
 | [`/r/notification-settings.json`](/r/notification-settings.json) | `NotificationSettings`: a person's addresses, verified by code, and which messages they get where |
+| [`/r/file-upload.json`](/r/file-upload.json) | `FileUpload`: a drop zone and a button, with progress and cancel; `accept` and `maxSize` checked before sending |
+| [`/r/attachments.json`](/r/attachments.json) | `Attachments`: a record's files with download and delete, and `FileUpload` above |
+| [`/r/avatar-upload.json`](/r/avatar-upload.json) | `AvatarUpload` for the account page, and `ProfilePhoto` (the photo or the initials) for the header |
 | [`/r/notification-channels.json`](/r/notification-channels.json) | `NotificationChannels`: each channel's settings and write-only secret, a test message, the delivery log with retry |
 
-They need a shadcn-initialised project (`components.json`, Tailwind). Answer **no** when asked to overwrite primitives you already have. Messages reach you through an `onNotify` callback: wire it to your toasts once. Sign-in, the organization switcher and the account pages are not among them — copy those from OIM, or start from the generated frontend.
+They need a shadcn-initialised project (`components.json`, Tailwind). Answer **no** when asked to overwrite primitives you already have. Messages reach you through an `onNotify` callback: wire it to your toasts once. The sign-in items also bring `auth/auth-shared.tsx`: the wording of every sign-in error, the provider buttons, the organization picker and the code field. The organization switcher and the other account pages are not among them — copy those from OIM, or start from the generated frontend.
 
 ## In OIM
 
@@ -95,5 +140,7 @@ OIM's two frontends are built on these packages: the Vite one with hand-written 
 
 ## See also
 
+- [Recipe: add Sign in with Google and Zoho](/docs/recipes/sign-in-with-google-and-zoho) · [let people sign up](/docs/recipes/let-people-sign-up) · [link a provider](/docs/recipes/link-a-provider)
+- [Recipe: attach files to your records](/docs/recipes/attach-files-to-records) · [let people set a profile photo](/docs/recipes/set-a-profile-photo)
 - [Recipe: show the bell](/docs/recipes/show-the-bell) · [switch organization](/docs/recipes/switch-organization) · [handle SESSION_REVOKED](/docs/recipes/handle-session-revoked)
 - [Web API reference](/docs/reference/web)

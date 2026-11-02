@@ -1,0 +1,134 @@
+---
+title: Store files in S3 or MinIO
+description: Move uploads from local disk to a bucket — AWS S3, MinIO, Cloudflare R2 or Wasabi — with the client library, the settings, and pre-signed downloads.
+---
+
+Local disk is the default. A bucket is what you want with several instances, or containers that come and go. Your code doesn't change: only a dependency and the settings.
+
+## 1. Add the S3 client
+
+| Java | Node | Python |
+|---|---|---|
+| `software.amazon.awssdk:s3`, with the AWS SDK's BOM (`software.amazon.awssdk:bom`) or a version | `npm install @aws-sdk/client-s3 @aws-sdk/s3-request-presigner` | `pip install "egradx-file-storage[s3]"` (aioboto3) |
+
+```xml title="pom.xml (Java)"
+<dependency>
+  <groupId>software.amazon.awssdk</groupId>
+  <artifactId>s3</artifactId>
+  <version>2.31.0</version>
+</dependency>
+```
+
+<Callout type="warn" title="Java: without the client, there is no backend">
+  With `backend: s3` and no `software.amazon.awssdk:s3` on the classpath, no store is configured and the application doesn't start. Add the dependency with the setting.
+</Callout>
+
+## 2. A bucket to try it on: MinIO
+
+```yaml title="docker-compose.yml"
+services:
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: app
+      MINIO_ROOT_PASSWORD: change-me-please
+    ports: ["9000:9000", "9001:9001"]
+    volumes: [minio_data:/data]
+
+  minio-bucket:            # makes the bucket once; the SDK expects it to exist
+    image: minio/mc
+    depends_on: [minio]
+    entrypoint: >
+      sh -c "mc alias set local http://minio:9000 app change-me-please &&
+             mc mb --ignore-existing local/app-files"
+
+volumes:
+  minio_data:
+```
+
+## 3. Point the application at it
+
+<Languages>
+<Tab value="Java">
+
+```yaml title="application.yml"
+egradx:
+  files:
+    backend: ${EGRADX_FILES_BACKEND:local}
+    s3:
+      bucket: ${EGRADX_FILES_S3_BUCKET:app-files}
+      endpoint: ${EGRADX_FILES_S3_ENDPOINT:}         # http://localhost:9000 for MinIO; empty for AWS
+      region: ${EGRADX_FILES_S3_REGION:us-east-1}
+      path-style: ${EGRADX_FILES_S3_PATH_STYLE:true}
+      access-key: ${EGRADX_FILES_S3_ACCESS_KEY:}     # empty: the AWS default credentials
+      secret-key: ${EGRADX_FILES_S3_SECRET_KEY:}
+```
+
+</Tab>
+<Tab value="Node">
+
+```ts title="src/app.ts"
+files: createFileStorage({
+  backend: config.filesBackend,                         // 'local' or 's3'
+  local: { root: './files' },
+  s3: {
+    bucket: process.env.EGRADX_FILES_S3_BUCKET ?? 'app-files',
+    endpoint: process.env.EGRADX_FILES_S3_ENDPOINT,     // http://localhost:9000 for MinIO; undefined for AWS
+    region: process.env.EGRADX_FILES_S3_REGION ?? 'us-east-1',
+    pathStyle: true,
+    accessKey: process.env.EGRADX_FILES_S3_ACCESS_KEY,  // undefined: the AWS default credentials
+    secretKey: process.env.EGRADX_FILES_S3_SECRET_KEY,
+  },
+}),
+```
+
+</Tab>
+<Tab value="Python">
+
+```python title="src/<module>/app.py"
+files=FilesOptions(
+    backend=config.files_backend,                                      # "local" or "s3"
+    local=LocalSettings(root="./files"),
+    s3=S3Settings(
+        bucket=os.environ.get("EGRADX_FILES_S3_BUCKET", "app-files"),
+        endpoint=os.environ.get("EGRADX_FILES_S3_ENDPOINT"),           # http://localhost:9000 for MinIO; None for AWS
+        region=os.environ.get("EGRADX_FILES_S3_REGION", "us-east-1"),
+        path_style=True,
+        access_key=os.environ.get("EGRADX_FILES_S3_ACCESS_KEY"),       # None: the AWS default credentials
+        secret_key=os.environ.get("EGRADX_FILES_S3_SECRET_KEY"),
+    ),
+),
+```
+
+</Tab>
+</Languages>
+
+For the other stores:
+
+| Store | `endpoint` | `region` | `path-style` |
+|---|---|---|---|
+| AWS S3 | none | the bucket's region | `false` |
+| MinIO | `http://minio:9000` (yours) | `us-east-1` | `true` |
+| Cloudflare R2 | `https://<account id>.r2.cloudflarestorage.com` | `auto` | `true` |
+| Wasabi | `https://s3.<region>.wasabisys.com` | the bucket's region | `true` |
+
+On AWS, prefer an instance or task role to keys: leave `access-key` and `secret-key` empty. The role needs `s3:PutObject`, `s3:GetObject` and `s3:DeleteObject` on the bucket's objects.
+
+## 4. Optionally, pre-signed downloads
+
+With `s3.presigned-downloads: true` (Node `presignedDownloads`, Python `presigned_downloads`), a download is checked as always and then answered **302** to a URL on the bucket that works for 5 minutes (`s3.presigned-ttl`; Node `presignedTtlMs`, Python `presigned_ttl_seconds`). The bytes no longer pass through your application.
+
+- `<img>`, links and `save` follow the redirect as they are.
+- A script's `fetch()` of the bucket (the client's `download`, `objectUrl`, `displayUrl` with tokens in the browser) needs **CORS on the bucket** for your frontend's origin, allowing `GET` and the `Range` header.
+- The bucket's address must be one the browser can reach: `http://minio:9000` inside Docker is not.
+
+## How it behaves
+
+- **Objects are named as on disk**: `org/{organizationId}/{yyyy}/{mm}/{id}`. Files already stored on local disk are not moved for you when you switch.
+- **A bucket that doesn't answer** makes uploads and downloads answer `FILE_STORAGE_UNAVAILABLE` (503) until it does.
+- **Java, Node and Python services share one bucket** and one table.
+
+## See also
+
+- [Files: backends](/docs/guides/files#backends) · [Production checklist](/docs/operate/production#files) · [Deploy with Docker Compose](/docs/recipes/deploy-with-docker-compose)

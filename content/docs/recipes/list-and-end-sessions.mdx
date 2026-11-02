@@ -1,0 +1,126 @@
+---
+title: List and end sessions
+description: Show people where they are signed in, and let them sign one device out — with the endpoints the SDK already serves.
+---
+
+A session is one sign-in on one device. The SDK keeps them and serves the endpoints; your application only shows them. They come with the next republish of `egradx-auth` 1.0.0 in every language ([what's new](/docs/whats-new)).
+
+| | Endpoint | Answers |
+|---|---|---|
+| Where you're signed in | `GET /egradx/auth/my/sessions` | the sessions still going, most recently used first |
+| Sign one device out | `DELETE /egradx/auth/my/sessions/{sessionId}` | 204; 404 `NOT_FOUND` when it isn't yours or has already ended |
+| Sign out everywhere | `POST /egradx/auth/my/sessions/revoke-all` | a fresh session for this device |
+
+Each session has `id`, `organizationId` and `organizationName`, `createdAt`, `lastUsedAt` (sign-in or the last refresh), `expiresAt`, `userAgent`, `ipAddress` (where it signed in from), and `current: true` on the session asking. Any signed-in person can call them for their own sessions; no permission is needed.
+
+## 1. Show the list and end one
+
+<Languages>
+<Tab value="Java">
+
+Nothing to write: `egradx-sdk` serves the endpoints. In code — your own endpoint that signs out every other device, say — use `EgradxSessionService`:
+
+```java
+import com.egradx.auth.account.EgradxSessionService;
+import com.egradx.auth.security.EgradxAuthenticatedPrincipal;
+
+// in a @RestController with: private final EgradxSessionService sessions;
+@PostMapping("/api/account/sign-out-others")
+@PreAuthorize("isAuthenticated()")
+ResponseEntity<Void> signOutOthers(@AuthenticationPrincipal EgradxAuthenticatedPrincipal me) {
+    sessions.listMine(me.userId(), me.sessionId()).stream()
+            .filter(session -> !session.current())
+            .forEach(session -> sessions.endMine(me.userId(), me.organizationId(), session.id()));
+    return ResponseEntity.noContent().build();
+}
+```
+
+</Tab>
+<Tab value="Node">
+
+Nothing to write: `egradxRoutes(egradx)` serves the endpoints. In code, use `egradx.auth.sessions`:
+
+```ts
+import { currentCaller } from '@babulvaibhav/egradx-sdk';
+
+router.post('/api/account/sign-out-others', async (_request, response) => {
+  const me = currentCaller()!;
+  for (const session of await egradx.auth.sessions.listMine(me.userId, me.sessionId)) {
+    if (!session.current) await egradx.auth.sessions.endMine(me.userId, me.organizationId ?? null, session.id);
+  }
+  response.status(204).end();
+});
+```
+
+</Tab>
+<Tab value="Python">
+
+Nothing to write: `sdk.install(app)` serves the endpoints. In code, use `sdk.auth.sessions`:
+
+```python
+from egradx.auth import current_caller
+
+@router.post("/api/account/sign-out-others", status_code=204)
+async def sign_out_others() -> None:
+    me = current_caller()
+    for session in await sdk.auth.sessions.list_mine(me.user_id, me.session_id):
+        if not session["current"]:
+            await sdk.auth.sessions.end_mine(me.user_id, me.organization_id, session["id"])
+```
+
+</Tab>
+</Languages>
+
+## 2. In the browser
+
+The client's typed calls reach both endpoints; `callAs` and `unwrap` turn a refusal into an `EgradxApiError`:
+
+```tsx
+import { callAs, createQuery, unwrap, type AuthApi } from '@babulvaibhav/egradx-client';
+import { useAuth, useEgradxClient, useStore } from '@babulvaibhav/egradx-react';
+
+type Session = AuthApi.components['schemas']['EgradxSessionDto'];
+
+export function Sessions() {
+  const egradx = useEgradxClient();
+  const { logout } = useAuth();
+  const { snapshot, store } = useStore(
+    (client) => createQuery(client, () => callAs<Session[]>(client.auth.GET('/egradx/auth/my/sessions'))),
+    'my-sessions',
+  );
+
+  async function end(session: Session) {
+    unwrap(await egradx.auth.DELETE('/egradx/auth/my/sessions/{sessionId}', { params: { path: { sessionId: session.id! } } }));
+    if (session.current) await logout();   // this device: clear its tokens too
+    else store.reload();
+  }
+
+  return (
+    <ul>
+      {(snapshot.data ?? []).map((session) => (
+        <li key={session.id}>
+          {session.userAgent ?? 'Unknown device'} · {session.organizationName} · last used {session.lastUsedAt}
+          {session.current ? ' (this device)' : <button onClick={() => void end(session)}>Sign out</button>}
+        </li>
+      ))}
+    </ul>
+  );
+}
+```
+
+Show the user agent the way people know it ("Firefox on Windows"), not raw. With Next.js the same component works: the backend-for-frontend forwards both calls with the session's token.
+
+## What ending one does
+
+- Its refresh token stops working at once (`401 SESSION_REVOKED`); its access token is refused on its next request (`401 SESSION_EXPIRED`). That device's client renews, is refused, and calls `onSessionEnded` ([handle SESSION_REVOKED](/docs/recipes/handle-session-revoked)).
+- It is recorded in the audit trail as `auth.session.ended`, with the `sessionId`.
+- Ending the `current` session signs this device out: clear its tokens afterwards.
+
+## Sessions and refresh tokens
+
+Every refresh returns a new refresh token in the same session; the SDK's web packages store it. A replaced token still renews within a 30-second grace (`refresh-token-reuse-grace-seconds`), so tabs refreshing at once carry on. Sent after that, it is taken as a stolen copy and the **whole session ends** (`SESSION_REVOKED`, audited as `auth.session.reused`). A client of your own must keep only the newest refresh token. See [sessions](/docs/guides/identity#sessions).
+
+## See also
+
+- [Sign-in & identity](/docs/guides/identity#sessions) · [Audit actions](/docs/reference/audit-actions)
+- [Handle SESSION_REVOKED in the frontend](/docs/recipes/handle-session-revoked)

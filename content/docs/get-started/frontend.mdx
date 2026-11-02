@@ -1,0 +1,117 @@
+---
+title: A frontend
+description: Put a React frontend on your backend with the web packages — signed in, renewing its tokens, calling your API and showing the live bell.
+---
+
+Your backend from the quickstart ([Java](/docs/get-started/quickstart-java), [Node](/docs/get-started/quickstart-node) or [Python](/docs/get-started/quickstart-python)) serves the SDK's endpoints under `/egradx/**`. The web packages are the browser side of them; they work the same whatever language the backend is in.
+
+| Package | What it gives |
+|---|---|
+| `@babulvaibhav/egradx-client` | The session (sign in, renew, sign out, switch organization), a `fetch` that adds the token and renews once on a 401, typed calls for every SDK endpoint, the live notification stream, file uploads with progress and downloads with the session. No framework. |
+| `@babulvaibhav/egradx-react` | `EgradxProvider`, `useAuth`, `useSession`, `<Can>`, `useInbox`, `useAttachments`, `useProfilePhoto` and a hook for every store. Headless: your UI kit, router and query library stay yours. |
+| `@babulvaibhav/egradx-next` | For Next.js: a backend-for-frontend that keeps the tokens in HttpOnly cookies, a page guard for `proxy.ts`, `getSession` and `serverFetch` for server code. |
+| `@babulvaibhav/egradx-ui` | Ready screens (sign-in and its methods picker, sign-up, the provider callback page, sign-in methods, the bell, the audit log, notification settings and channels, file upload, attachments, the profile photo), copied into your project with the shadcn CLI. Not a runtime dependency. |
+
+The code on this page is the portal's two web examples, `examples/web-vite` and `examples/web-next`, the frontends of the *notes* application, on the published packages.
+
+<Callout title="Or generate it">
+  [The Initializr](/start) adds either frontend to a generated project, wired to its backend.
+</Callout>
+
+## Choose one
+
+- **React with Vite** — a single-page app. Tokens are kept in `localStorage`, so every tab follows a sign-in; any script on the page can read them, so keep the Content-Security-Policy strict.
+- **Next.js** — the browser never holds a token. It talks to the Next.js server, which keeps them in HttpOnly cookies and forwards each call to your API.
+
+<Steps>
+<Step>
+
+### Install
+
+The packages are on GitHub Packages; the `.npmrc` from [access to the packages](/docs/get-started/access) covers them.
+
+```sh
+# React with Vite
+npm install @babulvaibhav/egradx-client @babulvaibhav/egradx-react
+
+# Next.js
+npm install @babulvaibhav/egradx-client @babulvaibhav/egradx-react @babulvaibhav/egradx-next
+```
+
+</Step>
+<Step>
+
+### Create the client
+
+One client for the whole application.
+
+**React with Vite:**
+
+<RepoSnippet file="apps/egradx-devportal/examples/web-vite/src/lib/egradx.ts" region="web-client" title="frontend/src/lib/egradx.ts" />
+
+In development, Vite sends `/api` and `/egradx` to the backend at `http://localhost:8080` (`vite.config.ts`); in production a reverse proxy does the same.
+
+**Next.js:** the backend-for-frontend, its route, the page guard, and a client with `tokens: 'server'`:
+
+<RepoSnippet file="apps/egradx-devportal/examples/web-next/src/lib/egradx-server.ts" region="web-bff" title="frontend/src/lib/egradx-server.ts" />
+
+<RepoSnippet file="apps/egradx-devportal/examples/web-next/src/app/bff/[...path]/route.ts" title="frontend/src/app/bff/[...path]/route.ts" />
+
+<RepoSnippet file="apps/egradx-devportal/examples/web-next/src/proxy.ts" region="web-proxy" title="frontend/src/proxy.ts" />
+
+<RepoSnippet file="apps/egradx-devportal/examples/web-next/src/lib/egradx.ts" region="web-client-next" title="frontend/src/lib/egradx.ts" />
+
+Wrap the application in `<EgradxProvider client={egradx}>`; it restores a stored session on mount.
+
+</Step>
+<Step>
+
+### Sign in
+
+The same code for both:
+
+<RepoSnippet file="apps/egradx-devportal/examples/web-vite/src/modules/auth/LoginForm.tsx" region="web-sign-in" title="frontend/src/modules/auth/LoginForm.tsx" />
+
+Someone in several organizations gets `ORG_SELECTION_REQUIRED` with the list; sign in again with the chosen one.
+
+To offer an emailed code, Google, Zoho or sign-up as well, see [sign-up and sign-in methods](/docs/guides/sign-in-methods); the copy-in `sign-in` screen offers whatever the API has turned on, and its `SignInMethodsPicker` (or `useSignInMethodList`) lets you show only some, in your order, with your words.
+
+</Step>
+<Step>
+
+### Call your own API
+
+`egradx.fetch` adds the token and an `X-Request-ID`, renews once on a 401 and retries:
+
+<RepoSnippet file="apps/egradx-devportal/examples/web-vite/src/modules/notes/notes-api.ts" region="web-own-api" title="frontend/src/modules/notes/notes-api.ts" />
+
+</Step>
+<Step>
+
+### Show the bell
+
+`useInbox()` loads the inbox and keeps it live. Use it once, high in the tree:
+
+<RepoSnippet file="apps/egradx-devportal/examples/web-vite/src/components/Bell.tsx" region="web-bell" title="frontend/src/components/Bell.tsx" />
+
+Or copy in the ready one: `npx shadcn@latest add https://<this portal>/r/notification-bell.json`.
+
+When the backend has [file storage](/docs/guides/files), the same client uploads and shows files: `useAttachments` and `useFileUpload` for a record's files, `useProfilePhoto` for the person's photo, or the copy-in `attachments` and `avatar-upload` screens. With Vite and tokens in the browser, allow `blob:` in the Content-Security-Policy's `img-src`; with Next.js, keep the BFF's path out of `proxy.ts`'s matcher, as above.
+
+</Step>
+<Step>
+
+### Run it
+
+Start the backend first, then:
+
+```sh
+npm run dev      # Vite: http://localhost:5173 · Next.js: http://localhost:3000
+```
+
+Sign in as the backend's seeded person. The Next.js server reaches the API at `EGRADX_API_URL` (default `http://localhost:8080`).
+
+</Step>
+</Steps>
+
+**Next:** the [web guide](/docs/guides/web) — guarding pages, what the client does for you, the copy-in screens and how OIM's two frontends use them.

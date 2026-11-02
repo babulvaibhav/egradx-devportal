@@ -1,0 +1,84 @@
+---
+title: Let people set a profile photo
+description: Upload, preview, replace and remove the signed-in person's photo, and show it in the header — with the avatar-upload screen or the useProfilePhoto hook.
+---
+
+The profile photo endpoints are served by `egradx-file-storage`: with the package [wired in](/docs/guides/files#wiring-it-in), there is nothing to add on the server. `PUT /egradx/auth/my/profile/photo` stores the photo and points the profile's `photoUrl` at it; `DELETE` removes it.
+
+## 1. Check the limits
+
+PNG, JPEG or WebP, at most 5 MB, unless you change them:
+
+| Java | Node | Python |
+|---|---|---|
+| `egradx.files.profile-photo.max-size: 2MB`, `.content-types: [image/png, image/jpeg]` | `createFileStorage({ profilePhoto: { maxSize: '2MB', contentTypes: ['image/png', 'image/jpeg'] } })` | `FilesOptions(profile_photo=ProfilePhotoSettings(max_size=2 * 1024 * 1024, content_types=["image/png", "image/jpeg"]))` |
+
+## 2. The account page
+
+The copy-in `avatar-upload` screen brings `AvatarUpload`, for the account page, and `ProfilePhoto`, for the header:
+
+```sh
+npx shadcn@latest add https://<this portal>/r/avatar-upload.json
+```
+
+```tsx title="frontend/src/modules/account/ProfilePhotoCard.tsx"
+import { AvatarUpload } from '@/components/egradx/files/avatar-upload';
+
+export function ProfilePhotoCard({ name, notify }: { name: string; notify: (message: string) => void }) {
+  return <AvatarUpload name={name} onNotify={notify} />;
+}
+```
+
+It previews the photo while it uploads, changes it when a file is chosen or dropped, and removes it after a confirmation. Refusals (`FILE_TOO_LARGE`, `FILE_TYPE_NOT_ALLOWED`) are worded in `components/egradx/files/file-format.ts`.
+
+## 3. The header
+
+```tsx title="frontend/src/components/layout/UserMenu.tsx"
+import { ProfilePhoto } from '@/components/egradx/files/avatar-upload';
+
+<ProfilePhoto name={user.name} className="size-7" />   // the photo, or the initials
+```
+
+Every use follows a change made in another, so the header changes as soon as the photo does.
+
+## Or with the hook
+
+`useProfilePhoto()` is the same, for a design of your own:
+
+```tsx
+import { useProfilePhoto } from '@babulvaibhav/egradx-react';
+
+function Avatar({ initials }: { initials: string }) {
+  const photo = useProfilePhoto({ accept: ['image/png', 'image/jpeg', 'image/webp'], maxSize: 5 * 1024 * 1024 });
+  return (
+    <label>
+      {photo.url ? <img src={photo.url} alt="" /> : initials}
+      <input type="file" accept="image/*" hidden onChange={(e) => e.target.files?.[0] && photo.set(e.target.files[0])} />
+      {photo.changeError?.code === 'FILE_TOO_LARGE' && <span>That photo is too large.</span>}
+    </label>
+  );
+}
+```
+
+`photo.url` is ready for `src`: with tokens in the browser (Vite) it is a `blob:` URL of the downloaded photo, so the Content-Security-Policy must allow `blob:` in `img-src`; behind the Next.js backend-for-frontend it is the plain URL, which the cookie goes with. A plain `<img src={profile.photoUrl}>` without the hook is refused with tokens in the browser: it carries no token.
+
+## How it behaves
+
+- **Setting a photo replaces the previous one**, which is deleted (`files.file.deleted`).
+- **One photo per person.** Setting it while in another organization replaces it everywhere.
+- **Everyone in the organization can see it**, without any file permission; only its owner can change or remove it.
+- **In another organization** it answers 404: a person in several organizations shows their initials in the others until they set it there.
+- **`photoUrl`** is `/egradx/files/{id}/content`. `PUT /egradx/auth/my/profile` accepts that, or an `http(s)` URL, and nothing else.
+
+## What can go wrong
+
+| Code | When |
+|---|---|
+| `FILE_TOO_LARGE` (413) | over `profile-photo.max-size` |
+| `FILE_TYPE_NOT_ALLOWED` (415) | not one of `profile-photo.content-types` |
+| `FILE_EMPTY` (400) | an empty file |
+| `ACCESS_DENIED` (403) | signed in to no organization |
+
+## See also
+
+- [Files](/docs/guides/files#profile-photos) · [Sign-in & identity](/docs/guides/identity)

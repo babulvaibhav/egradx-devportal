@@ -10,7 +10,7 @@ Joins `egradx-notification` to `egradx-auth`, imported as `egradx.notification_a
 | Export | What it is |
 |---|---|
 | `notifications_with_auth(auth, options)` | Adds the notification authorities to auth's catalog (call it before `auth.start()`). Returns the options with auth's resolvers (inbox viewers, admin actors, recipients, audiences and preferences), the account-message types, and their templates. Resolvers the options already set are kept. |
-| `connect_account_messages(auth, notifications)` | Lets egradx-auth send reset links, invitations, email-change codes and contact-verification codes through the outbox. |
+| `connect_account_messages(auth, notifications)` | Lets egradx-auth send reset links, invitations, email-change codes, contact-verification codes, sign-in and sign-up codes, and the sign-in-method-added notice (`egradx.auth.sign-in-code`, `egradx.auth.signup-code`, `egradx.auth.sign-in-method-added`) through the outbox. |
 | `account_message_types()`, `account_templates()` | The account messages, from `contracts/notification-templates/egradx-notification-auth`, which the wheel carries. Each type is replaceable, so an application can declare its own version. |
 | `mask_email`, `format_when` | As the Java sender writes them: `c***w@acme.test`, and `1 Oct 2026, 09:00 UTC`. |
 
@@ -26,6 +26,7 @@ await auth.start()
 - the contributed authorities, held by each Admin;
 - auth's records named in the audit trail;
 - a password reset sent from the contract templates;
+- a sign-in code, a sign-up code and the sign-in-method notice, from the contract templates;
 - a contact verified by a code sent on its own channel;
 - an organization's inbox and a bulk send.
 
@@ -155,6 +156,32 @@ async def send_email_change_code(m: EmailChangeCodeMessage) -> None
 
 ```python
 async def send_email_changed(m: EmailChangedMessage) -> None
+```
+
+#### `sends_sign_in_messages`
+
+```python
+def sends_sign_in_messages() -> bool
+```
+
+This sender sends the sign-in codes and the sign-in-method notice too.
+
+#### `send_sign_in_code`
+
+```python
+async def send_sign_in_code(m: SignInCodeMessage) -> None
+```
+
+#### `send_signup_code`
+
+```python
+async def send_signup_code(m: SignupCodeMessage) -> None
+```
+
+#### `send_sign_in_method_added`
+
+```python
+async def send_sign_in_method_added(m: SignInMethodAddedMessage) -> None
 ```
 
 ### `NotificationContactVerification`

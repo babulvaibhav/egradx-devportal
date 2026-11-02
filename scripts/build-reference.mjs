@@ -47,6 +47,7 @@ const written = [];
     ['AuthErrorCode', 'Sign-in & identity', 'From `/egradx/auth/**`.'],
     ['NotificationErrorCode', 'Notifications', 'From `/egradx/notifications/**`, and from `send(...)` in your code.'],
     ['AuditErrorCode', 'Audit trail', 'The audit trail answers with the generic codes only.'],
+    ['FilesErrorCode', 'File storage', 'From `/egradx/files/**` and `/egradx/auth/my/profile/photo`. Also the generic `NOT_FOUND`, `ACCESS_DENIED` and `NOT_AUTHENTICATED`.'],
   ];
   const inContract = new Set(groups.flatMap(([id]) => contract.$defs[id]?.enum ?? []));
   const missing = [...inContract].filter((code) => !known[code]);
@@ -123,6 +124,7 @@ Your application adds its own codes (\`NOTE_NOT_FOUND\`); the browser client als
     ['audit', 'Audit trail', 'egradx_audit_schema_history'],
     ['notification', 'Notifications', 'egradx_notification_schema_history'],
     ['events', 'Events', 'egradx_events_schema_history'],
+    ['files', 'File storage', 'egradx_files_schema_history'],
   ];
   let body = 'Every table the SDK creates in your database, with its columns as its migrations leave them. Each library records its migrations in its own history table; [the database guide](/docs/guides/database) explains the order.\n';
   for (const [folder, title, history] of capabilities) {
@@ -242,6 +244,7 @@ function readCatalog() {
     ['auth', 'Sign-in & identity', '/egradx/auth/**: sign-in, sessions, accounts, organizations, users, roles, invitations, profiles.'],
     ['audit', 'Audit trail', '/egradx/audit/**: records, history, export, the action catalog.'],
     ['notification', 'Notifications', '/egradx/notifications/**: the inbox and its stream, preferences, and the administration of channels, templates and deliveries.'],
+    ['files', 'File storage', '/egradx/files/**: uploads, the files of a record, downloads and deletes, and the profile photo.'],
   ];
   for (const [name, title, scope] of apis) {
     const spec = parse(read(`openapi/${name}.yaml`));
@@ -348,13 +351,18 @@ function expandParameter(parameter, schemas) {
     ['service', 'Service tokens', '/docs/recipes/service-token'],
     ['rest-template', 'The shared RestTemplate', '/docs/guides/java-only'],
     ['app', 'Application properties', '/docs/guides/core-utilities#application-properties'],
+    ['errors', 'The error envelope', '/docs/guides/errors#wiring-the-envelope-in'],
+    ['redis', 'Several instances (egradx-redis)', '/docs/recipes/two-instances'],
+    ['files', 'File storage (egradx-file-storage)', '/docs/guides/files'],
   ];
   const areaOf = (name) => name.split('.')[1];
   const envOf = (name) => name.replace(/-/g, '').replace(/\./g, '_').toUpperCase();
-  const typeName = (type) => text((type ?? '').replace(/java\.(lang|util|time)\./g, '').replace(/<.*>/, (g) => g.replace(/[a-z]+\.[a-zA-Z.]*\./g, '')));
+  // Package names go, and nested types read as in Java (com.egradx.auth.config.EgradxAuthProperties$SignupMode becomes
+  // EgradxAuthProperties.SignupMode).
+  const typeName = (type) => text((type ?? '').replace(/\b(?:[a-z][a-z0-9]*\.)+(?=[A-Z])/g, '').replace(/\$/g, '.'));
   // Javadoc to Markdown: {@code x} and {@link Type#member text} become code spans or their text; tags go.
   const javadoc = (s) => (s ?? '')
-    .replace(/\{@(?:code|literal) ([^}]*)\}/g, '`$1`')
+    .replace(/\{@(?:code|literal) ((?:[^{}]|\{[^{}]*\})*)\}/g, '`$1`')
     .replace(/\{@link(?:plain)? ([^}\s]+)(?: ([^}]*))?\}/g, (_, target, label) => label ?? `\`${target.replace(/^#/, '')}\``)
     .replace(/<\/?[a-z]+[^>]*>/g, '');
   const value = (v) => (v === undefined ? '' : `\`${Array.isArray(v) ? v.join(', ') : String(v)}\``);
@@ -368,7 +376,7 @@ function expandParameter(parameter, schemas) {
   const covered = new Set(areas.map(([area]) => area));
   const other = properties.filter((p) => !covered.has(areaOf(p.name)));
   if (other.length) throw new Error(`Configuration keys in no area of build-reference.mjs: ${other.map((p) => p.name).join(', ')}`);
-  body += `\n## Node and Python\n\nThere are no keys to read: the application passes options to \`createEgradx\` / \`SdkOptions\`, usually from its own environment variables, as the generated projects do in \`src/config.ts\` and \`config.py\`. The options, with every field and its default:\n\n| | Node | Python |\n|---|---|---|\n| Everything | [\`EgradxOptions\`](/docs/reference/node/egradx-sdk#egradxoptions) | [\`SdkOptions\`](/docs/reference/python/egradx-sdk#sdkoptions) |\n| Sign-in | [\`AuthOptions\`](/docs/reference/node/egradx-sdk#authoptions) | [\`AuthOptions\`](/docs/reference/python/egradx-auth#authoptions) |\n| Audit | [\`AuditorOptions\`](/docs/reference/node/egradx-sdk#auditoroptions) | [\`egradx-audit\`](/docs/reference/python/egradx-audit) |\n| Notifications | [\`NotificationsOptions\`](/docs/reference/node/egradx-sdk#notificationsoptions) | [\`NotificationsOptions\`](/docs/reference/python/egradx-notification#notificationsoptions) |\n| Events | [\`EventsOptions\`](/docs/reference/node/egradx-events#eventsoptions) | [\`egradx-events\`](/docs/reference/python/egradx-events) |\n\nTwo groups of environment variables are read by the SDK itself in Node and Python: the events transport (\`EGRADX_EVENTS_TRANSPORT\`, \`EGRADX_EVENTS_RABBITMQ_URL\`, \`EGRADX_EVENTS_KAFKA_BROKERS\`) and the notification secrets passphrase (\`EGRADX_NOTIFICATION_SECRETS_PASSPHRASE\`, else \`EGRADX_SECURITY_CRYPTO_PASSPHRASE\`).\n`;
+  body += `\n## Node and Python\n\nThere are no keys to read: the application passes options to \`createEgradx\` / \`SdkOptions\`, usually from its own environment variables, as the generated projects do in \`src/config.ts\` and \`config.py\`. The options, with every field and its default:\n\n| | Node | Python |\n|---|---|---|\n| Everything | [\`EgradxOptions\`](/docs/reference/node/egradx-sdk#egradxoptions) | [\`SdkOptions\`](/docs/reference/python/egradx-sdk#sdkoptions) |\n| Sign-in | [\`AuthOptions\`](/docs/reference/node/egradx-sdk#authoptions) | [\`AuthOptions\`](/docs/reference/python/egradx-auth#authoptions) |\n| Audit | [\`AuditorOptions\`](/docs/reference/node/egradx-sdk#auditoroptions) | [\`egradx-audit\`](/docs/reference/python/egradx-audit) |\n| Notifications | [\`NotificationsOptions\`](/docs/reference/node/egradx-sdk#notificationsoptions) | [\`NotificationsOptions\`](/docs/reference/python/egradx-notification#notificationsoptions) |\n| Events | [\`EventsOptions\`](/docs/reference/node/egradx-events#eventsoptions) | [\`egradx-events\`](/docs/reference/python/egradx-events) |\n| Files | [\`FilesSettings\`](/docs/reference/node/egradx-file-storage#filessettings) | [\`FilesOptions\`](/docs/reference/python/egradx-file-storage#filesoptions) |\n\nTwo groups of environment variables are read by the SDK itself in Node and Python: the events transport (\`EGRADX_EVENTS_TRANSPORT\`, \`EGRADX_EVENTS_RABBITMQ_URL\`, \`EGRADX_EVENTS_KAFKA_BROKERS\`) and the notification secrets passphrase (\`EGRADX_NOTIFICATION_SECRETS_PASSPHRASE\`, else \`EGRADX_SECURITY_CRYPTO_PASSPHRASE\`).\n`;
   written.push(page('configuration.mdx', { title: 'Configuration', description: 'Every configuration key of the Java SDK, with its environment variable and default, and where the Node and Python options are documented.' }, body));
 }
 

@@ -30,7 +30,8 @@ app.use(...egradxErrors());          // 404, and every error as the contract's e
 | Export | What it is |
 |---|---|
 | `createEgradx(options)` | Creates auth, the auditor and notifications on the application's `PrismaClient`, connected, as Java's auto-configuration does. `options.auth`, `.audit` and `.notifications` are each library's own options (Java's `egradx.auth.*`, `egradx.audit.*`, `egradx.notification.*`); only `auth.issuer` and `auth.keys` are required. `start()` seeds the platform organization and its administrator and starts the periodic work; `close()` stops it. |
-| `migrateEgradx(databaseUrl, { application?, afterAudit? })` | Every library's tables, in Java's order, into the history tables Java uses. egradx-auth's come first, then the application's own (`application`), then egradx-audit's, `afterAudit` (Java's `EgradxAuditSchemaCallback`) and egradx-notification's. |
+| `redis` option | Several instances acting as one: pass `createRedisCoordination({ url })` from `@babulvaibhav/egradx-redis` (a package of its own, not a dependency of this one). Sign-in attempts are counted in Redis (unless `auth.limiter` is given), role changes reach every instance's cache, and in-app notifications are pushed on every instance (unless `notifications.broadcaster` is given). `start()` and `close()` start and close it with the rest; it never waits for Redis. |
+| `migrateEgradx(databaseUrl, { application?, afterAudit? })` | Every library's tables, in Java's order, into the history tables Java uses. egradx-auth's come first, then the application's own (`application`), then egradx-audit's, `afterAudit` (Java's `EgradxAuditSchemaCallback`) and egradx-notification's, then egradx-events' if `@babulvaibhav/egradx-events` is installed. |
 | `@babulvaibhav/egradx-sdk/express`: `egradxMiddleware`, `egradxRoutes`, `egradxErrors` | The Express parts, in the order to register them. `egradxRoutes` takes anything with `auth`, `auditor` and `notifications`. Also exported: everything from `@babulvaibhav/egradx-express` and the libraries' Express modules (`requireAuthority`, `currentCaller`, …). |
 | Observability | Each library is timed and traced through `@babulvaibhav/egradx-observability` (`observations`, `metrics`). As in Java, registering an OpenTelemetry SDK and its exporters is the application's choice; OIM's `telemetry.ts` is an example. |
 
@@ -42,6 +43,7 @@ An application whose only EGRADX dependency is this package. The tests check:
 - the inbox serves the signed-in person and refuses anyone else;
 - the application's own route audits its change and sends a message in its transaction;
 - a reset link goes out as an email;
+- a `redis` coordination is given the limiter's settings and the libraries, publishes the live pushes, and is started and closed with them;
 - the application's errors and unknown routes come back in the contract's envelope.
 
 OIM's Node backend is built on it.
@@ -86,7 +88,7 @@ new AuthenticationException(
 
 ###### Overrides
 
-[`EgradxError`](#egradxerror).[`constructor`](#constructor-21)
+[`EgradxError`](#egradxerror).[`constructor`](#constructor-22)
 
 #### Properties
 
@@ -132,7 +134,7 @@ new AuthorizationException(
 
 ###### Overrides
 
-[`EgradxError`](#egradxerror).[`constructor`](#constructor-21)
+[`EgradxError`](#egradxerror).[`constructor`](#constructor-22)
 
 #### Properties
 
@@ -178,7 +180,7 @@ new BadRequestException(
 
 ###### Inherited from
 
-[`ValidationException`](#validationexception).[`constructor`](#constructor-72)
+[`ValidationException`](#validationexception).[`constructor`](#constructor-82)
 
 #### Properties
 
@@ -275,6 +277,11 @@ stop(): Promise<void>;
 
 - [`EgradxError`](#egradxerror)
 
+#### Extended by
+
+- [`EgradxSignupRequiredException`](#egradxsignuprequiredexception)
+- [`EgradxSignupRequiredException`](/docs/reference/node/egradx-auth#egradxsignuprequiredexception)
+
 #### Constructors
 
 ##### Constructor
@@ -301,7 +308,7 @@ new DuplicateResourceException(
 
 ###### Overrides
 
-[`EgradxError`](#egradxerror).[`constructor`](#constructor-21)
+[`EgradxError`](#egradxerror).[`constructor`](#constructor-22)
 
 #### Properties
 
@@ -477,7 +484,7 @@ new EgradxAudienceTooLargeException(audienceSize, cap): EgradxAudienceTooLargeEx
 
 ###### Overrides
 
-[`ValidationException`](#validationexception).[`constructor`](#constructor-72)
+[`ValidationException`](#validationexception).[`constructor`](#constructor-82)
 
 #### Properties
 
@@ -1022,7 +1029,8 @@ new EgradxAuthService(
    platform, 
    refreshTtlMs, 
    limiter, 
-   observations?
+   observations?, 
+   refreshReuseGraceMs?
 ): EgradxAuthService;
 ```
 
@@ -1040,6 +1048,7 @@ new EgradxAuthService(
 | `refreshTtlMs` | `number` | - |
 | `limiter` | [`EgradxAttemptLimiter`](#egradxattemptlimiter) | - |
 | `observations?` | [`EgradxObservations`](#egradxobservations) | Times egradx.auth.login, .refresh and .organization.switch, with the error code as the outcome of a failure. |
+| `refreshReuseGraceMs?` | `number` | How long a refresh token replaced by a refresh still renews its session (two callers refreshing with it at once); presented after that, it ends the session. Default 30 s, as Java's DEFAULT_REFRESH_TOKEN_REUSE_GRACE. |
 
 ###### Returns
 
@@ -1053,7 +1062,8 @@ new EgradxAuthService(
 currentUser(token): Promise<EgradxUserDto>;
 ```
 
-The user a verified token belongs to; an ended session if they were deactivated or their sessions cut off since.
+The user a verified token belongs to; an ended session if they were deactivated, their sessions cut off since, or
+the token's own session (sid) has ended or expired.
 
 ###### Parameters
 
@@ -1064,6 +1074,24 @@ The user a verified token belongs to; an ended session if they were deactivated 
 ###### Returns
 
 `Promise`\<[`EgradxUserDto`](#egradxuserdto)\>
+
+##### isLiveSession()
+
+```ts
+isLiveSession(sessionId): Promise<boolean>;
+```
+
+Whether sessionId (an access token's sid) names a session neither ended nor expired.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `sessionId` | `string` \| `null` \| `undefined` |
+
+###### Returns
+
+`Promise`\<`boolean`\>
 
 ##### issueSession()
 
@@ -1134,7 +1162,8 @@ choices are listed, but only once the password is proved.
 logout(refreshToken): Promise<void>;
 ```
 
-Revokes a refresh token; nothing, not an error, if it does not exist or already was.
+Ends the session a refresh token belongs to (SIGNED_OUT), with every token it has had; nothing, not an error, if it
+does not exist or was already revoked.
 
 ###### Parameters
 
@@ -1152,7 +1181,10 @@ Revokes a refresh token; nothing, not an error, if it does not exist or already 
 refresh(refreshToken): Promise<EgradxAuthResult>;
 ```
 
-A new access token for the session a refresh token belongs to; the refresh token stays the same (no rotation, as Java).
+Continues the session a refresh token belongs to: a new access token, and a new refresh token in place of the one
+presented, which is retired (rotation). The session keeps its organization and its expiry. A retired token still
+renews the session for the reuse grace after it was replaced, so two callers refreshing with it at once both carry
+on; presented after that, it is taken as stolen: the whole session ends (auth.session.reused) with SESSION_REVOKED.
 
 ###### Parameters
 
@@ -1182,6 +1214,35 @@ A person with no organization yet: someone else adds them to one.
 
 `Promise`\<[`EgradxUserDto`](#egradxuserdto)\>
 
+##### signInVerified()
+
+```ts
+signInVerified(
+   userId, 
+   requestedOrganizationId, 
+   method, 
+   provider
+): Promise<EgradxAuthResult>;
+```
+
+Signs in someone already proved to be who they are by another method than a password — an emailed code, or an
+OpenID Connect provider — choosing the organization as a password sign-in does, and recording auth.login with
+`method` (and `provider`, if given). AUTH_INVALID_CREDENTIALS if the account is gone or deactivated;
+ORG_SELECTION_REQUIRED if they belong to several and chose none; ORG_ACCESS_DENIED / ORG_SUSPENDED.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `userId` | `string` |
+| `requestedOrganizationId` | `string` \| `null` |
+| `method` | `string` |
+| `provider` | `string` \| `null` |
+
+###### Returns
+
+`Promise`\<[`EgradxAuthResult`](#egradxauthresult)\>
+
 ##### switchOrganization()
 
 ```ts
@@ -1192,7 +1253,7 @@ switchOrganization(
 ): Promise<EgradxAuthResult>;
 ```
 
-Moves the session into another organization the person belongs to, checking everything afresh; the old refresh token is revoked.
+Moves the person into a new session in another organization they belong to, checking everything afresh; the session left is ended (SWITCHED).
 
 ###### Parameters
 
@@ -1641,7 +1702,7 @@ new EgradxChannelUnavailableException(
 
 ###### Overrides
 
-[`ValidationException`](#validationexception).[`constructor`](#constructor-72)
+[`ValidationException`](#validationexception).[`constructor`](#constructor-82)
 
 #### Properties
 
@@ -1928,7 +1989,7 @@ start(
 | Parameter | Type |
 | ------ | ------ |
 | `userId` | `string` |
-| `currentPassword` | `string` |
+| `currentPassword` | `string` \| `null` |
 | `newEmail` | `string` |
 
 ###### Returns
@@ -2093,6 +2154,228 @@ Which failures are worth retrying.
 
 ***
 
+### EgradxEmailCodeService
+
+Six-digit codes emailed for signing in without a password, and for signing up (docs/auth/sign-in-methods.md). As
+Java's EgradxEmailCodeService.
+
+Asking for a sign-in code answers the same whether or not the address has an account; a code is sent only to an
+active one. Checking a code answers EMAIL_CODE_INVALID alike for a wrong code, an unknown address and no code at all.
+Wrong codes count, and the count is kept though the check is refused.
+
+Sign-up makes, when its code is entered, the account, a new organization it administers, and a session there.
+
+#### Constructors
+
+##### Constructor
+
+```ts
+new EgradxEmailCodeService(
+   prisma, 
+   provisioning, 
+   authService, 
+   passwords, 
+   senders, 
+   signup, 
+   settings, 
+   limiter, 
+   warn, 
+   observations?
+): EgradxEmailCodeService;
+```
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `prisma` | [`PrismaLike`](#prismalike) |
+| `provisioning` | [`EgradxOrganizationProvisioningService`](#egradxorganizationprovisioningservice) |
+| `authService` | [`EgradxAuthService`](#egradxauthservice) |
+| `passwords` | [`PasswordEncoder`](#passwordencoder) |
+| `senders` | `SenderHolder` |
+| `signup` | [`SignupSettings`](#signupsettings) |
+| `settings` | [`EmailCodeSettings`](#emailcodesettings) |
+| `limiter` | [`EgradxAttemptLimiter`](#egradxattemptlimiter) |
+| `warn` | (`message`) => `void` |
+| `observations?` | [`EgradxObservations`](#egradxobservations) |
+
+###### Returns
+
+[`EgradxEmailCodeService`](#egradxemailcodeservice)
+
+#### Methods
+
+##### confirmSignup()
+
+```ts
+confirmSignup(email, code): Promise<EgradxAuthResult>;
+```
+
+Completes a sign-up with its code: the account, a new organization it administers, and a session there.
+SIGNUP_DISABLED; EMAIL_CODE_INVALID, EMAIL_CODE_EXPIRED, EMAIL_CODE_TOO_MANY_ATTEMPTS; EMAIL_IN_USE,
+ORGANIZATION_NAME_IN_USE when taken meanwhile.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `email` | `string` |
+| `code` | `string` |
+
+###### Returns
+
+`Promise`\<[`EgradxAuthResult`](#egradxauthresult)\>
+
+##### createOrganizationAccount()
+
+```ts
+createOrganizationAccount(
+   email, 
+   name, 
+   organizationName, 
+   passwordHash
+): Promise<{
+  organizationId: string;
+  userId: string;
+}>;
+```
+
+Makes the account and the organization it administers, checking again that both are free. The account's username is
+its email; `passwordHash` may be null.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `email` | `string` |
+| `name` | `string` \| `null` |
+| `organizationName` | `string` |
+| `passwordHash` | `string` \| `null` |
+
+###### Returns
+
+`Promise`\<\{
+  `organizationId`: `string`;
+  `userId`: `string`;
+\}\>
+
+##### requireSignupAllowed()
+
+```ts
+requireSignupAllowed(
+   reader, 
+   email, 
+   organizationName
+): Promise<void>;
+```
+
+Refuses a sign-up that may not go ahead: no organization name, the domain is not allowed, the address has an account,
+or the organization name is taken. Shared with signing up through a provider.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `reader` | [`SqlClient`](#sqlclient) |
+| `email` | `string` |
+| `organizationName` | `string` \| `null` \| `undefined` |
+
+###### Returns
+
+`Promise`\<`void`\>
+
+##### sendSignInCode()
+
+```ts
+sendSignInCode(email): Promise<void>;
+```
+
+Emails a sign-in code to the account at `email`, if there is an active one, replacing any earlier code. Says nothing
+either way: an unknown address, a request inside the resend interval and a message that could not be sent all
+return normally. EMAIL_CODE_UNAVAILABLE when codes are not offered here at all; AUTH_TOO_MANY_ATTEMPTS when this
+address has asked for too many codes.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `email` | `string` |
+
+###### Returns
+
+`Promise`\<`void`\>
+
+##### signInAvailable()
+
+```ts
+signInAvailable(): boolean;
+```
+
+Whether signing in by an emailed code is offered here.
+
+###### Returns
+
+`boolean`
+
+##### signupOpen()
+
+```ts
+signupOpen(): boolean;
+```
+
+Whether anyone may sign up here: signup.mode organization.
+
+###### Returns
+
+`boolean`
+
+##### startSignup()
+
+```ts
+startSignup(request): Promise<EgradxSignupStartedDto>;
+```
+
+Starts a sign-up: checks it is allowed and emails a code to `request.email`, replacing any earlier one. SIGNUP_DISABLED;
+SIGNUP_EMAIL_DOMAIN_NOT_ALLOWED, PASSWORD_INVALID, EMAIL_CODE_RATE_LIMITED, EMAIL_CODE_UNAVAILABLE; EMAIL_IN_USE,
+ORGANIZATION_NAME_IN_USE.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `request` | [`EgradxStartSignupRequest`](#egradxstartsignuprequest) |
+
+###### Returns
+
+`Promise`\<[`EgradxSignupStartedDto`](#egradxsignupstarteddto)\>
+
+##### verifySignInCode()
+
+```ts
+verifySignInCode(
+   email, 
+   code, 
+   organizationId
+): Promise<EgradxAuthResult>;
+```
+
+Signs in with the code emailed to `email`. The code works once. When the person belongs to several organizations and
+chose none, ORG_SELECTION_REQUIRED is thrown and the code is kept, to be sent again with `organizationId`.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `email` | `string` |
+| `code` | `string` |
+| `organizationId` | `string` \| `null` |
+
+###### Returns
+
+`Promise`\<[`EgradxAuthResult`](#egradxauthresult)\>
+
+***
+
 ### EgradxError
 
 An error the SDK turns into the error envelope (contracts/schemas/error.json) with this status and
@@ -2116,6 +2399,7 @@ handler writes the response.
 - [`ServerException`](#serverexception)
 - [`ServerUnavailableException`](#serverunavailableexception)
 - [`ValidationException`](#validationexception)
+- [`EgradxFileException`](/docs/reference/node/egradx-file-storage#egradxfileexception)
 
 #### Constructors
 
@@ -2230,6 +2514,231 @@ size(): number;
 ###### Returns
 
 `number`
+
+***
+
+### EgradxGoogleSignInProvider
+
+Sign in with Google (`type: 'google'`): OpenID Connect at `https://accounts.google.com`, whose verified emails are
+trusted. Only the client id and secret need configuring. As Java's EgradxGoogleSignInProvider.
+
+#### Extends
+
+- [`EgradxOidcSignInProvider`](#egradxoidcsigninprovider)
+
+#### Constructors
+
+##### Constructor
+
+```ts
+new EgradxGoogleSignInProvider(settings, client): EgradxGoogleSignInProvider;
+```
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `settings` | `EgradxOidcSignInProviderSettings` |
+| `client` | [`EgradxOidcClient`](#egradxoidcclient) |
+
+###### Returns
+
+[`EgradxGoogleSignInProvider`](#egradxgooglesigninprovider)
+
+###### Inherited from
+
+[`EgradxOidcSignInProvider`](#egradxoidcsigninprovider).[`constructor`](#constructor-45)
+
+#### Properties
+
+| Property | Modifier | Type | Default value | Description | Overrides |
+| ------ | ------ | ------ | ------ | ------ | ------ |
+| <a id="property-factory"></a> `Factory` | `readonly` | [`SignInProviderFactoryClass`](#signinproviderfactoryclass) | `undefined` | `type: 'google'`. | [`EgradxOidcSignInProvider`](#egradxoidcsigninprovider).`Factory` |
+| <a id="property-issuer"></a> `ISSUER` | `readonly` | `"https://accounts.google.com"` | `"https://accounts.google.com"` | - | - |
+
+#### Accessors
+
+##### id
+
+###### Get Signature
+
+```ts
+get id(): string;
+```
+
+The id in the URLs (`/egradx/auth/oidc/{id}/start`) and in stored identities: `google`, `github`.
+
+###### Returns
+
+`string`
+
+The id in the URLs (`/egradx/auth/oidc/{id}/start`) and in stored identities: `google`, `github`.
+
+###### Inherited from
+
+[`EgradxOidcSignInProvider`](#egradxoidcsigninprovider).[`id`](#id-1)
+
+##### issuer
+
+###### Get Signature
+
+```ts
+get issuer(): string;
+```
+
+The configured issuer.
+
+###### Returns
+
+`string`
+
+###### Inherited from
+
+[`EgradxOidcSignInProvider`](#egradxoidcsigninprovider).[`issuer`](#issuer-1)
+
+##### name
+
+###### Get Signature
+
+```ts
+get name(): string;
+```
+
+Shown on the button: `Google`.
+
+###### Returns
+
+`string`
+
+Shown on the button: `Google`.
+
+###### Inherited from
+
+[`EgradxOidcSignInProvider`](#egradxoidcsigninprovider).[`name`](#name-2)
+
+##### trustEmail
+
+###### Get Signature
+
+```ts
+get trustEmail(): boolean;
+```
+
+Whether this provider's verified emails prove ownership of the address, so that a sign-in whose email matches an
+existing account is linked to it automatically. Only for providers that check addresses themselves.
+
+###### Returns
+
+`boolean`
+
+Whether this provider's verified emails prove ownership of the address, so that a sign-in whose email matches an
+existing account is linked to it automatically. Only for providers that check addresses themselves.
+
+###### Inherited from
+
+[`EgradxOidcSignInProvider`](#egradxoidcsigninprovider).[`trustEmail`](#trustemail-1)
+
+#### Methods
+
+##### authorizationUrl()
+
+```ts
+authorizationUrl(request): Promise<string>;
+```
+
+Where to send the browser to sign in. Throws EgradxSignInProviderException if the provider cannot be reached.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `request` | [`EgradxSignInAuthorization`](#egradxsigninauthorization) |
+
+###### Returns
+
+`Promise`\<`string`\>
+
+###### Inherited from
+
+[`EgradxOidcSignInProvider`](#egradxoidcsigninprovider).[`authorizationUrl`](#authorizationurl-2)
+
+##### complete()
+
+```ts
+complete(callback): Promise<EgradxProviderIdentity>;
+```
+
+Who the provider says signed in, from its callback: exchange the code, check what comes back. Throws (or rejects
+with) EgradxSignInProviderException if the provider cannot be reached, or its answer does not check out.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `callback` | [`EgradxSignInCallback`](#egradxsignincallback) |
+
+###### Returns
+
+`Promise`\<[`EgradxProviderIdentity`](#egradxprovideridentity)\>
+
+###### Inherited from
+
+[`EgradxOidcSignInProvider`](#egradxoidcsigninprovider).[`complete`](#complete-1)
+
+##### issuerFor()
+
+```ts
+protected issuerFor(_callbackParameters): string;
+```
+
+The issuer to exchange the code with and to expect in the ID token: the configured one. A provider whose accounts
+live under several issuers overrides this (Zoho).
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `_callbackParameters` | `Readonly`\<`Record`\<`string`, `string`\>\> |
+
+###### Returns
+
+`string`
+
+###### Inherited from
+
+[`EgradxOidcSignInProvider`](#egradxoidcsigninprovider).[`issuerFor`](#issuerfor-1)
+
+##### settings()
+
+```ts
+protected static settings(
+   id, 
+   configured, 
+   defaultIssuer, 
+   defaultName, 
+   defaultTrustEmail
+): EgradxOidcSignInProviderSettings;
+```
+
+Settings from configuration, with a provider type's defaults for what is left out. Throws without an issuer.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `id` | `string` |
+| `configured` | [`OidcProviderSettings`](#oidcprovidersettings) |
+| `defaultIssuer` | `string` \| `null` |
+| `defaultName` | `string` \| `null` |
+| `defaultTrustEmail` | `boolean` |
+
+###### Returns
+
+`EgradxOidcSignInProviderSettings`
+
+###### Inherited from
+
+[`EgradxOidcSignInProvider`](#egradxoidcsigninprovider).[`settings`](#settings-1)
 
 ***
 
@@ -2639,7 +3148,7 @@ new EgradxInternalException(
 
 ###### Overrides
 
-[`EgradxError`](#egradxerror).[`constructor`](#constructor-21)
+[`EgradxError`](#egradxerror).[`constructor`](#constructor-22)
 
 #### Properties
 
@@ -4303,6 +4812,499 @@ For tests and code that should record nothing.
 
 ***
 
+### EgradxOidcClient
+
+Talks to OpenID Connect providers: reads their discovery documents, builds the authorization URL, exchanges the code
+for tokens and verifies the ID token against the provider's published keys. Discovery documents are cached for an
+hour, and so are key sets (by jose). As Java's EgradxOidcClient.
+
+#### Constructors
+
+##### Constructor
+
+```ts
+new EgradxOidcClient(): EgradxOidcClient;
+```
+
+###### Returns
+
+[`EgradxOidcClient`](#egradxoidcclient)
+
+#### Methods
+
+##### authorizationUrl()
+
+```ts
+authorizationUrl(
+   issuer, 
+   clientId, 
+   scopes, 
+   request
+): Promise<string>;
+```
+
+Where to send the browser: the provider's authorization endpoint, with PKCE, state and nonce.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `issuer` | `string` |
+| `clientId` | `string` |
+| `scopes` | readonly `string`[] |
+| `request` | [`EgradxSignInAuthorization`](#egradxsigninauthorization) |
+
+###### Returns
+
+`Promise`\<`string`\>
+
+##### exchange()
+
+```ts
+exchange(
+   issuer, 
+   clientId, 
+   clientSecret, 
+   callback
+): Promise<EgradxProviderIdentity>;
+```
+
+Exchanges the callback's code at the token endpoint of `issuer` and verifies the ID token it returns; OidcException if anything fails.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `issuer` | `string` |
+| `clientId` | `string` |
+| `clientSecret` | `string` |
+| `callback` | [`EgradxSignInCallback`](#egradxsignincallback) |
+
+###### Returns
+
+`Promise`\<[`EgradxProviderIdentity`](#egradxprovideridentity)\>
+
+***
+
+### EgradxOidcService
+
+Signing in with OpenID Connect providers — Google, Zoho, or any other configured — and linking them to accounts
+(docs/auth/sign-in-methods.md). As Java's EgradxOidcService.
+
+A round trip is: start (the browser is sent to the provider), callback (the provider sends it back; what it proved is
+stored under a one-time result code and the browser is sent to the frontend), then exchange (the frontend trades the
+result code for a session). Every step keeps its state in the database, so each may reach a different instance.
+
+#### Constructors
+
+##### Constructor
+
+```ts
+new EgradxOidcService(
+   prisma, 
+   providers, 
+   authService, 
+   emailCodes, 
+   invitations, 
+   senders, 
+   signupSettings, 
+   settings, 
+   links, 
+   warn, 
+   observations?
+): EgradxOidcService;
+```
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `prisma` | [`PrismaLike`](#prismalike) |
+| `providers` | [`EgradxSignInProviders`](#egradxsigninproviders) |
+| `authService` | [`EgradxAuthService`](#egradxauthservice) |
+| `emailCodes` | [`EgradxEmailCodeService`](#egradxemailcodeservice) |
+| `invitations` | [`EgradxInvitationService`](#egradxinvitationservice) |
+| `senders` | `SenderHolder` |
+| `signupSettings` | [`SignupSettings`](#signupsettings) |
+| `settings` | [`OidcSettings`](#oidcsettings) |
+| `links` | [`LinkSettings`](#linksettings) |
+| `warn` | (`message`) => `void` |
+| `observations?` | [`EgradxObservations`](#egradxobservations) |
+
+###### Returns
+
+[`EgradxOidcService`](#egradxoidcservice)
+
+#### Methods
+
+##### callback()
+
+```ts
+callback(providerId, parameters): Promise<string>;
+```
+
+The provider's callback: checks it and returns where on the frontend to send the browser — with `code` (to
+exchange), `linked` (a provider linked from the profile), or `error`. Never throws for what the provider or the
+browser sent.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `providerId` | `string` |
+| `parameters` | `Record`\<`string`, `string`\> |
+
+###### Returns
+
+`Promise`\<`string`\>
+
+##### exchange()
+
+```ts
+exchange(
+   code, 
+   organizationId, 
+   invitationToken
+): Promise<EgradxAuthResult>;
+```
+
+Trades the result code for a session — or says why not. A code that ends in SIGNUP_REQUIRED or
+ORG_SELECTION_REQUIRED stays usable for the next step. OIDC_CODE_INVALID, OIDC_EMAIL_NOT_VERIFIED,
+ORG_SELECTION_REQUIRED (400); AUTH_NO_ACCOUNT, ORG_ACCESS_DENIED, ORG_SUSPENDED (403); IDENTITY_LINK_REQUIRED,
+SIGNUP_REQUIRED (409).
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `code` | `string` |
+| `organizationId` | `string` \| `null` |
+| `invitationToken` | `string` \| `null` |
+
+###### Returns
+
+`Promise`\<[`EgradxAuthResult`](#egradxauthresult)\>
+
+##### signInMethods()
+
+```ts
+signInMethods(userId): Promise<EgradxSignInMethodsDto>;
+```
+
+How the person can sign in: whether they have a password, and the providers linked.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `userId` | `string` |
+
+###### Returns
+
+`Promise`\<[`EgradxSignInMethodsDto`](#egradxsigninmethodsdto)\>
+
+##### signInOptions()
+
+```ts
+signInOptions(): EgradxSignInOptionsDto;
+```
+
+What a sign-in page can offer here.
+
+###### Returns
+
+[`EgradxSignInOptionsDto`](#egradxsigninoptionsdto)
+
+##### signup()
+
+```ts
+signup(code, organizationName): Promise<EgradxAuthResult>;
+```
+
+Signs up with the provider's verified email, after SIGNUP_REQUIRED: an account with no password, a new organization
+it administers, the provider linked, and a session there. SIGNUP_DISABLED (403); OIDC_CODE_INVALID,
+OIDC_EMAIL_NOT_VERIFIED, SIGNUP_EMAIL_DOMAIN_NOT_ALLOWED (400); EMAIL_IN_USE, ORGANIZATION_NAME_IN_USE, IDENTITY_IN_USE (409).
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `code` | `string` |
+| `organizationName` | `string` |
+
+###### Returns
+
+`Promise`\<[`EgradxAuthResult`](#egradxauthresult)\>
+
+##### start()
+
+```ts
+start(
+   providerId, 
+   returnTo, 
+   linkUserId
+): Promise<string>;
+```
+
+Starts a round trip to the provider and returns where to send the browser. `returnTo` is a path on the frontend to
+come back to (anything else is dropped); `linkUserId` links the provider to that signed-in account, rather than sign
+in. OIDC_PROVIDER_UNKNOWN (404); OIDC_FAILED when the provider cannot be reached (its discovery document cannot be read).
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `providerId` | `string` |
+| `returnTo` | `string` \| `null` \| `undefined` |
+| `linkUserId` | `string` \| `null` |
+
+###### Returns
+
+`Promise`\<`string`\>
+
+##### unlink()
+
+```ts
+unlink(
+   userId, 
+   organizationId, 
+   identityId
+): Promise<void>;
+```
+
+Removes a linked provider: NOT_FOUND when it is not one of the person's; SIGN_IN_METHOD_REQUIRED when it would leave them no way to sign in.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `userId` | `string` |
+| `organizationId` | `string` \| `null` |
+| `identityId` | `string` |
+
+###### Returns
+
+`Promise`\<`void`\>
+
+***
+
+### EgradxOidcSignInProvider
+
+Any OpenID Connect provider: the authorization code flow with PKCE, `state` and `nonce`, and the ID token checked
+against the provider's published keys (EgradxOidcClient). Configured with `type: 'oidc'` (the default), an `issuer`
+and a client. As Java's EgradxOidcSignInProvider.
+
+A provider with something particular to it extends this class and overrides what differs — see
+EgradxGoogleSignInProvider (its defaults) and EgradxZohoSignInProvider (its data centres).
+
+#### Extended by
+
+- [`EgradxGoogleSignInProvider`](#egradxgooglesigninprovider)
+- [`EgradxZohoSignInProvider`](#egradxzohosigninprovider)
+
+#### Implements
+
+- [`EgradxSignInProvider`](#egradxsigninprovider)
+
+#### Constructors
+
+##### Constructor
+
+```ts
+new EgradxOidcSignInProvider(settings, client): EgradxOidcSignInProvider;
+```
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `settings` | `EgradxOidcSignInProviderSettings` |
+| `client` | [`EgradxOidcClient`](#egradxoidcclient) |
+
+###### Returns
+
+[`EgradxOidcSignInProvider`](#egradxoidcsigninprovider)
+
+#### Properties
+
+| Property | Modifier | Type | Description |
+| ------ | ------ | ------ | ------ |
+| <a id="property-factory-1"></a> `Factory` | `readonly` | [`SignInProviderFactoryClass`](#signinproviderfactoryclass) | `type: 'oidc'`: any OpenID Connect provider, from its issuer. Emails are not trusted unless configured. |
+
+#### Accessors
+
+##### id
+
+###### Get Signature
+
+```ts
+get id(): string;
+```
+
+The id in the URLs (`/egradx/auth/oidc/{id}/start`) and in stored identities: `google`, `github`.
+
+###### Returns
+
+`string`
+
+The id in the URLs (`/egradx/auth/oidc/{id}/start`) and in stored identities: `google`, `github`.
+
+###### Implementation of
+
+[`EgradxSignInProvider`](#egradxsigninprovider).`id`
+
+##### issuer
+
+###### Get Signature
+
+```ts
+get issuer(): string;
+```
+
+The configured issuer.
+
+###### Returns
+
+`string`
+
+##### name
+
+###### Get Signature
+
+```ts
+get name(): string;
+```
+
+Shown on the button: `Google`.
+
+###### Returns
+
+`string`
+
+Shown on the button: `Google`.
+
+###### Implementation of
+
+[`EgradxSignInProvider`](#egradxsigninprovider).`name`
+
+##### trustEmail
+
+###### Get Signature
+
+```ts
+get trustEmail(): boolean;
+```
+
+Whether this provider's verified emails prove ownership of the address, so that a sign-in whose email matches an
+existing account is linked to it automatically. Only for providers that check addresses themselves.
+
+###### Returns
+
+`boolean`
+
+Whether this provider's verified emails prove ownership of the address, so that a sign-in whose email matches an
+existing account is linked to it automatically. Only for providers that check addresses themselves.
+
+###### Implementation of
+
+[`EgradxSignInProvider`](#egradxsigninprovider).`trustEmail`
+
+#### Methods
+
+##### authorizationUrl()
+
+```ts
+authorizationUrl(request): Promise<string>;
+```
+
+Where to send the browser to sign in. Throws EgradxSignInProviderException if the provider cannot be reached.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `request` | [`EgradxSignInAuthorization`](#egradxsigninauthorization) |
+
+###### Returns
+
+`Promise`\<`string`\>
+
+###### Implementation of
+
+[`EgradxSignInProvider`](#egradxsigninprovider).[`authorizationUrl`](#authorizationurl-4)
+
+##### complete()
+
+```ts
+complete(callback): Promise<EgradxProviderIdentity>;
+```
+
+Who the provider says signed in, from its callback: exchange the code, check what comes back. Throws (or rejects
+with) EgradxSignInProviderException if the provider cannot be reached, or its answer does not check out.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `callback` | [`EgradxSignInCallback`](#egradxsignincallback) |
+
+###### Returns
+
+`Promise`\<[`EgradxProviderIdentity`](#egradxprovideridentity)\>
+
+###### Implementation of
+
+[`EgradxSignInProvider`](#egradxsigninprovider).[`complete`](#complete-3)
+
+##### issuerFor()
+
+```ts
+protected issuerFor(_callbackParameters): string;
+```
+
+The issuer to exchange the code with and to expect in the ID token: the configured one. A provider whose accounts
+live under several issuers overrides this (Zoho).
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `_callbackParameters` | `Readonly`\<`Record`\<`string`, `string`\>\> |
+
+###### Returns
+
+`string`
+
+##### settings()
+
+```ts
+protected static settings(
+   id, 
+   configured, 
+   defaultIssuer, 
+   defaultName, 
+   defaultTrustEmail
+): EgradxOidcSignInProviderSettings;
+```
+
+Settings from configuration, with a provider type's defaults for what is left out. Throws without an issuer.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `id` | `string` |
+| `configured` | [`OidcProviderSettings`](#oidcprovidersettings) |
+| `defaultIssuer` | `string` \| `null` |
+| `defaultName` | `string` \| `null` |
+| `defaultTrustEmail` | `boolean` |
+
+###### Returns
+
+`EgradxOidcSignInProviderSettings`
+
+***
+
 ### EgradxOrganizationProvisioningService
 
 Creates an organization, its Admin role (with the organization-admin authorities, never the
@@ -4342,6 +5344,31 @@ new EgradxOrganizationProvisioningService(
 [`EgradxOrganizationProvisioningService`](#egradxorganizationprovisioningservice)
 
 #### Methods
+
+##### provision()
+
+```ts
+provision(request): Promise<{
+  adminUserId: string;
+  organization: EgradxOrganizationDto;
+}>;
+```
+
+provisionOrganization, returning the administrator as well — for sign-up, which signs them in. The administrator's
+password may be null: they sign in by an emailed code or a provider.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `request` | [`EgradxCreateOrganizationRequest`](#egradxcreateorganizationrequest) |
+
+###### Returns
+
+`Promise`\<\{
+  `adminUserId`: `string`;
+  `organization`: [`EgradxOrganizationDto`](#egradxorganizationdto);
+\}\>
 
 ##### provisionOrganization()
 
@@ -4389,7 +5416,7 @@ new EgradxOrganizationSelectionRequiredException(organizations): EgradxOrganizat
 
 ###### Overrides
 
-[`ValidationException`](#validationexception).[`constructor`](#constructor-72)
+[`ValidationException`](#validationexception).[`constructor`](#constructor-82)
 
 #### Properties
 
@@ -4684,7 +5711,7 @@ Changes one's own password, proved by the current one: every other session ends,
 | ------ | ------ |
 | `userId` | `string` |
 | `organizationId` | `string` \| `null` |
-| `currentPassword` | `string` |
+| `currentPassword` | `string` \| `null` |
 | `newPassword` | `string` |
 
 ###### Returns
@@ -5316,6 +6343,31 @@ Where to reach the person on a channel: a verified address, scoped before everyw
 
 `Promise`\<`string` \| `undefined`\>
 
+##### setPhotoUrl()
+
+```ts
+setPhotoUrl(
+   userId, 
+   organizationId, 
+   url
+): Promise<EgradxUserProfileDto>;
+```
+
+Sets just the photo: egradx-file-storage calls this with the stored photo's path (`/egradx/files/{id}/content`), or
+null to clear it. As Java's setPhotoUrl.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `userId` | `string` |
+| `organizationId` | `string` \| `null` |
+| `url` | `string` \| `null` |
+
+###### Returns
+
+`Promise`\<[`EgradxUserProfileDto`](#egradxuserprofiledto)\>
+
 ##### startVerification()
 
 ```ts
@@ -5611,6 +6663,24 @@ deleteRole(organizationId, roleId): Promise<void>;
 
 `Promise`\<`void`\>
 
+##### evictAuthorities()
+
+```ts
+evictAuthorities(roleId): void;
+```
+
+Forgets this instance's cached authorities of a role, so the next check reads them afresh: when another instance changed them.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `roleId` | `string` |
+
+###### Returns
+
+`void`
+
 ##### findRoleName()
 
 ```ts
@@ -5670,6 +6740,27 @@ listRoles(organizationId): Promise<EgradxRoleDto[]>;
 ###### Returns
 
 `Promise`\<[`EgradxRoleDto`](#egradxroledto)[]\>
+
+##### onAuthoritiesChanged()
+
+```ts
+onAuthoritiesChanged(listener): () => void;
+```
+
+Calls `listener` with a role's id once a change to its authorities has committed (at once outside a transaction),
+after this instance's own cache has evicted it: Java's EgradxRoleAuthoritiesChangedEvent, after commit. For telling
+other instances, as `@babulvaibhav/egradx-redis` does. A listener's failure is ignored. Returns the function that
+removes it.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `listener` | (`roleId`) => `void` |
+
+###### Returns
+
+() => `void`
 
 ##### removeUserFromOrganization()
 
@@ -5847,7 +6938,9 @@ seal(secret): Promise<SecretEnvelope>;
 
 ### EgradxSessionService
 
-Ends every session a person has, then starts this one again. As Java's EgradxSessionService.
+A person's sessions: listing them, ending one, ending every one on every device at once. Ending a session revokes its
+refresh tokens and refuses its access tokens on their next request (sid); ending all of them also sets
+sessions_valid_after, so that access tokens already issued are refused. As Java's EgradxSessionService.
 
 #### Constructors
 
@@ -5885,7 +6978,7 @@ cutOff(
 ): Promise<void>;
 ```
 
-Sessions_valid_after now, and every refresh token revoked: every access token issued before is refused.
+Sessions_valid_after now, every session ended (ALL_ENDED) and every refresh token revoked: every access token issued before is refused.
 
 ###### Parameters
 
@@ -5898,6 +6991,51 @@ Sessions_valid_after now, and every refresh token revoked: every access token is
 ###### Returns
 
 `Promise`\<`void`\>
+
+##### endMine()
+
+```ts
+endMine(
+   userId, 
+   organizationId, 
+   sessionId
+): Promise<void>;
+```
+
+Ends one of the person's sessions (ENDED): another device's, or this one. Its refresh tokens stop working at once,
+its access tokens on their next request. NOT_FOUND when it is not one of theirs still going: the same answer for
+both, so an id says nothing about anyone else's sessions.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `userId` | `string` |
+| `organizationId` | `string` \| `null` |
+| `sessionId` | `string` |
+
+###### Returns
+
+`Promise`\<`void`\>
+
+##### listMine()
+
+```ts
+listMine(userId, currentSessionId): Promise<EgradxSessionDto[]>;
+```
+
+The person's sessions still going, the most recently used first, with currentSessionId (the asking request's) marked.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `userId` | `string` |
+| `currentSessionId` | `string` \| `null` \| `undefined` |
+
+###### Returns
+
+`Promise`\<[`EgradxSessionDto`](#egradxsessiondto)[]\>
 
 ##### signOutEverywhere()
 
@@ -5917,6 +7055,188 @@ signOutEverywhere(userId, organizationId): Promise<EgradxAuthResult>;
 ###### Returns
 
 `Promise`\<[`EgradxAuthResult`](#egradxauthresult)\>
+
+***
+
+### EgradxSignInProviderException
+
+A provider could not be reached, or what it answered did not check out. egradx-auth logs the message and sends the
+browser back with OIDC_FAILED; the person never sees the message. As Java's EgradxSignInProviderException.
+
+#### Extends
+
+- `Error`
+
+#### Extended by
+
+- [`OidcException`](#oidcexception)
+
+#### Constructors
+
+##### Constructor
+
+```ts
+new EgradxSignInProviderException(message, options?): EgradxSignInProviderException;
+```
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `message` | `string` |
+| `options?` | `ErrorOptions` |
+
+###### Returns
+
+[`EgradxSignInProviderException`](#egradxsigninproviderexception)
+
+###### Overrides
+
+```ts
+Error.constructor
+```
+
+***
+
+### EgradxSignInProviders
+
+The sign-in providers in use: those configured under `oidc.providers`, each made by the SignInProviderFactory of its
+`type`, and those the application passes in `oidc.extraProviders`. Knows nothing of any particular provider. As Java's
+EgradxSignInProviders.
+
+Every provider needs `oidc.callbackBaseUrl` (for its redirect URI) and `links.baseUrl` (where the browser lands
+afterwards); a configured one also needs its client id and secret. A provider missing any of them is left out, with a
+warning.
+
+#### Constructors
+
+##### Constructor
+
+```ts
+new EgradxSignInProviders(
+   settings, 
+   linksBaseUrl, 
+   warn, 
+   factories?, 
+   registered?
+): EgradxSignInProviders;
+```
+
+`factories` in order of precedence: the application's first, then egradx-auth's own, so that an application's
+factory of a built-in type replaces it.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `settings` | [`OidcSettings`](#oidcsettings) |
+| `linksBaseUrl` | `string` \| `null` |
+| `warn` | (`message`) => `void` |
+| `factories?` | readonly [`SignInProviderFactory`](#signinproviderfactory)[] |
+| `registered?` | readonly [`EgradxSignInProvider`](#egradxsigninprovider)[] |
+
+###### Returns
+
+[`EgradxSignInProviders`](#egradxsigninproviders)
+
+#### Properties
+
+| Property | Modifier | Type | Default value | Description |
+| ------ | ------ | ------ | ------ | ------ |
+| <a id="property-default_type"></a> `DEFAULT_TYPE` | `readonly` | `"oidc"` | `"oidc"` | The type of a configured provider that names none: any OpenID Connect provider. |
+
+#### Methods
+
+##### find()
+
+```ts
+find(id): EgradxSignInProvider | undefined;
+```
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `id` | `string` \| `null` \| `undefined` |
+
+###### Returns
+
+[`EgradxSignInProvider`](#egradxsigninprovider) \| `undefined`
+
+##### list()
+
+```ts
+list(): EgradxSignInProvider[];
+```
+
+###### Returns
+
+[`EgradxSignInProvider`](#egradxsigninprovider)[]
+
+##### redirectUri()
+
+```ts
+redirectUri(providerId): string;
+```
+
+The redirect URI to register with the provider.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `providerId` | `string` |
+
+###### Returns
+
+`string`
+
+***
+
+### EgradxSignupRequiredException
+
+A provider proved who someone is, but they have no account, and signing up is open: a 409 whose details carry the
+email, name and provider to sign up with (POST /egradx/auth/oidc/signup). As Java's EgradxSignupRequiredException.
+
+#### Extends
+
+- [`DuplicateResourceException`](#duplicateresourceexception)
+
+#### Constructors
+
+##### Constructor
+
+```ts
+new EgradxSignupRequiredException(
+   email, 
+   name, 
+   provider
+): EgradxSignupRequiredException;
+```
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `email` | `string` |
+| `name` | `string` \| `null` |
+| `provider` | `string` |
+
+###### Returns
+
+[`EgradxSignupRequiredException`](#egradxsignuprequiredexception)
+
+###### Overrides
+
+[`DuplicateResourceException`](#duplicateresourceexception).[`constructor`](#constructor-4)
+
+#### Properties
+
+| Property | Modifier | Type | Inherited from |
+| ------ | ------ | ------ | ------ |
+| <a id="property-code-9"></a> `code` | `readonly` | `Code` | [`DuplicateResourceException`](#duplicateresourceexception).`code` |
+| <a id="property-details-10"></a> `details` | `readonly` | `unknown` | [`DuplicateResourceException`](#duplicateresourceexception).`details` |
+| <a id="property-status-9"></a> `status` | `readonly` | `number` | [`DuplicateResourceException`](#duplicateresourceexception).`status` |
 
 ***
 
@@ -6455,15 +7775,15 @@ new EgradxTemplateException(message): EgradxTemplateException;
 
 ###### Overrides
 
-[`ValidationException`](#validationexception).[`constructor`](#constructor-72)
+[`ValidationException`](#validationexception).[`constructor`](#constructor-82)
 
 #### Properties
 
 | Property | Modifier | Type | Inherited from |
 | ------ | ------ | ------ | ------ |
-| <a id="property-code-9"></a> `code` | `readonly` | `Code` | [`ValidationException`](#validationexception).`code` |
-| <a id="property-details-10"></a> `details` | `readonly` | `unknown` | [`ValidationException`](#validationexception).`details` |
-| <a id="property-status-9"></a> `status` | `readonly` | `number` | [`ValidationException`](#validationexception).`status` |
+| <a id="property-code-10"></a> `code` | `readonly` | `Code` | [`ValidationException`](#validationexception).`code` |
+| <a id="property-details-11"></a> `details` | `readonly` | `unknown` | [`ValidationException`](#validationexception).`details` |
+| <a id="property-status-10"></a> `status` | `readonly` | `number` | [`ValidationException`](#validationexception).`status` |
 
 ***
 
@@ -6621,7 +7941,8 @@ new EgradxTokenIssuer(
 issue(
    user, 
    organizationId, 
-   roleId
+   roleId, 
+   sessionId
 ): Promise<{
   expiresAt: Date;
   token: string;
@@ -6630,11 +7951,12 @@ issue(
 
 ###### Parameters
 
-| Parameter | Type |
-| ------ | ------ |
-| `user` | `UserRow` |
-| `organizationId` | `string` \| `null` |
-| `roleId` | `string` \| `null` |
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `user` | `UserRow` | - |
+| `organizationId` | `string` \| `null` | - |
+| `roleId` | `string` \| `null` | - |
+| `sessionId` | `string` | the session (egradx_session) the token belongs to, its sid: ending the session refuses the token. |
 
 ###### Returns
 
@@ -6673,17 +7995,17 @@ new EgradxTooManyAttemptsException(retryAfterMs): EgradxTooManyAttemptsException
 
 ###### Overrides
 
-[`ValidationException`](#validationexception).[`constructor`](#constructor-72)
+[`ValidationException`](#validationexception).[`constructor`](#constructor-82)
 
 #### Properties
 
 | Property | Modifier | Type | Description | Inherited from |
 | ------ | ------ | ------ | ------ | ------ |
-| <a id="property-code-10"></a> `code` | `readonly` | `Code` | - | [`ValidationException`](#validationexception).`code` |
-| <a id="property-details-11"></a> `details` | `readonly` | `unknown` | - | [`ValidationException`](#validationexception).`details` |
+| <a id="property-code-11"></a> `code` | `readonly` | `Code` | - | [`ValidationException`](#validationexception).`code` |
+| <a id="property-details-12"></a> `details` | `readonly` | `unknown` | - | [`ValidationException`](#validationexception).`details` |
 | <a id="property-retryafterms"></a> `retryAfterMs` | `readonly` | `number` | - | - |
 | <a id="property-retryafterseconds"></a> `retryAfterSeconds` | `readonly` | `number` | Whole seconds, rounded up: what Retry-After carries. | - |
-| <a id="property-status-10"></a> `status` | `readonly` | `number` | - | [`ValidationException`](#validationexception).`status` |
+| <a id="property-status-11"></a> `status` | `readonly` | `number` | - | [`ValidationException`](#validationexception).`status` |
 
 ***
 
@@ -7243,15 +8565,15 @@ new EgradxUnreachableRecipientsException(
 
 ###### Overrides
 
-[`ValidationException`](#validationexception).[`constructor`](#constructor-72)
+[`ValidationException`](#validationexception).[`constructor`](#constructor-82)
 
 #### Properties
 
 | Property | Modifier | Type | Inherited from |
 | ------ | ------ | ------ | ------ |
-| <a id="property-code-11"></a> `code` | `readonly` | `Code` | [`ValidationException`](#validationexception).`code` |
-| <a id="property-details-12"></a> `details` | `readonly` | `unknown` | [`ValidationException`](#validationexception).`details` |
-| <a id="property-status-11"></a> `status` | `readonly` | `number` | [`ValidationException`](#validationexception).`status` |
+| <a id="property-code-12"></a> `code` | `readonly` | `Code` | [`ValidationException`](#validationexception).`code` |
+| <a id="property-details-13"></a> `details` | `readonly` | `unknown` | [`ValidationException`](#validationexception).`details` |
+| <a id="property-status-12"></a> `status` | `readonly` | `number` | [`ValidationException`](#validationexception).`status` |
 | <a id="property-userids-1"></a> `userIds` | `readonly` | readonly `string`[] | - |
 
 ***
@@ -7841,6 +9163,233 @@ ProviderBackedChannel.validateProviderSettings
 
 ***
 
+### EgradxZohoSignInProvider
+
+Sign in with Zoho (`type: 'zoho'`): OpenID Connect at `https://accounts.zoho.com`, whose verified emails are trusted.
+An account kept in another of Zoho's data centres comes back from the sign-in naming it
+(`accounts-server=https://accounts.zoho.in`); that data centre is then the issuer, if it is one of Zoho's. As Java's
+EgradxZohoSignInProvider.
+
+#### Extends
+
+- [`EgradxOidcSignInProvider`](#egradxoidcsigninprovider)
+
+#### Constructors
+
+##### Constructor
+
+```ts
+new EgradxZohoSignInProvider(settings, client): EgradxZohoSignInProvider;
+```
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `settings` | `EgradxOidcSignInProviderSettings` |
+| `client` | [`EgradxOidcClient`](#egradxoidcclient) |
+
+###### Returns
+
+[`EgradxZohoSignInProvider`](#egradxzohosigninprovider)
+
+###### Inherited from
+
+[`EgradxOidcSignInProvider`](#egradxoidcsigninprovider).[`constructor`](#constructor-45)
+
+#### Properties
+
+| Property | Modifier | Type | Default value | Description | Overrides |
+| ------ | ------ | ------ | ------ | ------ | ------ |
+| <a id="property-factory-2"></a> `Factory` | `readonly` | [`SignInProviderFactoryClass`](#signinproviderfactoryclass) | `undefined` | `type: 'zoho'`. | [`EgradxOidcSignInProvider`](#egradxoidcsigninprovider).`Factory` |
+| <a id="property-issuer-1"></a> `ISSUER` | `readonly` | `"https://accounts.zoho.com"` | `"https://accounts.zoho.com"` | - | - |
+
+#### Accessors
+
+##### id
+
+###### Get Signature
+
+```ts
+get id(): string;
+```
+
+The id in the URLs (`/egradx/auth/oidc/{id}/start`) and in stored identities: `google`, `github`.
+
+###### Returns
+
+`string`
+
+The id in the URLs (`/egradx/auth/oidc/{id}/start`) and in stored identities: `google`, `github`.
+
+###### Inherited from
+
+[`EgradxOidcSignInProvider`](#egradxoidcsigninprovider).[`id`](#id-1)
+
+##### issuer
+
+###### Get Signature
+
+```ts
+get issuer(): string;
+```
+
+The configured issuer.
+
+###### Returns
+
+`string`
+
+###### Inherited from
+
+[`EgradxOidcSignInProvider`](#egradxoidcsigninprovider).[`issuer`](#issuer-1)
+
+##### name
+
+###### Get Signature
+
+```ts
+get name(): string;
+```
+
+Shown on the button: `Google`.
+
+###### Returns
+
+`string`
+
+Shown on the button: `Google`.
+
+###### Inherited from
+
+[`EgradxOidcSignInProvider`](#egradxoidcsigninprovider).[`name`](#name-2)
+
+##### trustEmail
+
+###### Get Signature
+
+```ts
+get trustEmail(): boolean;
+```
+
+Whether this provider's verified emails prove ownership of the address, so that a sign-in whose email matches an
+existing account is linked to it automatically. Only for providers that check addresses themselves.
+
+###### Returns
+
+`boolean`
+
+Whether this provider's verified emails prove ownership of the address, so that a sign-in whose email matches an
+existing account is linked to it automatically. Only for providers that check addresses themselves.
+
+###### Inherited from
+
+[`EgradxOidcSignInProvider`](#egradxoidcsigninprovider).[`trustEmail`](#trustemail-1)
+
+#### Methods
+
+##### authorizationUrl()
+
+```ts
+authorizationUrl(request): Promise<string>;
+```
+
+Where to send the browser to sign in. Throws EgradxSignInProviderException if the provider cannot be reached.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `request` | [`EgradxSignInAuthorization`](#egradxsigninauthorization) |
+
+###### Returns
+
+`Promise`\<`string`\>
+
+###### Inherited from
+
+[`EgradxOidcSignInProvider`](#egradxoidcsigninprovider).[`authorizationUrl`](#authorizationurl-2)
+
+##### complete()
+
+```ts
+complete(callback): Promise<EgradxProviderIdentity>;
+```
+
+Who the provider says signed in, from its callback: exchange the code, check what comes back. Throws (or rejects
+with) EgradxSignInProviderException if the provider cannot be reached, or its answer does not check out.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `callback` | [`EgradxSignInCallback`](#egradxsignincallback) |
+
+###### Returns
+
+`Promise`\<[`EgradxProviderIdentity`](#egradxprovideridentity)\>
+
+###### Inherited from
+
+[`EgradxOidcSignInProvider`](#egradxoidcsigninprovider).[`complete`](#complete-1)
+
+##### issuerFor()
+
+```ts
+protected issuerFor(callbackParameters): string;
+```
+
+The issuer to exchange the code with and to expect in the ID token: the configured one. A provider whose accounts
+live under several issuers overrides this (Zoho).
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `callbackParameters` | `Readonly`\<`Record`\<`string`, `string`\>\> |
+
+###### Returns
+
+`string`
+
+###### Overrides
+
+[`EgradxOidcSignInProvider`](#egradxoidcsigninprovider).[`issuerFor`](#issuerfor-1)
+
+##### settings()
+
+```ts
+protected static settings(
+   id, 
+   configured, 
+   defaultIssuer, 
+   defaultName, 
+   defaultTrustEmail
+): EgradxOidcSignInProviderSettings;
+```
+
+Settings from configuration, with a provider type's defaults for what is left out. Throws without an issuer.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `id` | `string` |
+| `configured` | [`OidcProviderSettings`](#oidcprovidersettings) |
+| `defaultIssuer` | `string` \| `null` |
+| `defaultName` | `string` \| `null` |
+| `defaultTrustEmail` | `boolean` |
+
+###### Returns
+
+`EgradxOidcSignInProviderSettings`
+
+###### Inherited from
+
+[`EgradxOidcSignInProvider`](#egradxoidcsigninprovider).[`settings`](#settings-1)
+
+***
+
 ### NotFoundException
 
 404 NOT_FOUND.
@@ -7875,15 +9424,15 @@ new NotFoundException(
 
 ###### Overrides
 
-[`EgradxError`](#egradxerror).[`constructor`](#constructor-21)
+[`EgradxError`](#egradxerror).[`constructor`](#constructor-22)
 
 #### Properties
 
 | Property | Modifier | Type | Inherited from |
 | ------ | ------ | ------ | ------ |
-| <a id="property-code-12"></a> `code` | `readonly` | `Code` | [`EgradxError`](#egradxerror).`code` |
-| <a id="property-details-13"></a> `details` | `readonly` | `unknown` | [`EgradxError`](#egradxerror).`details` |
-| <a id="property-status-12"></a> `status` | `readonly` | `number` | [`EgradxError`](#egradxerror).`status` |
+| <a id="property-code-13"></a> `code` | `readonly` | `Code` | [`EgradxError`](#egradxerror).`code` |
+| <a id="property-details-14"></a> `details` | `readonly` | `unknown` | [`EgradxError`](#egradxerror).`details` |
+| <a id="property-status-13"></a> `status` | `readonly` | `number` | [`EgradxError`](#egradxerror).`status` |
 
 ***
 
@@ -7921,15 +9470,48 @@ new NotImplementedException(
 
 ###### Overrides
 
-[`EgradxError`](#egradxerror).[`constructor`](#constructor-21)
+[`EgradxError`](#egradxerror).[`constructor`](#constructor-22)
 
 #### Properties
 
 | Property | Modifier | Type | Inherited from |
 | ------ | ------ | ------ | ------ |
-| <a id="property-code-13"></a> `code` | `readonly` | `Code` | [`EgradxError`](#egradxerror).`code` |
-| <a id="property-details-14"></a> `details` | `readonly` | `unknown` | [`EgradxError`](#egradxerror).`details` |
-| <a id="property-status-13"></a> `status` | `readonly` | `number` | [`EgradxError`](#egradxerror).`status` |
+| <a id="property-code-14"></a> `code` | `readonly` | `Code` | [`EgradxError`](#egradxerror).`code` |
+| <a id="property-details-15"></a> `details` | `readonly` | `unknown` | [`EgradxError`](#egradxerror).`details` |
+| <a id="property-status-14"></a> `status` | `readonly` | `number` | [`EgradxError`](#egradxerror).`status` |
+
+***
+
+### OidcException
+
+The provider could not be reached, or its answer did not check out. As Java's EgradxOidcClient.OidcException.
+
+#### Extends
+
+- [`EgradxSignInProviderException`](#egradxsigninproviderexception)
+
+#### Constructors
+
+##### Constructor
+
+```ts
+new OidcException(message, options?): OidcException;
+```
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `message` | `string` |
+| `options?` | `ErrorOptions` |
+
+###### Returns
+
+[`OidcException`](#oidcexception)
+
+###### Inherited from
+
+[`EgradxSignInProviderException`](#egradxsigninproviderexception).[`constructor`](#constructor-57)
 
 ***
 
@@ -7967,15 +9549,15 @@ new ServerAuthenticationException(
 
 ###### Overrides
 
-[`EgradxError`](#egradxerror).[`constructor`](#constructor-21)
+[`EgradxError`](#egradxerror).[`constructor`](#constructor-22)
 
 #### Properties
 
 | Property | Modifier | Type | Inherited from |
 | ------ | ------ | ------ | ------ |
-| <a id="property-code-14"></a> `code` | `readonly` | `Code` | [`EgradxError`](#egradxerror).`code` |
-| <a id="property-details-15"></a> `details` | `readonly` | `unknown` | [`EgradxError`](#egradxerror).`details` |
-| <a id="property-status-14"></a> `status` | `readonly` | `number` | [`EgradxError`](#egradxerror).`status` |
+| <a id="property-code-15"></a> `code` | `readonly` | `Code` | [`EgradxError`](#egradxerror).`code` |
+| <a id="property-details-16"></a> `details` | `readonly` | `unknown` | [`EgradxError`](#egradxerror).`details` |
+| <a id="property-status-15"></a> `status` | `readonly` | `number` | [`EgradxError`](#egradxerror).`status` |
 
 ***
 
@@ -8013,15 +9595,15 @@ new ServerAuthorizationException(
 
 ###### Overrides
 
-[`EgradxError`](#egradxerror).[`constructor`](#constructor-21)
+[`EgradxError`](#egradxerror).[`constructor`](#constructor-22)
 
 #### Properties
 
 | Property | Modifier | Type | Inherited from |
 | ------ | ------ | ------ | ------ |
-| <a id="property-code-15"></a> `code` | `readonly` | `Code` | [`EgradxError`](#egradxerror).`code` |
-| <a id="property-details-16"></a> `details` | `readonly` | `unknown` | [`EgradxError`](#egradxerror).`details` |
-| <a id="property-status-15"></a> `status` | `readonly` | `number` | [`EgradxError`](#egradxerror).`status` |
+| <a id="property-code-16"></a> `code` | `readonly` | `Code` | [`EgradxError`](#egradxerror).`code` |
+| <a id="property-details-17"></a> `details` | `readonly` | `unknown` | [`EgradxError`](#egradxerror).`details` |
+| <a id="property-status-16"></a> `status` | `readonly` | `number` | [`EgradxError`](#egradxerror).`status` |
 
 ***
 
@@ -8054,16 +9636,16 @@ new ServerException(httpResponseCode, message?): ServerException;
 
 ###### Overrides
 
-[`EgradxError`](#egradxerror).[`constructor`](#constructor-21)
+[`EgradxError`](#egradxerror).[`constructor`](#constructor-22)
 
 #### Properties
 
 | Property | Modifier | Type | Inherited from |
 | ------ | ------ | ------ | ------ |
-| <a id="property-code-16"></a> `code` | `readonly` | `Code` | [`EgradxError`](#egradxerror).`code` |
-| <a id="property-details-17"></a> `details` | `readonly` | `unknown` | [`EgradxError`](#egradxerror).`details` |
+| <a id="property-code-17"></a> `code` | `readonly` | `Code` | [`EgradxError`](#egradxerror).`code` |
+| <a id="property-details-18"></a> `details` | `readonly` | `unknown` | [`EgradxError`](#egradxerror).`details` |
 | <a id="property-httpresponsecode"></a> `httpResponseCode` | `readonly` | `number` | - |
-| <a id="property-status-16"></a> `status` | `readonly` | `number` | [`EgradxError`](#egradxerror).`status` |
+| <a id="property-status-17"></a> `status` | `readonly` | `number` | [`EgradxError`](#egradxerror).`status` |
 
 ***
 
@@ -8103,15 +9685,15 @@ new ServerUnavailableException(
 
 ###### Overrides
 
-[`EgradxError`](#egradxerror).[`constructor`](#constructor-21)
+[`EgradxError`](#egradxerror).[`constructor`](#constructor-22)
 
 #### Properties
 
 | Property | Modifier | Type | Inherited from |
 | ------ | ------ | ------ | ------ |
-| <a id="property-code-17"></a> `code` | `readonly` | `Code` | [`EgradxError`](#egradxerror).`code` |
-| <a id="property-details-18"></a> `details` | `readonly` | `unknown` | [`EgradxError`](#egradxerror).`details` |
-| <a id="property-status-17"></a> `status` | `readonly` | `number` | [`EgradxError`](#egradxerror).`status` |
+| <a id="property-code-18"></a> `code` | `readonly` | `Code` | [`EgradxError`](#egradxerror).`code` |
+| <a id="property-details-19"></a> `details` | `readonly` | `unknown` | [`EgradxError`](#egradxerror).`details` |
+| <a id="property-status-18"></a> `status` | `readonly` | `number` | [`EgradxError`](#egradxerror).`status` |
 
 ***
 
@@ -8165,15 +9747,15 @@ new ValidationException(
 
 ###### Overrides
 
-[`EgradxError`](#egradxerror).[`constructor`](#constructor-21)
+[`EgradxError`](#egradxerror).[`constructor`](#constructor-22)
 
 #### Properties
 
 | Property | Modifier | Type | Inherited from |
 | ------ | ------ | ------ | ------ |
-| <a id="property-code-18"></a> `code` | `readonly` | `Code` | [`EgradxError`](#egradxerror).`code` |
-| <a id="property-details-19"></a> `details` | `readonly` | `unknown` | [`EgradxError`](#egradxerror).`details` |
-| <a id="property-status-18"></a> `status` | `readonly` | `number` | [`EgradxError`](#egradxerror).`status` |
+| <a id="property-code-19"></a> `code` | `readonly` | `Code` | [`EgradxError`](#egradxerror).`code` |
+| <a id="property-details-20"></a> `details` | `readonly` | `unknown` | [`EgradxError`](#egradxerror).`details` |
+| <a id="property-status-19"></a> `status` | `readonly` | `number` | [`EgradxError`](#egradxerror).`status` |
 
 ## Interfaces
 
@@ -8639,7 +10221,7 @@ Which records to read. Filters combine (Java: EgradxAuditQuery).
 | <a id="property-category-1"></a> `category` | `string` |
 | <a id="property-changedfields"></a> `changedFields` | `string`[] \| `null` |
 | <a id="property-clientaddress"></a> `clientAddress` | `string` \| `null` |
-| <a id="property-details-20"></a> `details` | `unknown` |
+| <a id="property-details-21"></a> `details` | `unknown` |
 | <a id="property-entity"></a> `entity` | `object` |
 | `entity.id` | `string` \| `null` |
 | `entity.label` | `string` \| `null` |
@@ -8666,7 +10248,9 @@ Which records to read. Filters combine (Java: EgradxAuditQuery).
 | ------ | ------ | ------ | ------ |
 | <a id="property-authservice"></a> `authService` | `readonly` | [`EgradxAuthService`](#egradxauthservice) | - |
 | <a id="property-emailchanges"></a> `emailChanges` | `readonly` | [`EgradxEmailChangeService`](#egradxemailchangeservice) | - |
+| <a id="property-emailcodes"></a> `emailCodes` | `readonly` | [`EgradxEmailCodeService`](#egradxemailcodeservice) | Signing in by an emailed code, and signing up. |
 | <a id="property-invitations"></a> `invitations` | `readonly` | [`EgradxInvitationService`](#egradxinvitationservice) | - |
+| <a id="property-oidc"></a> `oidc` | `readonly` | [`EgradxOidcService`](#egradxoidcservice) | Signing in with OpenID Connect providers, and linking them from the profile. |
 | <a id="property-organizations-1"></a> `organizations` | `readonly` | [`EgradxOrganizationService`](#egradxorganizationservice) | - |
 | <a id="property-passwords"></a> `passwords` | `readonly` | [`EgradxPasswordService`](#egradxpasswordservice) | - |
 | <a id="property-people"></a> `people` | `readonly` | [`EgradxPeopleDirectory`](#egradxpeopledirectory) | What other libraries ask about people: names, memberships, audiences. |
@@ -8677,6 +10261,7 @@ Which records to read. Filters combine (Java: EgradxAuditQuery).
 | <a id="property-resolvecaller"></a> `resolveCaller` | `readonly` | (`token`) => `Promise`\<[`EgradxCaller`](#egradxcaller) \| `null`\> | For @babulvaibhav/egradx-express's authenticate(): resolves each request's caller afresh. |
 | <a id="property-roles"></a> `roles` | `readonly` | [`EgradxRoleService`](#egradxroleservice) | - |
 | <a id="property-sessions"></a> `sessions` | `readonly` | [`EgradxSessionService`](#egradxsessionservice) | - |
+| <a id="property-signup"></a> `signup` | `readonly` | `Readonly`\<[`SignupSettings`](#signupsettings)\> | The sign-up settings in force (with their defaults). |
 | <a id="property-users"></a> `users` | `readonly` | [`EgradxUserService`](#egradxuserservice) | - |
 | <a id="property-verifier"></a> `verifier` | `readonly` | `TokenVerifier` | Verifies access tokens issued here (and by a Java application sharing the keys and issuer). |
 
@@ -8727,19 +10312,25 @@ Adds another library's authorities; before start(), which seeds them.
 ```ts
 purge(): Promise<{
   emailChanges: number;
+  emailCodes: number;
+  oidcFlows: number;
   passwordResets: number;
   refreshTokens: number;
+  sessions: number;
 }>;
 ```
 
-Deletes what can no longer be used: expired refresh tokens, reset links, email-change codes.
+Deletes what can no longer be used: expired sessions, refresh tokens, reset links, email-change codes, emailed codes and provider sign-ins.
 
 ###### Returns
 
 `Promise`\<\{
   `emailChanges`: `number`;
+  `emailCodes`: `number`;
+  `oidcFlows`: `number`;
   `passwordResets`: `number`;
   `refreshTokens`: `number`;
+  `sessions`: `number`;
 \}\>
 
 ##### setAccountMessageSender()
@@ -8798,20 +10389,28 @@ Seeds the catalog, the platform organization and its administrator (unless disab
 | <a id="property-account"></a> `account?` | `Partial`\<[`AccountSettings`](#accountsettings)\> | - |
 | <a id="property-accountmessages"></a> `accountMessages?` | [`EgradxAccountMessageSender`](#egradxaccountmessagesender) | Account messages (reset links, invitations, email-change codes); the notification bridge provides one. |
 | <a id="property-authoritycontributors"></a> `authorityContributors?` | [`EgradxAuthorityContributor`](#egradxauthoritycontributor)[] | Other libraries' authorities (also addable with contribute() before start()). |
-| <a id="property-cleanup"></a> `cleanup?` | `object` | Deleting expired refresh tokens, reset links and email-change codes. |
+| <a id="property-cleanup"></a> `cleanup?` | `object` | Deleting expired sessions, refresh tokens, reset links, email-change codes, emailed codes and provider sign-ins. |
 | `cleanup.enabled?` | `boolean` | - |
 | `cleanup.intervalMs?` | `number` | - |
 | <a id="property-contactverification"></a> `contactVerification?` | [`EgradxContactVerificationSender`](#egradxcontactverificationsender) | Contact-verification codes; the notification bridge provides one. |
 | <a id="property-defaultadminrolename"></a> `defaultAdminRoleName?` | `string` | The role every organization has, seeded with the organization-admin authorities. |
-| <a id="property-issuer"></a> `issuer` | `string` | The `iss` stamped on every token and required when verifying one (Java: egradx.auth.issuer-uri). |
+| <a id="property-emailcode"></a> `emailCode?` | `Partial`\<[`EmailCodeSettings`](#emailcodesettings)\> | Codes emailed for signing in without a password and for confirming a sign-up: `enabled` (default true; also needs an account-message sender that sends sign-in messages), `ttlMs` (10 minutes), `maxAttempts` (5), `resendIntervalMs` (60 s). |
+| <a id="property-issuer-2"></a> `issuer` | `string` | The `iss` stamped on every token and required when verifying one (Java: egradx.auth.issuer-uri). |
 | <a id="property-keys"></a> `keys` | \| [`SigningKeys`](#signingkeys) \| \{ `keystorePath`: `string`; `passphrase`: `string`; \} | The signing keys, or where egradx-tls-provider keeps them (Java: egradx.security.crypto.keystorePath and .passphrase): an application of each language pointed at the same directory signs with the same key. |
-| <a id="property-limiter"></a> `limiter?` | [`EgradxAttemptLimiter`](#egradxattemptlimiter) | - |
+| <a id="property-limiter"></a> `limiter?` | \| [`EgradxAttemptLimiterFactory`](#egradxattemptlimiterfactory) \| [`EgradxAttemptLimiter`](#egradxattemptlimiter) | Counts wrong passwords instead of the in-memory limiter: a limiter, or a factory given `rateLimit`'s settings (and not called when `rateLimit.enabled` is false), such as `@babulvaibhav/egradx-redis`'s `attemptLimiter`. |
 | <a id="property-links"></a> `links?` | `Partial`\<[`LinkSettings`](#linksettings)\> | - |
 | <a id="property-log-1"></a> `log?` | `object` | - |
 | `log.error` | `void` | - |
 | `log.info` | `void` | - |
 | `log.warn` | `void` | - |
 | <a id="property-observations"></a> `observations?` | [`EgradxObservations`](#egradxobservations) | Times sign-in, refresh and the account operations (egradx.auth.*, see docs/observability/guide.md). By default the global OpenTelemetry providers: nothing is recorded until the application registers an OpenTelemetry SDK. |
+| <a id="property-oidc-1"></a> `oidc?` | `object` | Sign-in providers (Google, Zoho, any OpenID Connect provider, or one of the application's own): `callbackBaseUrl` (this server as the provider's redirect reaches it), `frontendCallbackPath` (default `/auth/callback`, after links.baseUrl), `flowTtlMs` (10 minutes), `providers` by id: `{ type?: 'oidc' | 'google' | 'zoho' | <an app's type>, name?, issuer?, clientId, clientSecret, scopes?, trustEmail?, enabled? }`, `providerFactories` (factories of the application's own types; one of a built-in type replaces it) and `extraProviders` (provider objects the application made). As Java's egradx.auth.oidc.* with EgradxSignInProviderFactory and EgradxSignInProvider beans. |
+| `oidc.callbackBaseUrl?` | `string` \| `null` | - |
+| `oidc.extraProviders?` | [`EgradxSignInProvider`](#egradxsigninprovider)[] | - |
+| `oidc.flowTtlMs?` | `number` | - |
+| `oidc.frontendCallbackPath?` | `string` | - |
+| `oidc.providerFactories?` | [`SignInProviderFactory`](#signinproviderfactory)[] | - |
+| `oidc.providers?` | `Record`\<`string`, [`OidcProviderSettings`](#oidcprovidersettings)\> | - |
 | <a id="property-onorganizationcreated"></a> `onOrganizationCreated?` | [`OrganizationCreatedListener`](#organizationcreatedlistener)[] | Run inside the transaction creating an organization: add the application's own default roles. |
 | <a id="property-passwordencoder"></a> `passwordEncoder?` | [`PasswordEncoder`](#passwordencoder) | - |
 | <a id="property-platform-2"></a> `platform?` | `Partial`\<[`PlatformSettings`](#platformsettings)\> | - |
@@ -8823,8 +10422,10 @@ Seeds the catalog, the platform organization and its administrator (unless disab
 | `rateLimit.maxFailuresPerAddress?` | `number` | - |
 | `rateLimit.maxTracked?` | `number` | - |
 | `rateLimit.windowMs?` | `number` | - |
-| <a id="property-refreshtokenttldays"></a> `refreshTokenTtlDays?` | `number` | - |
+| <a id="property-refreshtokenreusegraceseconds"></a> `refreshTokenReuseGraceSeconds?` | `number` | How long a refresh token replaced by a refresh still renews its session, in seconds, so that two callers refreshing with it at once both carry on; presented after that, it ends the session as a stolen copy. Default 30. |
+| <a id="property-refreshtokenttldays"></a> `refreshTokenTtlDays?` | `number` | How long a session lasts, in days: its refresh tokens stop working this long after sign-in, however often they rotate. |
 | <a id="property-roleauthoritiescachettlseconds"></a> `roleAuthoritiesCacheTtlSeconds?` | `number` | How long a role's authorities are cached before being read again, even without an edit evicting them. |
+| <a id="property-signup-1"></a> `signup?` | `Partial`\<[`SignupSettings`](#signupsettings)\> | Who may make an account of their own (docs/auth/sign-in-methods.md): `mode` `invitation` (the default) or `organization` (anyone may sign up, with a new organization they administer), `allowedEmailDomains` (empty allows any), and `legacyRegister` to keep the deprecated POST /egradx/auth/register (default false: SIGNUP_DISABLED). |
 
 ***
 
@@ -8917,11 +10518,12 @@ Sign-in and identity, the audit trail and notifications, connected to each other
 
 #### Properties
 
-| Property | Modifier | Type |
-| ------ | ------ | ------ |
-| <a id="property-auditor"></a> `auditor` | `readonly` | [`Auditor`](#auditor) |
-| <a id="property-auth"></a> `auth` | `readonly` | [`Auth`](#auth) |
-| <a id="property-notifications"></a> `notifications` | `readonly` | [`Notifications`](#notifications) |
+| Property | Modifier | Type | Description |
+| ------ | ------ | ------ | ------ |
+| <a id="property-auditor"></a> `auditor` | `readonly` | [`Auditor`](#auditor) | - |
+| <a id="property-auth"></a> `auth` | `readonly` | [`Auth`](#auth) | - |
+| <a id="property-files"></a> `files` | `readonly` | [`EgradxFileStorage`](#egradxfilestorage) \| `undefined` | File storage, when given. |
+| <a id="property-notifications"></a> `notifications` | `readonly` | [`Notifications`](#notifications) | - |
 
 #### Methods
 
@@ -9068,6 +10670,88 @@ sendPasswordReset(message): Promise<void>;
 
 `Promise`\<`void`\>
 
+##### sendSignInCode()?
+
+```ts
+optional sendSignInCode(message): Promise<void>;
+```
+
+A code for signing in without a password, to the account's email. Without it, signing in by code is unavailable.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `message` | \{ `code`: `string`; `email`: `string`; `expiresAt`: `Date`; `recipientName`: `string`; `userId`: `string`; \} |
+| `message.code` | `string` |
+| `message.email` | `string` |
+| `message.expiresAt` | `Date` |
+| `message.recipientName` | `string` |
+| `message.userId` | `string` |
+
+###### Returns
+
+`Promise`\<`void`\>
+
+##### sendSignInMethodAdded()?
+
+```ts
+optional sendSignInMethodAdded(message): Promise<void>;
+```
+
+That a provider (providerName: "Google") now signs in to the account, so someone who did not do it knows. Without it, none is sent.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `message` | \{ `addedAt`: `Date`; `email`: `string`; `providerName`: `string`; `recipientName`: `string`; `userId`: `string`; \} |
+| `message.addedAt` | `Date` |
+| `message.email` | `string` |
+| `message.providerName` | `string` |
+| `message.recipientName` | `string` |
+| `message.userId` | `string` |
+
+###### Returns
+
+`Promise`\<`void`\>
+
+##### sendSignupCode()?
+
+```ts
+optional sendSignupCode(message): Promise<void>;
+```
+
+A code confirming a sign-up, to the address signing up; there is no account yet. Without it, signing up by email is unavailable.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `message` | \{ `code`: `string`; `email`: `string`; `expiresAt`: `Date`; `organizationName`: `string`; `recipientName`: `string` \| `null`; \} |
+| `message.code` | `string` |
+| `message.email` | `string` |
+| `message.expiresAt` | `Date` |
+| `message.organizationName` | `string` |
+| `message.recipientName` | `string` \| `null` |
+
+###### Returns
+
+`Promise`\<`void`\>
+
+##### sendsSignInMessages()?
+
+```ts
+optional sendsSignInMessages(): boolean;
+```
+
+Whether this sender sends the codes and notice above. As Java's default methods: a sender that leaves this out (or
+answers false) makes emailed codes unavailable (EMAIL_CODE_UNAVAILABLE) and sends no sign-in-method notice.
+
+###### Returns
+
+`boolean`
+
 ***
 
 ### EgradxApplicationProperties
@@ -9118,12 +10802,15 @@ Limits wrong passwords: per account from one address, and per address across all
 failures count; a success clears the count for that account from that address. There is deliberately
 no limit on an account alone, which would let anyone lock its owner out. As Java's EgradxAttemptLimiter.
 
+Each method may return a Promise, for a limiter that counts somewhere shared across instances
+(`@babulvaibhav/egradx-redis`); the callers await it.
+
 #### Methods
 
 ##### failed()
 
 ```ts
-failed(key, clientAddress): void;
+failed(key, clientAddress): void | Promise<void>;
 ```
 
 ###### Parameters
@@ -9135,12 +10822,12 @@ failed(key, clientAddress): void;
 
 ###### Returns
 
-`void`
+`void` \| `Promise`\<`void`\>
 
 ##### retryAfter()
 
 ```ts
-retryAfter(key, clientAddress): number | undefined;
+retryAfter(key, clientAddress): number | Promise<number | undefined> | undefined;
 ```
 
 How long until another attempt is allowed, in ms; undefined if it is allowed now.
@@ -9154,12 +10841,12 @@ How long until another attempt is allowed, in ms; undefined if it is allowed now
 
 ###### Returns
 
-`number` \| `undefined`
+`number` \| `Promise`\<`number` \| `undefined`\> \| `undefined`
 
 ##### succeeded()
 
 ```ts
-succeeded(key, clientAddress): void;
+succeeded(key, clientAddress): void | Promise<void>;
 ```
 
 ###### Parameters
@@ -9171,7 +10858,7 @@ succeeded(key, clientAddress): void;
 
 ###### Returns
 
-`void`
+`void` \| `Promise`\<`void`\>
 
 ***
 
@@ -9295,7 +10982,7 @@ A bulk send's progress. As Java's EgradxBulkSendView.
 | <a id="property-optedout"></a> `optedOut` | `number` | - |
 | <a id="property-organizationid-9"></a> `organizationId` | `string` \| `null` | - |
 | <a id="property-recipientsexpanded"></a> `recipientsExpanded` | `number` | - |
-| <a id="property-status-19"></a> `status` | [`EgradxBulkSendStatus`](#egradxbulksendstatus) | - |
+| <a id="property-status-20"></a> `status` | [`EgradxBulkSendStatus`](#egradxbulksendstatus) | - |
 | <a id="property-unreachable"></a> `unreachable` | `number` | - |
 | <a id="property-updatedat"></a> `updatedAt` | `string` | - |
 
@@ -9320,14 +11007,14 @@ EgradxTenantContext together.
 | <a id="property-claims"></a> `claims` | `readonly` | `Readonly`\<`Record`\<`string`, `unknown`\>\> | The free-form `claims` claim, or {}. | - | [`EgradxUserTokenContext`](/docs/reference/node/egradx-express#egradxusertokencontext).[`claims`](/docs/reference/node/egradx-express) |
 | <a id="property-expiresat-1"></a> `expiresAt` | `readonly` | `Date` | - | - | [`EgradxUserTokenContext`](/docs/reference/node/egradx-express#egradxusertokencontext).[`expiresAt`](/docs/reference/node/egradx-express) |
 | <a id="property-issuedat"></a> `issuedAt` | `readonly` | `Date` | - | - | [`EgradxUserTokenContext`](/docs/reference/node/egradx-express#egradxusertokencontext).[`issuedAt`](/docs/reference/node/egradx-express) |
-| <a id="property-issuer-1"></a> `issuer` | `readonly` | `string` | - | - | [`EgradxUserTokenContext`](/docs/reference/node/egradx-express#egradxusertokencontext).[`issuer`](/docs/reference/node/egradx-express) |
+| <a id="property-issuer-3"></a> `issuer` | `readonly` | `string` | - | - | [`EgradxUserTokenContext`](/docs/reference/node/egradx-express#egradxusertokencontext).[`issuer`](/docs/reference/node/egradx-express) |
 | <a id="property-organizationid-10"></a> `organizationId` | `readonly` | `string` \| `undefined` | The organization the session acts in, null if none. | [`EgradxUserTokenContext`](/docs/reference/node/egradx-express#egradxusertokencontext).[`organizationId`](/docs/reference/node/egradx-express) | - |
 | <a id="property-platformroles"></a> `platformRoles` | `readonly` | `ReadonlySet`\<`string`\> | From `platformAccess.roles`, which egradx-auth doesn't issue (see docs/architecture/restructure-log.md R2). | - | [`EgradxUserTokenContext`](/docs/reference/node/egradx-express#egradxusertokencontext).[`platformRoles`](/docs/reference/node/egradx-express) |
 | <a id="property-platformsession"></a> `platformSession` | `readonly` | `boolean` | Whether this session is scoped to the platform organization: platform powers are per session. | - | - |
 | <a id="property-primaryaccountid"></a> `primaryAccountId` | `readonly` | `string` \| `undefined` | - | - | [`EgradxUserTokenContext`](/docs/reference/node/egradx-express#egradxusertokencontext).[`primaryAccountId`](/docs/reference/node/egradx-express) |
 | <a id="property-roleid-1"></a> `roleId` | `readonly` | `string` \| `undefined` | - | - | [`EgradxUserTokenContext`](/docs/reference/node/egradx-express#egradxusertokencontext).[`roleId`](/docs/reference/node/egradx-express) |
 | <a id="property-scope"></a> `scope` | `readonly` | `ReadonlySet`\<`string`\> | From the comma-delimited `scope` claim. | - | [`EgradxUserTokenContext`](/docs/reference/node/egradx-express#egradxusertokencontext).[`scope`](/docs/reference/node/egradx-express) |
-| <a id="property-sessionid"></a> `sessionId` | `readonly` | `string` | - | - | [`EgradxUserTokenContext`](/docs/reference/node/egradx-express#egradxusertokencontext).[`sessionId`](/docs/reference/node/egradx-express) |
+| <a id="property-sessionid"></a> `sessionId` | `readonly` | `string` | The session the token belongs to (its sid), checked live on this request. As Java's EgradxAuthenticatedPrincipal.sessionId. | [`EgradxUserTokenContext`](/docs/reference/node/egradx-express#egradxusertokencontext).[`sessionId`](/docs/reference/node/egradx-express) | - |
 | <a id="property-token"></a> `token` | `readonly` | `string` | - | - | [`EgradxUserTokenContext`](/docs/reference/node/egradx-express#egradxusertokencontext).[`token`](/docs/reference/node/egradx-express) |
 | <a id="property-userid-2"></a> `userId` | `readonly` | `string` | The `sub` claim. | - | [`EgradxUserTokenContext`](/docs/reference/node/egradx-express#egradxusertokencontext).[`userId`](/docs/reference/node/egradx-express) |
 | <a id="property-username"></a> `username` | `readonly` | `string` | - | - | - |
@@ -9449,6 +11136,64 @@ send(challenge): Promise<void>;
 
 ***
 
+### EgradxCoordination
+
+What makes several instances of an application act as one: `createRedisCoordination(…)` from
+`@babulvaibhav/egradx-redis`, as adding Java's egradx-redis does. Described here, so this package does not depend on it.
+
+#### Properties
+
+| Property | Modifier | Type | Description |
+| ------ | ------ | ------ | ------ |
+| <a id="property-attemptlimiter"></a> `attemptLimiter` | `readonly` | [`EgradxAttemptLimiterFactory`](#egradxattemptlimiterfactory) | egradx-auth's attempt limiter, made from its `rateLimit` settings. |
+| <a id="property-broadcaster"></a> `broadcaster` | `readonly` | (`published`) => `void` | egradx-notification's broadcaster: the live push to every instance. |
+
+#### Methods
+
+##### close()
+
+```ts
+close(): Promise<void>;
+```
+
+###### Returns
+
+`Promise`\<`void`\>
+
+##### connect()
+
+```ts
+connect(libraries): void;
+```
+
+Told about the libraries once created: role changes and pushes received go to them.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `libraries` | \{ `auth`: [`Auth`](#auth); `notifications`: [`Notifications`](#notifications); \} |
+| `libraries.auth` | [`Auth`](#auth) |
+| `libraries.notifications` | [`Notifications`](#notifications) |
+
+###### Returns
+
+`void`
+
+##### start()
+
+```ts
+start(): Promise<void>;
+```
+
+Starts in the background: never fails, nor waits, for the shared server.
+
+###### Returns
+
+`Promise`\<`void`\>
+
+***
+
 ### EgradxCreateContactRequest
 
 #### Properties
@@ -9468,14 +11213,14 @@ send(challenge): Promise<void>;
 
 #### Properties
 
-| Property | Type |
-| ------ | ------ |
-| <a id="property-admin"></a> `admin` | `object` |
-| `admin.email` | `string` |
-| `admin.name` | `string` |
-| `admin.password` | `string` |
-| `admin.username?` | `string` \| `null` |
-| <a id="property-name-5"></a> `name` | `string` |
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-admin"></a> `admin` | `object` | The administrator's password may be null through provision(): sign-up, where they sign in by an emailed code or a provider. |
+| `admin.email` | `string` | - |
+| `admin.name` | `string` | - |
+| `admin.password?` | `string` \| `null` | - |
+| `admin.username?` | `string` \| `null` | - |
+| <a id="property-name-5"></a> `name` | `string` | - |
 
 ***
 
@@ -9487,7 +11232,7 @@ send(challenge): Promise<void>;
 | ------ | ------ | ------ |
 | <a id="property-email"></a> `email` | `string` | - |
 | <a id="property-name-6"></a> `name` | `string` | - |
-| <a id="property-password"></a> `password` | `string` | - |
+| <a id="property-password"></a> `password?` | `string` \| `null` | Optional: without one, the person signs in by an emailed code or a provider, and may set one later. |
 | <a id="property-roleid-2"></a> `roleId` | `string` | - |
 | <a id="property-username-1"></a> `username?` | `string` \| `null` | Defaults to the email. |
 
@@ -9550,7 +11295,7 @@ One row of the delivery log. As Java's EgradxDeliveryView.
 | <a id="property-providermessageid"></a> `providerMessageId` | `string` \| `null` | - |
 | <a id="property-requestid-1"></a> `requestId` | `string` \| `null` | That request's X-Request-ID. |
 | <a id="property-sentat"></a> `sentAt` | `string` \| `null` | - |
-| <a id="property-status-20"></a> `status` | [`EgradxDeliveryStatus`](#egradxdeliverystatus) | - |
+| <a id="property-status-21"></a> `status` | [`EgradxDeliveryStatus`](#egradxdeliverystatus) | - |
 | <a id="property-traceid-1"></a> `traceId` | `string` \| `null` | The trace of the request that sent it, when the application traces. |
 | <a id="property-updatedat-3"></a> `updatedAt` | `string` | - |
 
@@ -9605,6 +11350,69 @@ The body of every non-2xx response (contracts/schemas/error.json).
 | `error.timestamp` | `string` | UTC, RFC 3339. |
 | `error.traceId` | `string` \| `null` | The request's trace (W3C trace id), when the server traces requests. |
 | <a id="property-success-1"></a> `success` | `false` | - |
+
+***
+
+### EgradxFileStorage
+
+File storage: `createFileStorage({ … })` from `@babulvaibhav/egradx-file-storage`, as adding Java's egradx-file-storage
+does. Described here, so this package does not depend on it.
+
+#### Methods
+
+##### close()
+
+```ts
+close(): Promise<void>;
+```
+
+###### Returns
+
+`Promise`\<`void`\>
+
+##### connect()
+
+```ts
+connect(libraries): void;
+```
+
+Told about egradx-auth once created, before it starts: contributes the file permissions and sets profile photos through it.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `libraries` | \{ `auth`: [`Auth`](#auth); `log`: [`EgradxLog`](#egradxlog); `observations`: [`EgradxObservations`](#egradxobservations); `prisma`: [`PrismaLike`](#prismalike); \} |
+| `libraries.auth` | [`Auth`](#auth) |
+| `libraries.log` | [`EgradxLog`](#egradxlog) |
+| `libraries.observations` | [`EgradxObservations`](#egradxobservations) |
+| `libraries.prisma` | [`PrismaLike`](#prismalike) |
+
+###### Returns
+
+`void`
+
+##### routes()
+
+```ts
+routes(): unknown;
+```
+
+The endpoints, an Express handler: mounted by egradxRoutes.
+
+###### Returns
+
+`unknown`
+
+##### start()
+
+```ts
+start(): Promise<void>;
+```
+
+###### Returns
+
+`Promise`\<`void`\>
 
 ***
 
@@ -9687,7 +11495,7 @@ One notification as its viewer sees it, in a page or pushed live.
 | <a id="property-resendavailableat-1"></a> `resendAvailableAt` | `string` |
 | <a id="property-roleid-3"></a> `roleId` | `string` |
 | <a id="property-rolename-1"></a> `roleName` | `string` \| `null` |
-| <a id="property-status-21"></a> `status` | `string` |
+| <a id="property-status-22"></a> `status` | `string` |
 
 ***
 
@@ -9971,7 +11779,7 @@ An organization the person belongs to, for a picker.
 | <a id="property-platformorganization-1"></a> `platformOrganization` | `boolean` |
 | <a id="property-roleid-4"></a> `roleId` | `string` |
 | <a id="property-rolename-3"></a> `roleName` | `string` \| `null` |
-| <a id="property-status-22"></a> `status` | `string` |
+| <a id="property-status-23"></a> `status` | `string` |
 
 ***
 
@@ -10170,6 +11978,24 @@ A low-cardinality tag: on the timer and the span. Checked by EgradxTagRules.
 
 ***
 
+### EgradxOidcSignInProviderSettings
+
+The settings of one OpenID Connect provider. As Java's EgradxOidcSignInProvider.Settings.
+
+#### Properties
+
+| Property | Modifier | Type |
+| ------ | ------ | ------ |
+| <a id="property-clientid"></a> `clientId` | `readonly` | `string` |
+| <a id="property-clientsecret"></a> `clientSecret` | `readonly` | `string` |
+| <a id="property-id-9"></a> `id` | `readonly` | `string` |
+| <a id="property-issuer-4"></a> `issuer` | `readonly` | `string` |
+| <a id="property-name-8"></a> `name` | `readonly` | `string` |
+| <a id="property-scopes"></a> `scopes` | `readonly` | readonly `string`[] |
+| <a id="property-trustemail"></a> `trustEmail` | `readonly` | `boolean` |
+
+***
+
 ### EgradxOptions
 
 #### Properties
@@ -10178,11 +12004,13 @@ A low-cardinality tag: on the timer and the span. Checked by EgradxTagRules.
 | ------ | ------ | ------ |
 | <a id="property-audit"></a> `audit?` | `Omit`\<[`AuditorOptions`](#auditoroptions), `Wired` \| `"actors"` \| `"names"`\> | egradx-audit, as Java's `egradx.audit.*`. Who acted, and the names on records, come from egradx-auth. |
 | <a id="property-auth-1"></a> `auth` | `Omit`\<[`AuthOptions`](#authoptions), `Wired`\> | egradx-auth, as Java's `egradx.auth.*`: `issuer` (egradx.auth.issuer-uri) and `keys` (a key pair, or `{ keystorePath, passphrase }` as egradx.security.crypto.*) are required; everything else has Java's default. |
+| <a id="property-files-1"></a> `files?` | [`EgradxFileStorage`](#egradxfilestorage) | File storage: `createFileStorage({ local: { root } })` from `@babulvaibhav/egradx-file-storage`. Its permissions are contributed to egradx-auth, it is started and closed with the rest, and egradxRoutes mounts its endpoints. |
 | <a id="property-log-2"></a> `log?` | [`EgradxLog`](#egradxlog) | Default: the console. |
 | <a id="property-metrics-1"></a> `metrics?` | [`EgradxMetrics`](#egradxmetrics) | - |
 | <a id="property-notifications-1"></a> `notifications?` | `Omit`\<[`NotificationsOptions`](#notificationsoptions), \| `Wired` \| `"actors"` \| `"viewers"` \| `"recipientResolver"` \| `"recipientDirectory"` \| `"recipientPreferences"`\> | egradx-notification, as Java's `egradx.notification.*`. Who is signed in, recipients' addresses and preferences, and the account messages (reset links, invitations, codes) come from egradx-auth. |
 | <a id="property-observations-1"></a> `observations?` | [`EgradxObservations`](#egradxobservations) | Timers and spans for every library (docs/observability/guide.md). By default the global OpenTelemetry providers: nothing is recorded until the application registers an OpenTelemetry SDK, as Java records nothing without Actuator. |
 | <a id="property-prisma-2"></a> `prisma` | [`PrismaLike`](#prismalike) | The application's PrismaClient, which every library shares and whose transactions they join. |
+| <a id="property-redis"></a> `redis?` | [`EgradxCoordination`](#egradxcoordination) | Several instances acting as one, through Redis: `createRedisCoordination({ url })` from `@babulvaibhav/egradx-redis`. Sign-in attempts are counted together (unless `auth.limiter` is given), role changes reach every instance's cache, and in-app notifications are pushed live on every instance (unless `notifications.broadcaster` is given). It is started and closed with the rest. |
 
 ***
 
@@ -10207,9 +12035,9 @@ Told when an organization is created, inside its transaction: add the applicatio
 | Property | Type |
 | ------ | ------ |
 | <a id="property-createdat-6"></a> `createdAt` | `string` |
-| <a id="property-id-9"></a> `id` | `string` |
-| <a id="property-name-8"></a> `name` | `string` |
-| <a id="property-status-23"></a> `status` | [`EgradxOrganizationStatus`](#egradxorganizationstatus) |
+| <a id="property-id-10"></a> `id` | `string` |
+| <a id="property-name-9"></a> `name` | `string` |
+| <a id="property-status-24"></a> `status` | [`EgradxOrganizationStatus`](#egradxorganizationstatus) |
 | <a id="property-updatedat-4"></a> `updatedAt` | `string` |
 
 ***
@@ -10223,8 +12051,8 @@ Told when an organization is created, inside its transaction: add the applicatio
 | <a id="property-active"></a> `active` | `boolean` | - |
 | <a id="property-createdat-7"></a> `createdAt` | `string` | - |
 | <a id="property-email-3"></a> `email` | `string` | - |
-| <a id="property-id-10"></a> `id` | `string` | - |
-| <a id="property-name-9"></a> `name` | `string` | The display name, or the username when there is none. |
+| <a id="property-id-11"></a> `id` | `string` | - |
+| <a id="property-name-10"></a> `name` | `string` | The display name, or the username when there is none. |
 | <a id="property-organizationid-24"></a> `organizationId` | `string` | - |
 | <a id="property-roleid-5"></a> `roleId` | `string` | - |
 | <a id="property-rolename-4"></a> `roleName` | `string` \| `null` | - |
@@ -10267,6 +12095,22 @@ want the messenger, which builds these from user ids and templates.
 | <a id="property-line2"></a> `line2` | `string` \| `null` |
 | <a id="property-postalcode"></a> `postalCode` | `string` \| `null` |
 | <a id="property-region"></a> `region` | `string` \| `null` |
+
+***
+
+### EgradxProviderIdentity
+
+Who a provider says signed in. As Java's EgradxProviderIdentity.
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-email-4"></a> `email` | `string` \| `null` | Their email, if the provider gives one. |
+| <a id="property-emailverified"></a> `emailVerified` | `boolean` \| `null` | Whether the provider says it checked the email; null if it does not say, in which case `trustEmail` decides. |
+| <a id="property-issuer-5"></a> `issuer` | `string` | Who vouches for the subject: the OpenID Connect issuer, or a fixed address for another kind of provider (`https://github.com`); with `subject`, the stable identity linked to an account. |
+| <a id="property-name-11"></a> `name` | `string` \| `null` | Their name, if given. |
+| <a id="property-subject-1"></a> `subject` | `string` | The provider's own id for the person, never reused. |
 
 ***
 
@@ -10429,9 +12273,9 @@ The user is typed by whoever sets it (@babulvaibhav/egradx-security's token cont
 | Property | Type |
 | ------ | ------ |
 | <a id="property-description-4"></a> `description` | `string` \| `null` |
-| <a id="property-id-11"></a> `id` | `string` |
+| <a id="property-id-12"></a> `id` | `string` |
 | <a id="property-issystem"></a> `isSystem` | `boolean` |
-| <a id="property-name-10"></a> `name` | `string` |
+| <a id="property-name-12"></a> `name` | `string` |
 | <a id="property-organizationid-26"></a> `organizationId` | `string` |
 | <a id="property-permissions"></a> `permissions` | [`EgradxAuthorityDto`](#egradxauthoritydto)[] |
 
@@ -10453,6 +12297,164 @@ What a send queued. As Java's EgradxSendReceipt.
 
 ***
 
+### EgradxSessionDto
+
+One of a person's sessions, for a "where you're signed in" screen. As Java's EgradxSessionDto.
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-createdat-8"></a> `createdAt` | `string` | - |
+| <a id="property-current-1"></a> `current` | `boolean` | Whether it is the session of the request asking. |
+| <a id="property-expiresat-5"></a> `expiresAt` | `string` | When it ends of itself; refreshing never moves this. |
+| <a id="property-id-13"></a> `id` | `string` | - |
+| <a id="property-ipaddress"></a> `ipAddress` | `string` \| `null` | The address it signed in from. |
+| <a id="property-lastusedat"></a> `lastUsedAt` | `string` | Sign-in or its last refresh. |
+| <a id="property-organizationid-27"></a> `organizationId` | `string` \| `null` | The organization it acts in; null for a person in none. |
+| <a id="property-organizationname-5"></a> `organizationName` | `string` \| `null` | That organization's name now. |
+| <a id="property-useragent-2"></a> `userAgent` | `string` \| `null` | The browser or app it was signed in from, as it said; null if it said nothing. |
+
+***
+
+### EgradxSignInAuthorization
+
+What egradx-auth has prepared for the round trip. A provider puts `state` in the URL so the callback finds it again;
+one that supports them also uses `nonce` (OpenID Connect) and `codeChallenge` (PKCE, S256). As Java's
+EgradxSignInProvider.Authorization.
+
+#### Properties
+
+| Property | Modifier | Type | Description |
+| ------ | ------ | ------ | ------ |
+| <a id="property-codechallenge"></a> `codeChallenge` | `readonly` | `string` | - |
+| <a id="property-nonce"></a> `nonce` | `readonly` | `string` | - |
+| <a id="property-redirecturi"></a> `redirectUri` | `readonly` | `string` | Where the provider must send the browser back: `{callbackBaseUrl}/egradx/auth/oidc/{id}/callback`. |
+| <a id="property-state"></a> `state` | `readonly` | `string` | - |
+
+***
+
+### EgradxSignInCallback
+
+The provider's callback. As Java's EgradxSignInProvider.Callback.
+
+#### Properties
+
+| Property | Modifier | Type | Description |
+| ------ | ------ | ------ | ------ |
+| <a id="property-code-20"></a> `code` | `readonly` | `string` | The authorization code. |
+| <a id="property-codeverifier"></a> `codeVerifier` | `readonly` | `string` | The PKCE verifier matching EgradxSignInAuthorization.codeChallenge. |
+| <a id="property-nonce-1"></a> `nonce` | `readonly` | `string` | The nonce sent in EgradxSignInAuthorization.nonce. |
+| <a id="property-parameters"></a> `parameters` | `readonly` | `Readonly`\<`Record`\<`string`, `string`\>\> | Every query parameter of the callback, for a provider that sends more (Zoho's `accounts-server`). |
+| <a id="property-redirecturi-1"></a> `redirectUri` | `readonly` | `string` | - |
+
+***
+
+### EgradxSignInMethodsDto
+
+How the person can sign in: whether they have a password, and the providers linked. As Java's EgradxSignInMethodsDto.
+
+#### Properties
+
+| Property | Type |
+| ------ | ------ |
+| <a id="property-identities"></a> `identities` | `object`[] |
+| <a id="property-password-1"></a> `password` | `boolean` |
+
+***
+
+### EgradxSignInOptionsDto
+
+What a sign-in page can offer here. As Java's EgradxSignInOptionsDto.
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-emailcode-1"></a> `emailCode` | `boolean` | - |
+| <a id="property-password-2"></a> `password` | `boolean` | - |
+| <a id="property-providers"></a> `providers` | `object`[] | The OpenID Connect providers, in configured order. |
+| <a id="property-signup-2"></a> `signup` | `string` | `invitation` or `organization`: whether anyone may sign up. |
+
+***
+
+### EgradxSignInProvider
+
+One way of signing in elsewhere — Google, Zoho, any OpenID Connect provider, or a provider of an application's own
+(GitHub, a company's identity server). egradx-auth drives the round trip — state, PKCE, the callback, linking the
+account, the session — and asks the provider only for the two steps that differ between them: where to send the
+browser, and who came back. As Java's EgradxSignInProvider.
+
+Adding a provider is writing a class: implement this interface (or extend EgradxOidcSignInProvider for one that
+speaks OpenID Connect) and either pass it in `oidc.extraProviders`, or pass a SignInProviderFactory in
+`oidc.providerFactories` so that it is configured under `oidc.providers.<id>.type`. No existing class changes.
+
+#### Properties
+
+| Property | Modifier | Type | Description |
+| ------ | ------ | ------ | ------ |
+| <a id="property-id-14"></a> `id` | `readonly` | `string` | The id in the URLs (`/egradx/auth/oidc/{id}/start`) and in stored identities: `google`, `github`. |
+| <a id="property-name-13"></a> `name` | `readonly` | `string` | Shown on the button: `Google`. |
+| <a id="property-trustemail-1"></a> `trustEmail` | `readonly` | `boolean` | Whether this provider's verified emails prove ownership of the address, so that a sign-in whose email matches an existing account is linked to it automatically. Only for providers that check addresses themselves. |
+
+#### Methods
+
+##### authorizationUrl()
+
+```ts
+authorizationUrl(request): string | Promise<string>;
+```
+
+Where to send the browser to sign in. Throws EgradxSignInProviderException if the provider cannot be reached.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `request` | [`EgradxSignInAuthorization`](#egradxsigninauthorization) |
+
+###### Returns
+
+`string` \| `Promise`\<`string`\>
+
+##### complete()
+
+```ts
+complete(callback): 
+  | EgradxProviderIdentity
+| Promise<EgradxProviderIdentity>;
+```
+
+Who the provider says signed in, from its callback: exchange the code, check what comes back. Throws (or rejects
+with) EgradxSignInProviderException if the provider cannot be reached, or its answer does not check out.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `callback` | [`EgradxSignInCallback`](#egradxsignincallback) |
+
+###### Returns
+
+  \| [`EgradxProviderIdentity`](#egradxprovideridentity)
+  \| `Promise`\<[`EgradxProviderIdentity`](#egradxprovideridentity)\>
+
+***
+
+### EgradxSignupStartedDto
+
+What starting a sign-up answers: where the code went, until when it works, and when another may be asked for.
+
+#### Properties
+
+| Property | Type |
+| ------ | ------ |
+| <a id="property-email-5"></a> `email` | `string` |
+| <a id="property-expiresat-6"></a> `expiresAt` | `string` |
+| <a id="property-resendavailableat-2"></a> `resendAvailableAt` | `string` |
+
+***
+
 ### EgradxSmsProvider
 
 An SMS gateway, chosen per organization by its configuration's `provider` setting. Twilio is built in.
@@ -10461,7 +12463,7 @@ An SMS gateway, chosen per organization by its configuration's `provider` settin
 
 | Property | Modifier | Type | Description |
 | ------ | ------ | ------ | ------ |
-| <a id="property-name-11"></a> `name` | `readonly` | `string` | What the provider setting names; lowercase, stable. |
+| <a id="property-name-14"></a> `name` | `readonly` | `string` | What the provider setting names; lowercase, stable. |
 
 #### Methods
 
@@ -10623,6 +12625,19 @@ Runs `fn` inside this observation's span and the request id's logging context.
 
 ***
 
+### EgradxStartSignupRequest
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-email-6"></a> `email` | `string` | - |
+| <a id="property-name-15"></a> `name?` | `string` \| `null` | How to address them; optional. |
+| <a id="property-organizationname-6"></a> `organizationName` | `string` | - |
+| <a id="property-password-3"></a> `password?` | `string` \| `null` | Optional: without one, they sign in by an emailed code or a provider. |
+
+***
+
 ### EgradxStoredTemplateView
 
 A stored template as reported. `locale` is `und` for the default.
@@ -10633,13 +12648,13 @@ A stored template as reported. `locale` is `und` for the default.
 | ------ | ------ |
 | <a id="property-body-3"></a> `body` | `string` |
 | <a id="property-channel-18"></a> `channel` | `string` |
-| <a id="property-createdat-8"></a> `createdAt` | `string` |
+| <a id="property-createdat-9"></a> `createdAt` | `string` |
 | <a id="property-format-1"></a> `format` | [`EgradxMessageFormat`](#egradxmessageformat) |
-| <a id="property-id-12"></a> `id` | `string` |
+| <a id="property-id-15"></a> `id` | `string` |
 | <a id="property-locale-4"></a> `locale` | `string` |
 | <a id="property-notificationkey-8"></a> `notificationKey` | `string` |
-| <a id="property-organizationid-27"></a> `organizationId` | `string` \| `null` |
-| <a id="property-subject-1"></a> `subject` | `string` \| `null` |
+| <a id="property-organizationid-28"></a> `organizationId` | `string` \| `null` |
+| <a id="property-subject-2"></a> `subject` | `string` \| `null` |
 | <a id="property-updatedat-6"></a> `updatedAt` | `string` |
 
 ***
@@ -10657,8 +12672,8 @@ A template to store, replacing the shipped one for its key, channel and locale.
 | <a id="property-format-2"></a> `format?` | [`EgradxMessageFormat`](#egradxmessageformat) | - |
 | <a id="property-locale-5"></a> `locale?` | `string` \| `null` | BCP 47; null for the default template. |
 | <a id="property-notificationkey-9"></a> `notificationKey` | `string` | - |
-| <a id="property-organizationid-28"></a> `organizationId` | `string` \| `null` | Null: every organization without an override of its own. |
-| <a id="property-subject-2"></a> `subject?` | `string` \| `null` | - |
+| <a id="property-organizationid-29"></a> `organizationId` | `string` \| `null` | Null: every organization without an override of its own. |
+| <a id="property-subject-3"></a> `subject?` | `string` \| `null` | - |
 
 ***
 
@@ -10732,7 +12747,7 @@ The raw text of one template, before rendering. As Java's EgradxTemplateSource.
 | <a id="property-cachekey-1"></a> `cacheKey` | `string` | Identifies this exact text; compiled templates are cached under it. |
 | <a id="property-format-3"></a> `format` | [`EgradxMessageFormat`](#egradxmessageformat) | - |
 | <a id="property-origin"></a> `origin` | `string` | Where it came from, in words, for error messages. |
-| <a id="property-subject-3"></a> `subject` | `string` \| `null` | - |
+| <a id="property-subject-4"></a> `subject` | `string` \| `null` | - |
 
 ***
 
@@ -10773,9 +12788,9 @@ Runs once the transaction has committed; never if it rolls back. Failures are re
 | Property | Type | Description |
 | ------ | ------ | ------ |
 | <a id="property-active-1"></a> `active?` | `boolean` \| `null` | - |
-| <a id="property-email-4"></a> `email?` | `string` \| `null` | - |
-| <a id="property-name-12"></a> `name?` | `string` \| `null` | - |
-| <a id="property-password-1"></a> `password?` | `string` \| `null` | Blank means "leave it alone". |
+| <a id="property-email-7"></a> `email?` | `string` \| `null` | - |
+| <a id="property-name-16"></a> `name?` | `string` \| `null` | - |
+| <a id="property-password-4"></a> `password?` | `string` \| `null` | Blank means "leave it alone". |
 | <a id="property-roleid-6"></a> `roleId?` | `string` \| `null` | - |
 | <a id="property-username-4"></a> `username?` | `string` \| `null` | - |
 
@@ -10806,10 +12821,10 @@ Runs once the transaction has committed; never if it rolls back. Failures are re
 | Property | Type |
 | ------ | ------ |
 | <a id="property-active-2"></a> `active` | `boolean` |
-| <a id="property-createdat-9"></a> `createdAt` | `string` |
+| <a id="property-createdat-10"></a> `createdAt` | `string` |
 | <a id="property-displayname-1"></a> `displayName` | `string` \| `null` |
-| <a id="property-email-5"></a> `email` | `string` |
-| <a id="property-id-13"></a> `id` | `string` |
+| <a id="property-email-8"></a> `email` | `string` |
+| <a id="property-id-16"></a> `id` | `string` |
 | <a id="property-username-5"></a> `username` | `string` |
 
 ***
@@ -10824,7 +12839,7 @@ Runs once the transaction has committed; never if it rolls back. Failures are re
 | <a id="property-attributes-1"></a> `attributes` | `Record`\<`string`, `unknown`\> |
 | <a id="property-contacts"></a> `contacts` | [`EgradxContactDto`](#egradxcontactdto)[] |
 | <a id="property-displayname-2"></a> `displayName` | `string` \| `null` |
-| <a id="property-email-6"></a> `email` | `string` |
+| <a id="property-email-9"></a> `email` | `string` |
 | <a id="property-firstname-1"></a> `firstName` | `string` \| `null` |
 | <a id="property-jobtitle-1"></a> `jobTitle` | `string` \| `null` |
 | <a id="property-lastname-1"></a> `lastName` | `string` \| `null` |
@@ -10845,7 +12860,7 @@ A way to send WhatsApp: Meta's Cloud API ("meta") and Twilio ("twilio") are buil
 
 | Property | Modifier | Type |
 | ------ | ------ | ------ |
-| <a id="property-name-13"></a> `name` | `readonly` | `string` |
+| <a id="property-name-17"></a> `name` | `readonly` | `string` |
 
 #### Methods
 
@@ -10919,7 +12934,22 @@ An approved WhatsApp template to send instead of text, with its parameters in or
 | ------ | ------ | ------ |
 | <a id="property-locale-8"></a> `locale` | `string` \| `null` | The language the message was rendered in. |
 | <a id="property-mapping"></a> `mapping` | `Record`\<`string`, `unknown`\> | The notification's entry of the `templates` setting, without `parameters`. |
-| <a id="property-parameters"></a> `parameters` | `string`[] | - |
+| <a id="property-parameters-1"></a> `parameters` | `string`[] | - |
+
+***
+
+### EmailCodeSettings
+
+Signing in, and confirming a sign-up, with a code emailed to the address. As Java's egradx.auth.email-code.*.
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-enabled-4"></a> `enabled` | `boolean` | Offer signing in with an emailed code. Needs something that delivers account messages. |
+| <a id="property-maxattempts-1"></a> `maxAttempts` | `number` | Wrong codes allowed before a new one must be asked for. |
+| <a id="property-resendintervalms"></a> `resendIntervalMs` | `number` | How soon another code may be sent to the same address. |
+| <a id="property-ttlms"></a> `ttlMs` | `number` | How long a code works. |
 
 ***
 
@@ -11208,7 +13238,7 @@ publishToUser(
 | ------ | ------ | ------ |
 | <a id="property-actors-3"></a> `actors?` | [`NotificationActorResolver`](#notificationactorresolver) | Who is calling the admin endpoints. Without one, they answer 401. |
 | <a id="property-backlogrefreshms"></a> `backlogRefreshMs?` | `number` | How long a backlog count is kept before the gauge counts again (Java: egradx.notification.metrics.backlog-refresh). Default 30 s. |
-| <a id="property-broadcaster"></a> `broadcaster?` | (`published`) => `void` | Gets a published notification to the live streams of every instance. The default reaches this instance only: with several, relay through something shared (Redis pub/sub) and call `deliverLocally` on each. Nothing is lost without it, only immediacy. |
+| <a id="property-broadcaster-1"></a> `broadcaster?` | (`published`) => `void` | Gets a published notification to the live streams of every instance. The default reaches this instance only: with several, relay through something shared (Redis pub/sub) and call `deliverLocally` on each. Nothing is lost without it, only immediacy. |
 | <a id="property-builtinchannels"></a> `builtInChannels?` | `object` | The library's channels, each on unless set to false; as Java's egradx.notification.channels.*. `log` is off unless set: it writes message bodies to the log. |
 | `builtInChannels.email?` | `false` \| [`ApplicationEmail`](#applicationemail) | - |
 | `builtInChannels.log?` | `boolean` | - |
@@ -11274,6 +13304,42 @@ currentViewer():
   \| [`EgradxNotificationViewer`](#egradxnotificationviewer)
   \| `Promise`\<[`EgradxNotificationViewer`](#egradxnotificationviewer) \| `undefined`\>
   \| `undefined`
+
+***
+
+### OidcProviderSettings
+
+One configured sign-in provider. As Java's egradx.auth.oidc.providers.<id>.*.
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-clientid-1"></a> `clientId?` | `string` \| `null` | The client id the provider issued for this application. |
+| <a id="property-clientsecret-1"></a> `clientSecret?` | `string` \| `null` | The client secret the provider issued for this application. |
+| <a id="property-enabled-5"></a> `enabled?` | `boolean` | Turn the provider off without removing its settings. Default true. |
+| <a id="property-issuer-6"></a> `issuer?` | `string` \| `null` | The provider's issuer; its discovery document is at `{issuer}/.well-known/openid-configuration`. |
+| <a id="property-name-18"></a> `name?` | `string` \| `null` | Shown on the button. |
+| <a id="property-scopes-1"></a> `scopes?` | `string`[] | Scopes asked for; default `openid email profile`. |
+| <a id="property-trustemail-2"></a> `trustEmail?` | `boolean` \| `null` | Take the provider's verified emails as proof of owning the address: a sign-in whose email matches an account is linked to it. Default true for google and zoho, false otherwise. |
+| <a id="property-type-1"></a> `type?` | `string` \| `null` | Which kind of provider, so which factory makes it: `oidc` (the default: any OpenID Connect provider, from its issuer), `google`, `zoho`, or a type of the application's own (`oidc.providerFactories`). |
+
+***
+
+### OidcSettings
+
+Signing in with other providers: Google, Zoho, or any other by configuration or by code. As Java's egradx.auth.oidc.*.
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-callbackbaseurl"></a> `callbackBaseUrl` | `string` \| `null` | This server's public address as the provider's browser redirect reaches it, e.g. `https://api.example.com/api`. The redirect URI is `{callbackBaseUrl}/egradx/auth/oidc/{id}/callback`; register it with the provider. |
+| <a id="property-extraproviders"></a> `extraProviders?` | [`EgradxSignInProvider`](#egradxsigninprovider)[] | Providers the application made itself, as Java's EgradxSignInProvider beans; listed after the configured ones. An id used twice is an error. |
+| <a id="property-flowttlms"></a> `flowTtlMs` | `number` | How long a round trip to a provider, and the code it ends with, may take. Default 10 minutes. |
+| <a id="property-frontendcallbackpath"></a> `frontendCallbackPath` | `string` | Where on the frontend (after links.baseUrl) the browser lands after the provider. Default `/auth/callback`. |
+| <a id="property-providerfactories"></a> `providerFactories?` | [`SignInProviderFactory`](#signinproviderfactory)[] | Factories for provider types of the application's own, as Java's EgradxSignInProviderFactory beans. One with the type of a built-in (`oidc`, `google`, `zoho`) replaces it. |
+| <a id="property-providers-1"></a> `providers` | `Record`\<`string`, [`OidcProviderSettings`](#oidcprovidersettings)\> | The configured providers, by id (`google`, `zoho`, …): the id is in the URLs and on the buttons' data. |
 
 ***
 
@@ -11356,8 +13422,8 @@ matches(raw, encoded): Promise<boolean>;
 | <a id="property-adminemail"></a> `adminEmail` | `string` |
 | <a id="property-adminpassword"></a> `adminPassword` | `string` |
 | <a id="property-adminusername"></a> `adminUsername` | `string` |
-| <a id="property-enabled-4"></a> `enabled` | `boolean` |
-| <a id="property-organizationname-5"></a> `organizationName` | `string` |
+| <a id="property-enabled-6"></a> `enabled` | `boolean` |
+| <a id="property-organizationname-7"></a> `organizationName` | `string` |
 
 ***
 
@@ -11539,6 +13605,43 @@ An RSA key pair.
 
 ***
 
+### SignInProviderFactory
+
+Makes providers of one `type` from configuration: `oidc.providers.<id>.type`. egradx-auth has `oidc` (any OpenID
+Connect provider, the default), `google` and `zoho`; an application adds a type by passing a factory in
+`oidc.providerFactories`, and replaces a built-in one by passing a factory of the same type (the application's wins).
+As Java's EgradxSignInProviderFactory.
+
+#### Properties
+
+| Property | Modifier | Type | Description |
+| ------ | ------ | ------ | ------ |
+| <a id="property-type-2"></a> `type` | `readonly` | `string` | The value of `type` this factory makes providers for. |
+
+#### Methods
+
+##### create()
+
+```ts
+create(id, settings): EgradxSignInProvider;
+```
+
+A provider from its settings. The client id and secret are checked present before this is called. Throws an Error
+if the settings are not enough; the provider is then left out, with a warning.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `id` | `string` |
+| `settings` | [`OidcProviderSettings`](#oidcprovidersettings) |
+
+###### Returns
+
+[`EgradxSignInProvider`](#egradxsigninprovider)
+
+***
+
 ### SignupRequest
 
 #### Properties
@@ -11546,9 +13649,23 @@ An RSA key pair.
 | Property | Type |
 | ------ | ------ |
 | <a id="property-displayname-3"></a> `displayName?` | `string` \| `null` |
-| <a id="property-email-7"></a> `email` | `string` |
-| <a id="property-password-2"></a> `password` | `string` |
+| <a id="property-email-10"></a> `email` | `string` |
+| <a id="property-password-5"></a> `password` | `string` |
 | <a id="property-username-7"></a> `username` | `string` |
+
+***
+
+### SignupSettings
+
+Who may make an account of their own (docs/auth/sign-in-methods.md). As Java's egradx.auth.signup.*.
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-allowedemaildomains"></a> `allowedEmailDomains` | `string`[] | Email domains allowed to sign up (`example.com`); empty allows any. |
+| <a id="property-legacyregister"></a> `legacyRegister` | `boolean` | Keep the deprecated POST /egradx/auth/register, which makes an account in no organization. Off, it answers SIGNUP_DISABLED. |
+| <a id="property-mode"></a> `mode` | `"invitation"` \| `"organization"` | `invitation` (the default): accounts are made only by an administrator or by accepting an invitation. `organization`: anyone may also sign up, and becomes the administrator of a new organization of their own. |
 
 ***
 
@@ -11708,6 +13825,27 @@ type AuthErrorCode = typeof AUTH_ERROR_CODES[number];
 
 ***
 
+### EgradxAttemptLimiterFactory
+
+```ts
+type EgradxAttemptLimiterFactory = (settings) => EgradxAttemptLimiter;
+```
+
+Makes a limiter from the auth settings (`rateLimit`, with their defaults), so that one shared across instances counts
+with the same limits and window the in-memory one would. Not called when `rateLimit.enabled` is false.
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `settings` | [`RateLimitSettings`](#ratelimitsettings) |
+
+#### Returns
+
+[`EgradxAttemptLimiter`](#egradxattemptlimiter)
+
+***
+
 ### EgradxAudienceKind
 
 ```ts
@@ -11795,7 +13933,8 @@ type EgradxErrorCode =
   | GenericErrorCode
   | AuthErrorCode
   | AuditErrorCode
-  | NotificationErrorCode;
+  | NotificationErrorCode
+  | FilesErrorCode;
 ```
 
 Every code the SDK defines. An application may use codes of its own too.
@@ -11850,6 +13989,14 @@ type EgradxOutboxEventStatus = typeof EgradxOutboxEventStatus[number];
 
 ```ts
 type Fetch = typeof fetch;
+```
+
+***
+
+### FilesErrorCode
+
+```ts
+type FilesErrorCode = typeof FILES_ERROR_CODES[number];
 ```
 
 ***
@@ -11932,6 +14079,26 @@ a channel is any EgradxNotificationChannel
 ```ts
 type RequestStatus = typeof RequestStatus[number];
 ```
+
+***
+
+### SignInProviderFactoryClass
+
+```ts
+type SignInProviderFactoryClass = (client) => SignInProviderFactory;
+```
+
+What makes a provider factory: `new EgradxGoogleSignInProvider.Factory(client)`.
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `client` | [`EgradxOidcClient`](#egradxoidcclient) |
+
+#### Returns
+
+[`SignInProviderFactory`](#signinproviderfactory)
 
 ***
 
@@ -12052,8 +14219,28 @@ Everything egradx-auth records, as Java's EgradxAuthAuditActions describes it fo
 ### AUTH\_ERROR\_CODES
 
 ```ts
-const AUTH_ERROR_CODES: readonly ["AUTH_INVALID_CREDENTIALS", "AUTH_REFRESH_TOKEN_INVALID", "AUTH_TOO_MANY_ATTEMPTS", "SESSION_EXPIRED", "SESSION_REVOKED", "ORG_SUSPENDED", "ORG_ACCESS_DENIED", "ORG_SELECTION_REQUIRED", "PROFILE_INVALID", "CONTACT_LIMIT_REACHED", "CONTACT_DUPLICATE", "CONTACT_ALREADY_VERIFIED", "CONTACT_VERIFICATION_UNAVAILABLE", "CONTACT_VERIFICATION_RATE_LIMITED", "CONTACT_VERIFICATION_NOT_STARTED", "CONTACT_VERIFICATION_INVALID_CODE", "CONTACT_VERIFICATION_EXPIRED", "CONTACT_VERIFICATION_TOO_MANY_ATTEMPTS", "PASSWORD_INVALID", "PASSWORD_INCORRECT", "PASSWORD_RESET_INVALID", "PASSWORD_RESET_EXPIRED", "INVITATION_INVALID", "INVITATION_EXPIRED", "INVITATION_ALREADY_ACCEPTED", "INVITATION_SIGN_IN_REQUIRED", "INVITATION_EMAIL_MISMATCH", "INVITATION_ALREADY_MEMBER", "INVITATION_DELIVERY_UNAVAILABLE", "INVITATION_RATE_LIMITED", "EMAIL_IN_USE", "EMAIL_UNCHANGED", "EMAIL_CHANGE_UNAVAILABLE", "EMAIL_CHANGE_RATE_LIMITED", "EMAIL_CHANGE_NOT_STARTED", "EMAIL_CHANGE_INVALID_CODE", "EMAIL_CHANGE_EXPIRED", "EMAIL_CHANGE_TOO_MANY_ATTEMPTS"];
+const AUTH_ERROR_CODES: readonly ["AUTH_INVALID_CREDENTIALS", "AUTH_REFRESH_TOKEN_INVALID", "AUTH_TOO_MANY_ATTEMPTS", "SESSION_EXPIRED", "SESSION_REVOKED", "ORG_SUSPENDED", "ORG_ACCESS_DENIED", "ORG_SELECTION_REQUIRED", "PROFILE_INVALID", "CONTACT_LIMIT_REACHED", "CONTACT_DUPLICATE", "CONTACT_ALREADY_VERIFIED", "CONTACT_VERIFICATION_UNAVAILABLE", "CONTACT_VERIFICATION_RATE_LIMITED", "CONTACT_VERIFICATION_NOT_STARTED", "CONTACT_VERIFICATION_INVALID_CODE", "CONTACT_VERIFICATION_EXPIRED", "CONTACT_VERIFICATION_TOO_MANY_ATTEMPTS", "PASSWORD_INVALID", "PASSWORD_INCORRECT", "PASSWORD_RESET_INVALID", "PASSWORD_RESET_EXPIRED", "INVITATION_INVALID", "INVITATION_EXPIRED", "INVITATION_ALREADY_ACCEPTED", "INVITATION_SIGN_IN_REQUIRED", "INVITATION_EMAIL_MISMATCH", "INVITATION_ALREADY_MEMBER", "INVITATION_DELIVERY_UNAVAILABLE", "INVITATION_RATE_LIMITED", "EMAIL_IN_USE", "EMAIL_UNCHANGED", "EMAIL_CHANGE_UNAVAILABLE", "EMAIL_CHANGE_RATE_LIMITED", "EMAIL_CHANGE_NOT_STARTED", "EMAIL_CHANGE_INVALID_CODE", "EMAIL_CHANGE_EXPIRED", "EMAIL_CHANGE_TOO_MANY_ATTEMPTS", "SIGNUP_DISABLED", "SIGNUP_EMAIL_DOMAIN_NOT_ALLOWED", "ORGANIZATION_NAME_IN_USE", "SIGNUP_REQUIRED", "AUTH_NO_ACCOUNT", "EMAIL_CODE_UNAVAILABLE", "EMAIL_CODE_RATE_LIMITED", "EMAIL_CODE_INVALID", "EMAIL_CODE_EXPIRED", "EMAIL_CODE_TOO_MANY_ATTEMPTS", "OIDC_PROVIDER_UNKNOWN", "OIDC_CANCELLED", "OIDC_STATE_INVALID", "OIDC_FAILED", "OIDC_CODE_INVALID", "OIDC_EMAIL_NOT_VERIFIED", "IDENTITY_LINK_REQUIRED", "IDENTITY_IN_USE", "SIGN_IN_METHOD_REQUIRED"];
 ```
+
+***
+
+### builtInSignInProviderFactories
+
+```ts
+const builtInSignInProviderFactories: (client) => SignInProviderFactory[];
+```
+
+egradx-auth's own factories: `oidc`, `google` and `zoho`, all talking through `client`.
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `client` | [`EgradxOidcClient`](#egradxoidcclient) |
+
+#### Returns
+
+[`SignInProviderFactory`](#signinproviderfactory)[]
 
 ***
 
@@ -12152,6 +14339,7 @@ the message. As Java's EgradxAuthErrorCodes; contracts/schemas/error-codes.json 
 | Name | Type | Description |
 | ------ | ------ | ------ |
 | <a id="property-auth_invalid_credentials"></a> `AUTH_INVALID_CREDENTIALS` | `"AUTH_INVALID_CREDENTIALS"` | Unknown user, deactivated user, or wrong password: deliberately indistinguishable. |
+| <a id="property-auth_no_account"></a> `AUTH_NO_ACCOUNT` | `"AUTH_NO_ACCOUNT"` | No account, and signing up is not open. A 403. |
 | <a id="property-auth_refresh_token_invalid"></a> `AUTH_REFRESH_TOKEN_INVALID` | `"AUTH_REFRESH_TOKEN_INVALID"` | The refresh token does not exist, has expired, or was revoked by a sign-out. |
 | <a id="property-auth_too_many_attempts"></a> `AUTH_TOO_MANY_ATTEMPTS` | `"AUTH_TOO_MANY_ATTEMPTS"` | Too many wrong passwords: 429 with Retry-After and details.retryAfterSeconds. |
 | <a id="property-contact_already_verified"></a> `CONTACT_ALREADY_VERIFIED` | `"CONTACT_ALREADY_VERIFIED"` | - |
@@ -12169,8 +14357,15 @@ the message. As Java's EgradxAuthErrorCodes; contracts/schemas/error-codes.json 
 | <a id="property-email_change_rate_limited"></a> `EMAIL_CHANGE_RATE_LIMITED` | `"EMAIL_CHANGE_RATE_LIMITED"` | - |
 | <a id="property-email_change_too_many_attempts"></a> `EMAIL_CHANGE_TOO_MANY_ATTEMPTS` | `"EMAIL_CHANGE_TOO_MANY_ATTEMPTS"` | - |
 | <a id="property-email_change_unavailable"></a> `EMAIL_CHANGE_UNAVAILABLE` | `"EMAIL_CHANGE_UNAVAILABLE"` | - |
+| <a id="property-email_code_expired"></a> `EMAIL_CODE_EXPIRED` | `"EMAIL_CODE_EXPIRED"` | - |
+| <a id="property-email_code_invalid"></a> `EMAIL_CODE_INVALID` | `"EMAIL_CODE_INVALID"` | Not the code sent — or no code was sent to that address. |
+| <a id="property-email_code_rate_limited"></a> `EMAIL_CODE_RATE_LIMITED` | `"EMAIL_CODE_RATE_LIMITED"` | A code was asked for too soon after the last one to the same address. |
+| <a id="property-email_code_too_many_attempts"></a> `EMAIL_CODE_TOO_MANY_ATTEMPTS` | `"EMAIL_CODE_TOO_MANY_ATTEMPTS"` | Too many wrong codes; a new one must be asked for. |
+| <a id="property-email_code_unavailable"></a> `EMAIL_CODE_UNAVAILABLE` | `"EMAIL_CODE_UNAVAILABLE"` | No code can be emailed here: nothing delivers account messages, or codes are turned off. |
 | <a id="property-email_in_use"></a> `EMAIL_IN_USE` | `"EMAIL_IN_USE"` | - |
 | <a id="property-email_unchanged"></a> `EMAIL_UNCHANGED` | `"EMAIL_UNCHANGED"` | - |
+| <a id="property-identity_in_use"></a> `IDENTITY_IN_USE` | `"IDENTITY_IN_USE"` | Another account already signs in with that provider identity. A 409. |
+| <a id="property-identity_link_required"></a> `IDENTITY_LINK_REQUIRED` | `"IDENTITY_LINK_REQUIRED"` | An account has that email, but this provider is not trusted to prove it: sign in, then link. A 409. |
 | <a id="property-invitation_already_accepted"></a> `INVITATION_ALREADY_ACCEPTED` | `"INVITATION_ALREADY_ACCEPTED"` | - |
 | <a id="property-invitation_already_member"></a> `INVITATION_ALREADY_MEMBER` | `"INVITATION_ALREADY_MEMBER"` | - |
 | <a id="property-invitation_delivery_unavailable"></a> `INVITATION_DELIVERY_UNAVAILABLE` | `"INVITATION_DELIVERY_UNAVAILABLE"` | - |
@@ -12179,9 +14374,16 @@ the message. As Java's EgradxAuthErrorCodes; contracts/schemas/error-codes.json 
 | <a id="property-invitation_invalid"></a> `INVITATION_INVALID` | `"INVITATION_INVALID"` | - |
 | <a id="property-invitation_rate_limited"></a> `INVITATION_RATE_LIMITED` | `"INVITATION_RATE_LIMITED"` | - |
 | <a id="property-invitation_sign_in_required"></a> `INVITATION_SIGN_IN_REQUIRED` | `"INVITATION_SIGN_IN_REQUIRED"` | - |
+| <a id="property-oidc_cancelled"></a> `OIDC_CANCELLED` | `"OIDC_CANCELLED"` | The person declined at the provider. Sent to the frontend as ?error=. |
+| <a id="property-oidc_code_invalid"></a> `OIDC_CODE_INVALID` | `"OIDC_CODE_INVALID"` | The result code from the callback is unknown, used or expired. |
+| <a id="property-oidc_email_not_verified"></a> `OIDC_EMAIL_NOT_VERIFIED` | `"OIDC_EMAIL_NOT_VERIFIED"` | The provider does not vouch for the email, so it cannot make or be linked to an account. |
+| <a id="property-oidc_failed"></a> `OIDC_FAILED` | `"OIDC_FAILED"` | The provider could not be reached, or what it answered did not check out. Sent as ?error=. |
+| <a id="property-oidc_provider_unknown"></a> `OIDC_PROVIDER_UNKNOWN` | `"OIDC_PROVIDER_UNKNOWN"` | No such provider is configured, or it is turned off. A 404. |
+| <a id="property-oidc_state_invalid"></a> `OIDC_STATE_INVALID` | `"OIDC_STATE_INVALID"` | The provider's callback names no round trip under way: unknown, used or expired. Sent as ?error=. |
 | <a id="property-org_access_denied"></a> `ORG_ACCESS_DENIED` | `"ORG_ACCESS_DENIED"` | - |
 | <a id="property-org_selection_required"></a> `ORG_SELECTION_REQUIRED` | `"ORG_SELECTION_REQUIRED"` | The person belongs to several organizations and did not say which; details.organizations lists them. |
 | <a id="property-org_suspended"></a> `ORG_SUSPENDED` | `"ORG_SUSPENDED"` | - |
+| <a id="property-organization_name_in_use"></a> `ORGANIZATION_NAME_IN_USE` | `"ORGANIZATION_NAME_IN_USE"` | Another organization already has that name. A 409. |
 | <a id="property-password_incorrect"></a> `PASSWORD_INCORRECT` | `"PASSWORD_INCORRECT"` | The current password given to confirm a change was wrong: a 400, never a 401. |
 | <a id="property-password_invalid"></a> `PASSWORD_INVALID` | `"PASSWORD_INVALID"` | - |
 | <a id="property-password_reset_expired"></a> `PASSWORD_RESET_EXPIRED` | `"PASSWORD_RESET_EXPIRED"` | - |
@@ -12189,6 +14391,10 @@ the message. As Java's EgradxAuthErrorCodes; contracts/schemas/error-codes.json 
 | <a id="property-profile_invalid"></a> `PROFILE_INVALID` | `"PROFILE_INVALID"` | - |
 | <a id="property-session_expired"></a> `SESSION_EXPIRED` | `"SESSION_EXPIRED"` | The access token is missing, malformed, expired, refused, or its session was ended. |
 | <a id="property-session_revoked"></a> `SESSION_REVOKED` | `"SESSION_REVOKED"` | A refresh token valid until the person's sessions were ended (password change, reset, sign out everywhere). |
+| <a id="property-sign_in_method_required"></a> `SIGN_IN_METHOD_REQUIRED` | `"SIGN_IN_METHOD_REQUIRED"` | Removing this sign-in method would leave the person no way to sign in. |
+| <a id="property-signup_disabled"></a> `SIGNUP_DISABLED` | `"SIGNUP_DISABLED"` | Signing up is not open on this deployment (signup.mode is invitation), or the legacy register is off. A 403. |
+| <a id="property-signup_email_domain_not_allowed"></a> `SIGNUP_EMAIL_DOMAIN_NOT_ALLOWED` | `"SIGNUP_EMAIL_DOMAIN_NOT_ALLOWED"` | The email's domain is not one allowed to sign up. |
+| <a id="property-signup_required"></a> `SIGNUP_REQUIRED` | `"SIGNUP_REQUIRED"` | No account, and signing up is open: details carry the email and name to sign up with. A 409. |
 
 ***
 
@@ -12223,7 +14429,7 @@ const EgradxChannels: object;
 
 | Name | Type |
 | ------ | ------ |
-| <a id="property-email-8"></a> `EMAIL` | `"email"` |
+| <a id="property-email-11"></a> `EMAIL` | `"email"` |
 | <a id="property-slack"></a> `SLACK` | `"slack"` |
 | <a id="property-sms"></a> `SMS` | `"sms"` |
 | <a id="property-webhook"></a> `WEBHOOK` | `"webhook"` |
@@ -12362,6 +14568,14 @@ are refused, and values that look like a UUID or are longer than 64 characters a
 | `checkSegment()` | (`segment`) => `string` | One module or operation segment of a name, such as `notification` or `bulk.expansion`. |
 | `checkTag()` | (`key`, `value`) => `void` | - |
 | `checkTags()` | (`keyValues`) => `Record`\<`string`, `string`\> | Checks alternating key, value pairs and returns them as attributes. |
+
+***
+
+### FILES\_ERROR\_CODES
+
+```ts
+const FILES_ERROR_CODES: readonly ["FILE_TOO_LARGE", "FILE_TYPE_NOT_ALLOWED", "FILE_EMPTY", "FILE_REJECTED", "FILE_STORAGE_UNAVAILABLE"];
+```
 
 ***
 
@@ -12579,6 +14793,26 @@ The characters random strings are drawn from, as Java's RandomStringGeneratorUti
 ```ts
 const RequestStatus: readonly ["PENDING", "ONTRIAL", "ACTIVATED", "EXPIRED"];
 ```
+
+***
+
+### SessionEndReasons
+
+```ts
+const SessionEndReasons: object;
+```
+
+Why a session ended (egradx_session.end_reason). As Java's EgradxSessionEntity.
+
+#### Type Declaration
+
+| Name | Type |
+| ------ | ------ |
+| <a id="property-all_ended"></a> `ALL_ENDED` | `"ALL_ENDED"` |
+| <a id="property-ended"></a> `ENDED` | `"ENDED"` |
+| <a id="property-reused"></a> `REUSED` | `"REUSED"` |
+| <a id="property-signed_out"></a> `SIGNED_OUT` | `"SIGNED_OUT"` |
+| <a id="property-switched"></a> `SWITCHED` | `"SWITCHED"` |
 
 ***
 
@@ -13500,8 +15734,9 @@ function migrateEgradx(databaseUrl, options?): Promise<void>;
 ```
 
 Creates and upgrades every library's tables, in Java's order, into the history tables Java uses: egradx-auth's, then
-the application's own (`application`), then egradx-audit's and egradx-notification's. So any SDK's application can
-start first on a database another SDK's created.
+the application's own (`application`), then egradx-audit's and egradx-notification's, and egradx-events' and
+egradx-file-storage's when `@babulvaibhav/egradx-events` or `@babulvaibhav/egradx-file-storage` is installed (as Java
+migrates their tables whenever they are on the classpath). So any SDK's application can start first on a database another SDK's created.
 
 #### Parameters
 
@@ -13774,6 +16009,26 @@ Runs `fn` with `context` as the current request context.
 #### Returns
 
 `T`
+
+***
+
+### safeReturnTo()
+
+```ts
+function safeReturnTo(returnTo): string | null;
+```
+
+A path on the frontend, or nothing: never another site (`//host`, `/\host`, `https:`). As Java's safeReturnTo.
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `returnTo` | `string` \| `null` \| `undefined` |
+
+#### Returns
+
+`string` \| `null`
 
 ***
 

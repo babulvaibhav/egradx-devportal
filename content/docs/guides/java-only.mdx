@@ -11,7 +11,7 @@ description: The Java SDK's older and partial modules — gRPC and WebFlux conte
 |---|---|---|---|
 | `egradx-bom` | the versions of every EGRADX artifact | ✓ | import it, as the generated projects do |
 | `egradx-sdk-root` | a parent POM with Spring Boot 3.4.9, Java 21 and aligned Spring Cloud / gRPC versions | ✓ | optional; the BOM is enough |
-| `egradx-webservice` | `WebService` base class (`getCurrentUserId()`, `getAccessToken()`…) and an application-wide error handler | partial | `EgradxTenantContextAccessor`, and [the error advice](/docs/guides/errors#wiring-the-envelope-in) |
+| `egradx-webservice` | `WebService` base class (`getCurrentUserId()`, `getAccessToken()`…) and an application-wide error handler | partial | `EgradxTenantContextAccessor`, and `egradx-sdk`'s [error fallback](/docs/guides/errors#wiring-the-envelope-in) |
 | `egradx-web-context-manager` | an interceptor on `/api/**` storing the caller's token data; `EgradxWebRequestContextUtil` | partial | `EgradxTenantContextAccessor` |
 | `egradx-web-security` | token utilities, the service-token manager, a shared `RestTemplate` | ✓ (comes with `egradx-sdk`) | — |
 | `egradx-grpc-context-manager`, `egradx-grpc-service` | the caller on gRPC calls | partial | — |

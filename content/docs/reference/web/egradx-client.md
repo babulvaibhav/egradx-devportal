@@ -13,6 +13,11 @@ The browser and Node client for applications built on the EGRADX SDK. It has no 
 |---|---|
 | `createEgradxClient({ baseUrl, storage?, tokens?, fetch?, onSessionEnded? })` | The application's one client. `baseUrl` includes any context path, e.g. `/api`. With `tokens: 'server'` the client holds no tokens: a backend-for-frontend at `baseUrl` ([`@babulvaibhav/egradx-next`](/docs/reference/web/egradx-next)) keeps them in HttpOnly cookies, and the client keeps the session's other fields and asks it for the session on `restore()`. |
 | `client.session` | Sign-in, sign-out, refresh, switching organization, and adopting a session the server issued. Refreshes are single-flight. It follows other tabs, and its status is `loading`, `authenticated` or `anonymous`. |
+| Signing in other ways, and signing up (`client.session`) | `signInOptions()` says what a sign-in page can offer. `requestEmailCode(email)` then `verifyEmailCode({ email, code, organizationId? })` signs in with an emailed code; `startSignup({ email, name?, organizationName, password? })` then `confirmSignup({ email, code })` signs up with a new organization. `providerSignInUrl(id, returnTo?)` is the URL to navigate the browser to for Google, Zoho or another provider; the callback page then calls `exchangeProviderCode({ code, organizationId?, invitationToken? })`, or `signUpWithProvider({ code, organizationName })` after `SIGNUP_REQUIRED`. `changePassword({ currentPassword?, newPassword })` sets a first password without the current one. Each that returns a session stores it, as `login` does. See `docs/auth/sign-in-methods.md`. |
+| `readProviderCallback(query)`, `organizationChoices(error)`, `providerSignupDetails(error)`, `retryAfterSeconds(error)`, `safeReturnTo` | For the flows above: what the frontend's `/auth/callback` page was given (`code`, `linked` or `error`, with `returnTo` kept only when it is a path on this site); the organizations to pick from after `ORG_SELECTION_REQUIRED` (send the same code or password again with one); who to sign up after `SIGNUP_REQUIRED`; and the wait after `AUTH_TOO_MANY_ATTEMPTS`. |
+| `resolveSignInMethods(options, { methods?, order?, labels? })` | The methods a sign-in page shows: the application's choice intersected with `signInOptions()`. Ids are `password`, `email-code` and provider ids; `providers` in `methods` stands for every enabled provider not named. A method the server has not enabled never appears. Framework-free, for any binding. |
+| `session.startProviderSignIn(id, { returnTo?, invitationToken? })`, `createInvitationHandoff` | Starts a provider sign-in: keeps an invitation's token (sessionStorage, key `egradx.pendingInvitation`, per tab) for the callback page and returns the URL to navigate to. `exchangeProviderCode` sends the kept token by itself when given none, keeps it through `ORG_SELECTION_REQUIRED`, and forgets it once settled; a start without a token forgets a leftover one. Pass `invitationHandoff` to `createEgradxClient` to keep it elsewhere. |
+| `createSignInMethods(client)` | The signed-in person's sign-in methods: whether they have a password, the providers linked, `link(id, returnTo?)` (resolves with the provider's URL to send the browser to), `unlink(identityId)` and `setPassword(...)`. |
 | `client.fetch` | A signed-in `fetch`: it adds the bearer token and an `X-Request-ID`, and on a 401 refreshes once and retries. Use it for the application's own endpoints too. |
 | `client.auth`, `client.audit`, `client.notification` | Typed calls to `/egradx/**`, using [openapi-fetch](https://openapi-ts.dev/openapi-fetch/) over types generated from `contracts/openapi/`. |
 | `createInbox(client)` | The notification inbox: the list, the unread count, the live stream and read state. It follows sign-in, sign-out and organization switches. |
@@ -20,6 +25,7 @@ The browser and Node client for applications built on the EGRADX SDK. It has no 
 | `createAuditList(client, { filter?, pageSize?, platform?, entity? })`, `createAuditActions`, `getAuditRecord`, `exportAuditCsv`, `auditQuery` | The audit trail a page at a time (cursor-based; `entity` reads one thing's history), the action catalog, one record, and the CSV export with its filename and whether it was cut short. `platform: true` reads the platform's records. |
 | `createNotificationChannels`, `createNotificationTypes`, `createDeliveryLog` | Notification administration: each channel's settings and whether it can send, with save, remove, clear-secret and test; the message types; and the delivery log, numbered pages, with requeue. `platform: true` for the platform's own. |
 | `createContacts`, `createNotificationPreferences` | The signed-in person's own addresses (add, remove, make primary, verify by code) and their notification preferences. |
+| `client.files`, `createAttachments(client, { attachedType, attachedId })`, `createProfilePhoto(client)`, `checkFile` | Files: upload with progress, a record's files, downloads with the session, delete, and the person's profile photo. See **Files** below. |
 | `createQuery`, `EgradxStore`, `QuerySnapshot`, `asApiError` | The store pattern every one of the above uses: `subscribe`/`getSnapshot`, `start`/`stop`. A store follows sign-in, sign-out and organization switches; it empties on a switch and drops answers that arrive for the previous person or organization. Use it for an application's own data too. |
 | `EgradxApiError`, `unwrap`, the error-code constants and types | Errors carry the server's `error.code` (from `contracts/schemas/error-codes.json`), its `status`, `requestId` and `details`. |
 | `localStorageTokenStore`, `memoryTokenStore`, `TokenStore` | Where the session is kept. localStorage is the default; memory is for tests, scripts and server code. |
@@ -27,16 +33,38 @@ The browser and Node client for applications built on the EGRADX SDK. It has no 
 
 Nothing in it depends on a particular application: not its routes, UI kit or router.
 
+## Files
+
+```ts
+const file = await client.files.upload(input.files[0], {
+  attachedType: 'order', attachedId: order.id,          // the record it belongs to (both or neither)
+  onProgress: ({ fraction }) => setProgress(fraction),  // XMLHttpRequest in a browser
+  signal: controller.signal,                            // abort: rejects with the AbortError
+});
+await client.files.list({ attachedType: 'order', attachedId: order.id }); // newest first, at most 200
+await client.files.save(file.id);                       // downloads with the session, saves under its name
+const { url, revoke } = await client.files.displayUrl(profile.photoUrl!); // for <img src>; revoke() when done
+await client.files.setProfilePhoto(blob);               // resolves with the profile; photoUrl is the new photo
+```
+
+- **Everything is signed in.** Uploads and downloads get the token, the refresh and the retry every call gets. An upload that reports progress goes through XMLHttpRequest, the one browser API that reports upload progress; without `onProgress`, or outside a browser, it goes through the client's fetch and `onProgress` is called once at the end.
+- **Naming a file.** By its id, by its content URL (`/egradx/files/{id}/content`, what `contentUrl` and a profile's `photoUrl` hold), or by an absolute URL. Only this API's URLs get the session.
+- **Showing one.** A plain `<img src>` carries no bearer token, so with the token in the browser it is refused. `displayUrl` (and `objectUrl`) download the bytes into an object URL; behind a backend-for-frontend (`tokens: 'server'`) the cookie goes with the plain URL, and `displayUrl` returns it without downloading. `contentUrl(id)` is that URL.
+- **Downloads.** `download(id, { range? })` resolves with the `Blob`, the name (from `Content-Disposition`, else the file's details) and the type. A redirect to a pre-signed URL is followed; a script's fetch of a bucket needs CORS on the bucket.
+- **Errors.** `FILE_EMPTY` (400), `FILE_TOO_LARGE` (413), `FILE_TYPE_NOT_ALLOWED` (415), `FILE_REJECTED` (422), `FILE_STORAGE_UNAVAILABLE` (503), and the generic `NOT_FOUND` and `ACCESS_DENIED`. `checkFile(file, { accept, maxSize })` answers with the same codes before anything is sent.
+- **Stores.** `createAttachments` is a record's files (`upload` and `remove` reload it). `createProfilePhoto` is `data.photoUrl` with `set` and `remove`; every one made from the same client reloads when the photo changes through it.
+
 ## Maintaining it
 
 - `src/generated/` is generated from `contracts/`. After a contract changes, run `pnpm run generate` and commit the result; the diff shows what changed for clients. The generator leaves out `Authorization` header parameters, because the client sends that header itself.
-- The read models the stores answer with (`AuditRecord`, `ChannelStatus`, `Delivery`, `Contact`…) are written out by hand in `audit.ts`, `notification-admin.ts` and `profile.ts`, mirroring Java's records: the generated types make every field optional, while every SDK sends every field. When a record in Java gains a field, add it there too.
+- The read models the stores answer with (`AuditRecord`, `ChannelStatus`, `Delivery`, `Contact`…) are written out by hand in `audit.ts`, `notification-admin.ts`, `profile.ts` and `sign-in.ts`, mirroring Java's records: the generated types make every field optional, while every SDK sends every field. When a record in Java gains a field, add it there too.
 - `pnpm build` compiles to `dist/` (ESM with type declarations). `pnpm test` runs the unit tests against a scripted fake server.
 
 ## Namespaces
 
 - AuditApi
 - AuthApi
+- FilesApi
 - NotificationApi
 
 ## Classes
@@ -147,9 +175,10 @@ new EgradxSessionManager(config): EgradxSessionManager;
 
 | Parameter | Type |
 | ------ | ------ |
-| `config` | \{ `baseUrl`: `string`; `expirySkewMs`: `number`; `onSessionEnded`: ((`reason`) => `void`) \| `undefined`; `send`: (`input`, `init?`) => `Promise`\<`Response`\>; `storage`: [`TokenStore`](#tokenstore); `tokens`: [`TokenMode`](#tokenmode); \} |
+| `config` | \{ `baseUrl`: `string`; `expirySkewMs`: `number`; `invitations`: [`InvitationHandoff`](#invitationhandoff); `onSessionEnded`: ((`reason`) => `void`) \| `undefined`; `send`: (`input`, `init?`) => `Promise`\<`Response`\>; `storage`: [`TokenStore`](#tokenstore); `tokens`: [`TokenMode`](#tokenmode); \} |
 | `config.baseUrl` | `string` |
 | `config.expirySkewMs` | `number` |
+| `config.invitations` | [`InvitationHandoff`](#invitationhandoff) |
 | `config.onSessionEnded` | ((`reason`) => `void`) \| `undefined` |
 | `config.send` | (`input`, `init?`) => `Promise`\<`Response`\> |
 | `config.storage` | [`TokenStore`](#tokenstore) |
@@ -249,6 +278,20 @@ get current():
 
 `null`
 
+##### pendingInvitation
+
+###### Get Signature
+
+```ts
+get pendingInvitation(): string | null;
+```
+
+The invitation kept for the callback page by `startProviderSignIn`, or null.
+
+###### Returns
+
+`string` \| `null`
+
 ##### status
 
 ###### Get Signature
@@ -318,6 +361,190 @@ password or signing out everywhere.
 | `roleName?` | `string` \| `null` | - |
 | `tokenType?` | `string` \| `null` | - |
 | `user?` | \| \{ `active?`: `boolean` \| `null`; `createdAt?`: `string` \| `null`; `displayName?`: `string` \| `null`; `email?`: `string` \| `null`; `id?`: `string` \| `null`; `username?`: `string` \| `null`; \} \| `null` | - |
+
+##### changePassword()
+
+```ts
+changePassword(request): Promise<{
+  accessToken?: string | null;
+  authorities?: string[] | null;
+  expiresAt?: string | null;
+  organizationId?: string | null;
+  organizationName?: string | null;
+  platformOrganization?: boolean | null;
+  refreshToken?: string | null;
+  roleId?: string | null;
+  roleName?: string | null;
+  tokenType?: string | null;
+  user?:   | {
+     active?: boolean | null;
+     createdAt?: string | null;
+     displayName?: string | null;
+     email?: string | null;
+     id?: string | null;
+     username?: string | null;
+   }
+     | null;
+}>;
+```
+
+Changes the signed-in person's password, or sets a first one (no `currentPassword`) when they have none. Every
+session ends, and this one continues as the new session the server returns. Throws PASSWORD_INCORRECT,
+PASSWORD_INVALID, AUTH_TOO_MANY_ATTEMPTS.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `request` | [`ChangePasswordRequest`](#changepasswordrequest) |
+
+###### Returns
+
+`Promise`\<\{
+  `accessToken?`: `string` \| `null`;
+  `authorities?`: `string`[] \| `null`;
+  `expiresAt?`: `string` \| `null`;
+  `organizationId?`: `string` \| `null`;
+  `organizationName?`: `string` \| `null`;
+  `platformOrganization?`: `boolean` \| `null`;
+  `refreshToken?`: `string` \| `null`;
+  `roleId?`: `string` \| `null`;
+  `roleName?`: `string` \| `null`;
+  `tokenType?`: `string` \| `null`;
+  `user?`:   \| \{
+     `active?`: `boolean` \| `null`;
+     `createdAt?`: `string` \| `null`;
+     `displayName?`: `string` \| `null`;
+     `email?`: `string` \| `null`;
+     `id?`: `string` \| `null`;
+     `username?`: `string` \| `null`;
+   \}
+     \| `null`;
+\}\>
+
+##### confirmSignup()
+
+```ts
+confirmSignup(request): Promise<{
+  accessToken?: string | null;
+  authorities?: string[] | null;
+  expiresAt?: string | null;
+  organizationId?: string | null;
+  organizationName?: string | null;
+  platformOrganization?: boolean | null;
+  refreshToken?: string | null;
+  roleId?: string | null;
+  roleName?: string | null;
+  tokenType?: string | null;
+  user?:   | {
+     active?: boolean | null;
+     createdAt?: string | null;
+     displayName?: string | null;
+     email?: string | null;
+     id?: string | null;
+     username?: string | null;
+   }
+     | null;
+}>;
+```
+
+Completes a sign-up with the emailed code: makes the account and its organization, and signs in there.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `request` | \{ `code`: `string`; `email`: `string`; \} |
+| `request.code` | `string` |
+| `request.email` | `string` |
+
+###### Returns
+
+`Promise`\<\{
+  `accessToken?`: `string` \| `null`;
+  `authorities?`: `string`[] \| `null`;
+  `expiresAt?`: `string` \| `null`;
+  `organizationId?`: `string` \| `null`;
+  `organizationName?`: `string` \| `null`;
+  `platformOrganization?`: `boolean` \| `null`;
+  `refreshToken?`: `string` \| `null`;
+  `roleId?`: `string` \| `null`;
+  `roleName?`: `string` \| `null`;
+  `tokenType?`: `string` \| `null`;
+  `user?`:   \| \{
+     `active?`: `boolean` \| `null`;
+     `createdAt?`: `string` \| `null`;
+     `displayName?`: `string` \| `null`;
+     `email?`: `string` \| `null`;
+     `id?`: `string` \| `null`;
+     `username?`: `string` \| `null`;
+   \}
+     \| `null`;
+\}\>
+
+##### exchangeProviderCode()
+
+```ts
+exchangeProviderCode(request): Promise<{
+  accessToken?: string | null;
+  authorities?: string[] | null;
+  expiresAt?: string | null;
+  organizationId?: string | null;
+  organizationName?: string | null;
+  platformOrganization?: boolean | null;
+  refreshToken?: string | null;
+  roleId?: string | null;
+  roleName?: string | null;
+  tokenType?: string | null;
+  user?:   | {
+     active?: boolean | null;
+     createdAt?: string | null;
+     displayName?: string | null;
+     email?: string | null;
+     id?: string | null;
+     username?: string | null;
+   }
+     | null;
+}>;
+```
+
+Trades the callback page's `code` for a session. Throws OIDC_CODE_INVALID, OIDC_EMAIL_NOT_VERIFIED,
+AUTH_NO_ACCOUNT, IDENTITY_LINK_REQUIRED (sign in another way, then link the provider from the profile), and two
+that keep the code usable: ORG_SELECTION_REQUIRED (call again with `organizationId`) and SIGNUP_REQUIRED (ask for
+an organization name, then `signUpWithProvider`; see `providerSignupDetails`).
+
+Without `invitationToken`, the invitation kept by `startProviderSignIn` goes with it; it is forgotten once the
+exchange is settled. Pass `invitationToken: null` to send none.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `request` | [`ProviderExchangeRequest`](#providerexchangerequest) |
+
+###### Returns
+
+`Promise`\<\{
+  `accessToken?`: `string` \| `null`;
+  `authorities?`: `string`[] \| `null`;
+  `expiresAt?`: `string` \| `null`;
+  `organizationId?`: `string` \| `null`;
+  `organizationName?`: `string` \| `null`;
+  `platformOrganization?`: `boolean` \| `null`;
+  `refreshToken?`: `string` \| `null`;
+  `roleId?`: `string` \| `null`;
+  `roleName?`: `string` \| `null`;
+  `tokenType?`: `string` \| `null`;
+  `user?`:   \| \{
+     `active?`: `boolean` \| `null`;
+     `createdAt?`: `string` \| `null`;
+     `displayName?`: `string` \| `null`;
+     `email?`: `string` \| `null`;
+     `id?`: `string` \| `null`;
+     `username?`: `string` \| `null`;
+   \}
+     \| `null`;
+\}\>
 
 ##### getSnapshot()
 
@@ -434,6 +661,27 @@ backend-for-frontend, that also clears its cookies.
 
 `Promise`\<`void`\>
 
+##### providerSignInUrl()
+
+```ts
+providerSignInUrl(providerId, returnTo?): string;
+```
+
+Where to send the browser to sign in with a provider: `location.assign(url)`, or a plain link. It is a navigation,
+not a fetch: the server redirects to the provider, which comes back to the frontend's callback page. `returnTo` is
+a path on this site to land on afterwards. Behind a backend-for-frontend the URL goes through it.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `providerId` | `string` |
+| `returnTo?` | `string` \| `null` |
+
+###### Returns
+
+`string`
+
 ##### refresh()
 
 ```ts
@@ -446,6 +694,25 @@ when the tokens are kept on the server, which sets them itself).
 ###### Returns
 
 `Promise`\<`string`\>
+
+##### requestEmailCode()
+
+```ts
+requestEmailCode(email): Promise<void>;
+```
+
+Emails a six-digit sign-in code. Resolves alike whether or not the address has an account, so it reveals nothing.
+Throws EMAIL_CODE_UNAVAILABLE when codes are not offered, AUTH_TOO_MANY_ATTEMPTS (see `retryAfterSeconds`).
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `email` | `string` |
+
+###### Returns
+
+`Promise`\<`void`\>
 
 ##### restore()
 
@@ -460,6 +727,117 @@ backend-for-frontend says which session its cookies hold, if any.
 ###### Returns
 
 `Promise`\<`void`\>
+
+##### signInOptions()
+
+```ts
+signInOptions(): Promise<SignInOptions>;
+```
+
+What a sign-in page can offer: a password, an emailed code, sign-up (`signup: 'organization'`), and the providers
+to show buttons for. Public.
+
+###### Returns
+
+`Promise`\<[`SignInOptions`](#signinoptions-1)\>
+
+##### signUpWithProvider()
+
+```ts
+signUpWithProvider(request): Promise<{
+  accessToken?: string | null;
+  authorities?: string[] | null;
+  expiresAt?: string | null;
+  organizationId?: string | null;
+  organizationName?: string | null;
+  platformOrganization?: boolean | null;
+  refreshToken?: string | null;
+  roleId?: string | null;
+  roleName?: string | null;
+  tokenType?: string | null;
+  user?:   | {
+     active?: boolean | null;
+     createdAt?: string | null;
+     displayName?: string | null;
+     email?: string | null;
+     id?: string | null;
+     username?: string | null;
+   }
+     | null;
+}>;
+```
+
+After SIGNUP_REQUIRED: makes the account with the provider's verified email and a new organization, and signs in.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `request` | [`ProviderSignupRequest`](#providersignuprequest) |
+
+###### Returns
+
+`Promise`\<\{
+  `accessToken?`: `string` \| `null`;
+  `authorities?`: `string`[] \| `null`;
+  `expiresAt?`: `string` \| `null`;
+  `organizationId?`: `string` \| `null`;
+  `organizationName?`: `string` \| `null`;
+  `platformOrganization?`: `boolean` \| `null`;
+  `refreshToken?`: `string` \| `null`;
+  `roleId?`: `string` \| `null`;
+  `roleName?`: `string` \| `null`;
+  `tokenType?`: `string` \| `null`;
+  `user?`:   \| \{
+     `active?`: `boolean` \| `null`;
+     `createdAt?`: `string` \| `null`;
+     `displayName?`: `string` \| `null`;
+     `email?`: `string` \| `null`;
+     `id?`: `string` \| `null`;
+     `username?`: `string` \| `null`;
+   \}
+     \| `null`;
+\}\>
+
+##### startProviderSignIn()
+
+```ts
+startProviderSignIn(providerId, start?): string;
+```
+
+Starts a sign-in with a provider: keeps `invitationToken` for the callback page's exchange (or forgets one left
+over), and returns where to send the browser (`location.assign(url)`).
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `providerId` | `string` |
+| `start` | [`ProviderSignInStart`](#providersigninstart) |
+
+###### Returns
+
+`string`
+
+##### startSignup()
+
+```ts
+startSignup(request): Promise<SignupStarted>;
+```
+
+Signs up with a new organization the person will administer: emails a code that completes it (`confirmSignup`).
+Asking again replaces the code. Throws SIGNUP_DISABLED, EMAIL_IN_USE, ORGANIZATION_NAME_IN_USE, PASSWORD_INVALID,
+SIGNUP_EMAIL_DOMAIN_NOT_ALLOWED, EMAIL_CODE_RATE_LIMITED or EMAIL_CODE_UNAVAILABLE.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `request` | [`SignupRequest`](#signuprequest) |
+
+###### Returns
+
+`Promise`\<[`SignupStarted`](#signupstarted)\>
 
 ##### subscribe()
 
@@ -535,7 +913,205 @@ Moves the session into another of the person's organizations.
      \| `null`;
 \}\>
 
+##### verifyEmailCode()
+
+```ts
+verifyEmailCode(request): Promise<{
+  accessToken?: string | null;
+  authorities?: string[] | null;
+  expiresAt?: string | null;
+  organizationId?: string | null;
+  organizationName?: string | null;
+  platformOrganization?: boolean | null;
+  refreshToken?: string | null;
+  roleId?: string | null;
+  roleName?: string | null;
+  tokenType?: string | null;
+  user?:   | {
+     active?: boolean | null;
+     createdAt?: string | null;
+     displayName?: string | null;
+     email?: string | null;
+     id?: string | null;
+     username?: string | null;
+   }
+     | null;
+}>;
+```
+
+Signs in with the emailed code. Throws EMAIL_CODE_INVALID, EMAIL_CODE_EXPIRED or EMAIL_CODE_TOO_MANY_ATTEMPTS (the
+last two: ask for a new code), AUTH_TOO_MANY_ATTEMPTS, or ORG_SELECTION_REQUIRED: the code is kept, so call again
+with the same code and `organizationId` (see `organizationChoices`).
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `request` | [`EmailCodeSignInRequest`](#emailcodesigninrequest) |
+
+###### Returns
+
+`Promise`\<\{
+  `accessToken?`: `string` \| `null`;
+  `authorities?`: `string`[] \| `null`;
+  `expiresAt?`: `string` \| `null`;
+  `organizationId?`: `string` \| `null`;
+  `organizationName?`: `string` \| `null`;
+  `platformOrganization?`: `boolean` \| `null`;
+  `refreshToken?`: `string` \| `null`;
+  `roleId?`: `string` \| `null`;
+  `roleName?`: `string` \| `null`;
+  `tokenType?`: `string` \| `null`;
+  `user?`:   \| \{
+     `active?`: `boolean` \| `null`;
+     `createdAt?`: `string` \| `null`;
+     `displayName?`: `string` \| `null`;
+     `email?`: `string` \| `null`;
+     `id?`: `string` \| `null`;
+     `username?`: `string` \| `null`;
+   \}
+     \| `null`;
+\}\>
+
 ## Interfaces
+
+### AttachedTo
+
+The record a file is attached to: an application's own type and id, e.g. `order` / the order's id.
+
+#### Properties
+
+| Property | Type |
+| ------ | ------ |
+| <a id="property-attachedid"></a> `attachedId` | `string` |
+| <a id="property-attachedtype"></a> `attachedType` | `string` |
+
+***
+
+### Attachments
+
+One answer from the server, loaded for the current session and reloaded on demand.
+
+#### Extends
+
+- [`EgradxQuery`](#egradxquery)\<[`EgradxFile`](#egradxfile)[]\>
+
+#### Methods
+
+##### getSnapshot()
+
+```ts
+getSnapshot(): QuerySnapshot;
+```
+
+###### Returns
+
+[`QuerySnapshot`](#querysnapshot)
+
+###### Inherited from
+
+[`EgradxQuery`](#egradxquery).[`getSnapshot`](#getsnapshot-5)
+
+##### reload()
+
+```ts
+reload(): Promise<void>;
+```
+
+###### Returns
+
+`Promise`\<`void`\>
+
+###### Inherited from
+
+[`EgradxQuery`](#egradxquery).[`reload`](#reload-4)
+
+##### remove()
+
+```ts
+remove(fileId): Promise<void>;
+```
+
+Deletes one of them, then reloads.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `fileId` | `string` |
+
+###### Returns
+
+`Promise`\<`void`\>
+
+##### start()
+
+```ts
+start(): void;
+```
+
+###### Returns
+
+`void`
+
+###### Inherited from
+
+[`EgradxQuery`](#egradxquery).[`start`](#start-4)
+
+##### stop()
+
+```ts
+stop(): void;
+```
+
+###### Returns
+
+`void`
+
+###### Inherited from
+
+[`EgradxQuery`](#egradxquery).[`stop`](#stop-4)
+
+##### subscribe()
+
+```ts
+subscribe(listener): () => void;
+```
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `listener` | () => `void` |
+
+###### Returns
+
+() => `void`
+
+###### Inherited from
+
+[`EgradxQuery`](#egradxquery).[`subscribe`](#subscribe-5)
+
+##### upload()
+
+```ts
+upload(file, options?): Promise<EgradxFile>;
+```
+
+Uploads a file to the record, then reloads. Same errors as `client.files.upload`.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `file` | `Blob` |
+| `options?` | `Omit`\<[`UploadOptions`](#uploadoptions), `"attachedType"` \| `"attachedId"`\> |
+
+###### Returns
+
+`Promise`\<[`EgradxFile`](#egradxfile)\>
+
+***
 
 ### AuditActionDefinition
 
@@ -645,7 +1221,7 @@ getSnapshot(): AuditListSnapshot;
 
 ###### Inherited from
 
-[`EgradxStore`](#egradxstore).[`getSnapshot`](#getsnapshot-5)
+[`EgradxStore`](#egradxstore).[`getSnapshot`](#getsnapshot-6)
 
 ##### loadMore()
 
@@ -697,7 +1273,7 @@ start(): void;
 
 ###### Inherited from
 
-[`EgradxStore`](#egradxstore).[`start`](#start-4)
+[`EgradxStore`](#egradxstore).[`start`](#start-5)
 
 ##### stop()
 
@@ -711,7 +1287,7 @@ stop(): void;
 
 ###### Inherited from
 
-[`EgradxStore`](#egradxstore).[`stop`](#stop-4)
+[`EgradxStore`](#egradxstore).[`stop`](#stop-5)
 
 ##### subscribe()
 
@@ -731,7 +1307,7 @@ subscribe(listener): () => void;
 
 ###### Inherited from
 
-[`EgradxStore`](#egradxstore).[`subscribe`](#subscribe-5)
+[`EgradxStore`](#egradxstore).[`subscribe`](#subscribe-6)
 
 ***
 
@@ -809,6 +1385,17 @@ subscribe(listener): () => void;
 | Property | Type | Description |
 | ------ | ------ | ------ |
 | <a id="property-platform-1"></a> `platform?` | `boolean` | Search every organization's records (`/egradx/audit/platform/**`; needs `egradx.audit.platform.read`). Default: the caller's organization. |
+
+***
+
+### ChangePasswordRequest
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-currentpassword"></a> `currentPassword?` | `string` \| `null` | Leave out to set a first password, when the person has none (see `SignInMethods.password`). |
+| <a id="property-newpassword"></a> `newPassword` | `string` | - |
 
 ***
 
@@ -959,7 +1546,7 @@ getSnapshot(): QuerySnapshot;
 
 ###### Inherited from
 
-[`EgradxQuery`](#egradxquery).[`getSnapshot`](#getsnapshot-4)
+[`EgradxQuery`](#egradxquery).[`getSnapshot`](#getsnapshot-5)
 
 ##### makePrimary()
 
@@ -991,7 +1578,7 @@ reload(): Promise<void>;
 
 ###### Inherited from
 
-[`EgradxQuery`](#egradxquery).[`reload`](#reload-3)
+[`EgradxQuery`](#egradxquery).[`reload`](#reload-4)
 
 ##### remove()
 
@@ -1021,7 +1608,7 @@ start(): void;
 
 ###### Inherited from
 
-[`EgradxQuery`](#egradxquery).[`start`](#start-3)
+[`EgradxQuery`](#egradxquery).[`start`](#start-4)
 
 ##### startVerification()
 
@@ -1053,7 +1640,7 @@ stop(): void;
 
 ###### Inherited from
 
-[`EgradxQuery`](#egradxquery).[`stop`](#stop-3)
+[`EgradxQuery`](#egradxquery).[`stop`](#stop-4)
 
 ##### subscribe()
 
@@ -1073,7 +1660,7 @@ subscribe(listener): () => void;
 
 ###### Inherited from
 
-[`EgradxQuery`](#egradxquery).[`subscribe`](#subscribe-4)
+[`EgradxQuery`](#egradxquery).[`subscribe`](#subscribe-5)
 
 ***
 
@@ -1150,7 +1737,7 @@ getSnapshot(): DeliveryLogSnapshot;
 
 ###### Inherited from
 
-[`EgradxStore`](#egradxstore).[`getSnapshot`](#getsnapshot-5)
+[`EgradxStore`](#egradxstore).[`getSnapshot`](#getsnapshot-6)
 
 ##### reload()
 
@@ -1224,7 +1811,7 @@ start(): void;
 
 ###### Inherited from
 
-[`EgradxStore`](#egradxstore).[`start`](#start-4)
+[`EgradxStore`](#egradxstore).[`start`](#start-5)
 
 ##### stop()
 
@@ -1238,7 +1825,7 @@ stop(): void;
 
 ###### Inherited from
 
-[`EgradxStore`](#egradxstore).[`stop`](#stop-4)
+[`EgradxStore`](#egradxstore).[`stop`](#stop-5)
 
 ##### subscribe()
 
@@ -1258,7 +1845,7 @@ subscribe(listener): () => void;
 
 ###### Inherited from
 
-[`EgradxStore`](#egradxstore).[`subscribe`](#subscribe-5)
+[`EgradxStore`](#egradxstore).[`subscribe`](#subscribe-6)
 
 ***
 
@@ -1294,6 +1881,44 @@ subscribe(listener): () => void;
 
 ***
 
+### DisplayUrl
+
+A displayable URL for a file, and what to call when it is no longer shown.
+
+#### Properties
+
+| Property | Type |
+| ------ | ------ |
+| <a id="property-url"></a> `url` | `string` |
+
+#### Methods
+
+##### revoke()
+
+```ts
+revoke(): void;
+```
+
+Releases an object URL; does nothing for a plain one.
+
+###### Returns
+
+`void`
+
+***
+
+### DownloadedFile
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-blob-1"></a> `blob` | `Blob` | - |
+| <a id="property-contenttype"></a> `contentType` | `string` | - |
+| <a id="property-name-1"></a> `name` | `string` | From `Content-Disposition`, falling back to the file's details. |
+
+***
+
 ### EgradxClient
 
 #### Properties
@@ -1303,6 +1928,7 @@ subscribe(listener): () => void;
 | <a id="property-audit"></a> `audit` | `readonly` | `Client`\<`paths`\> | Typed calls to /egradx/audit/**. |
 | <a id="property-auth"></a> `auth` | `readonly` | `Client`\<`paths`\> | Typed calls to /egradx/auth/**, generated from contracts/openapi/auth.yaml. |
 | <a id="property-baseurl"></a> `baseUrl` | `readonly` | `string` | - |
+| <a id="property-files"></a> `files` | `readonly` | [`EgradxFiles`](#egradxfiles) | Files (contracts/openapi/files.yaml): upload with progress, a record's files, downloads with the session (a Blob, an object URL, or saved under the file's name), delete, and the signed-in person's profile photo. |
 | <a id="property-notification"></a> `notification` | `readonly` | `Client`\<`paths`\> | Typed calls to /egradx/notifications/**. |
 | <a id="property-session"></a> `session` | `readonly` | [`EgradxSessionManager`](#egradxsessionmanager) | - |
 
@@ -1340,6 +1966,7 @@ endpoints too.
 | <a id="property-baseurl-1"></a> `baseUrl` | `string` | Where the application serves the EGRADX endpoints, including any context path, e.g. `/api` or `https://app.example.com/api`. Must be absolute outside a browser. |
 | <a id="property-expiryskewms"></a> `expirySkewMs?` | `number` | How long before its expiry an access token is treated as expired. Default 30 s. |
 | <a id="property-fetch"></a> `fetch?` | (`input`, `init?`) => `Promise`\<`Response`\> | The fetch to send requests with. Default: the global fetch. |
+| <a id="property-invitationhandoff"></a> `invitationHandoff?` | [`InvitationHandoff`](#invitationhandoff) | Where an invitation's token waits while the browser is at a provider (`startProviderSignIn` with `invitationToken`). Default: sessionStorage, key `egradx.pendingInvitation`. |
 | <a id="property-onsessionended"></a> `onSessionEnded?` | (`reason`) => `void` | The session ended without the person signing out: the server refused to refresh it. `reason` is the server's error when it gave one, e.g. `ORG_SUSPENDED` or `SESSION_REVOKED`. |
 | <a id="property-storage"></a> `storage?` | [`TokenStore`](#tokenstore) | Where the session is kept. Default: localStorage, key `egradx.session`. |
 | <a id="property-tokens"></a> `tokens?` | [`TokenMode`](#tokenmode) | Who keeps the tokens. `browser` (the default): this client, sending the access token itself. `server`: a backend-for-frontend at `baseUrl` (@babulvaibhav/egradx-next) keeps them in HttpOnly cookies and adds them to each request, so no script on the page can read them. Sign-in, refresh, switching organization and sign-out go through it as usual; it answers with the session minus its tokens. |
@@ -1365,6 +1992,314 @@ The body of every non-2xx response from an EGRADX endpoint (contracts/schemas/er
 
 ***
 
+### EgradxFile
+
+A stored file, as the API answers it (contracts/openapi/files.yaml).
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-attachedid-1"></a> `attachedId` | `string` \| `null` | - |
+| <a id="property-attachedtype-1"></a> `attachedType` | `string` \| `null` | The application record it belongs to, e.g. `order` / `42`; both null when it belongs to none. |
+| <a id="property-contenttype-1"></a> `contentType` | `string` | - |
+| <a id="property-contenturl"></a> `contentUrl` | `string` | Where to download it, relative to the API: `/egradx/files/{id}/content`. |
+| <a id="property-createdat-3"></a> `createdAt` | `string` | - |
+| <a id="property-id-6"></a> `id` | `string` | - |
+| <a id="property-name-2"></a> `name` | `string` | The original file name, cleaned by the server. |
+| <a id="property-organizationid-6"></a> `organizationId` | `string` | - |
+| <a id="property-purpose"></a> `purpose` | `string` | `attachment` (the default), `profile-photo`, or an application's own word. |
+| <a id="property-sha256"></a> `sha256` | `string` | - |
+| <a id="property-size"></a> `size` | `number` | - |
+| <a id="property-uploadedby"></a> `uploadedBy` | `string` \| `null` | Null once the person who uploaded it is gone. |
+
+***
+
+### EgradxFiles
+
+The files API. A file is named by its id, by its content URL (`/egradx/files/{id}/content`, which is what `photoUrl`
+and `contentUrl` hold), or by an absolute URL. Only URLs of this API get the session; any other is fetched as it is.
+
+#### Methods
+
+##### contentUrl()
+
+```ts
+contentUrl(file): string;
+```
+
+The file's URL under `baseUrl`: what an `<img src>` or a link needs where cookies carry the session (behind a
+backend-for-frontend). With the token in the browser, a plain URL is refused: use `displayUrl` or `objectUrl`.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `file` | `string` |
+
+###### Returns
+
+`string`
+
+##### displayUrl()
+
+```ts
+displayUrl(file, options?): Promise<DisplayUrl>;
+```
+
+A URL to show the file at. Behind a backend-for-frontend (`tokens: 'server'`), its cookie goes with a plain URL,
+so this is the URL itself and nothing is downloaded; with the token in the browser, it is an object URL of the
+downloaded bytes. Call `revoke()` when it is no longer shown.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `file` | `string` |
+| `options?` | [`FileRequestOptions`](#filerequestoptions) |
+
+###### Returns
+
+`Promise`\<[`DisplayUrl`](#displayurl)\>
+
+##### download()
+
+```ts
+download(file, options?): Promise<DownloadedFile>;
+```
+
+The bytes, with the session, and the name to save them under. Follows a redirect to a pre-signed URL.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `file` | `string` |
+| `options?` | [`FileRequestOptions`](#filerequestoptions) & `object` |
+
+###### Returns
+
+`Promise`\<[`DownloadedFile`](#downloadedfile)\>
+
+##### get()
+
+```ts
+get(fileId, options?): Promise<EgradxFile>;
+```
+
+One file's details. Throws NOT_FOUND, ACCESS_DENIED.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `fileId` | `string` |
+| `options?` | [`FileRequestOptions`](#filerequestoptions) |
+
+###### Returns
+
+`Promise`\<[`EgradxFile`](#egradxfile)\>
+
+##### list()
+
+```ts
+list(attachedTo, options?): Promise<EgradxFile[]>;
+```
+
+The files attached to one record that the caller may read, newest first, at most 200.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `attachedTo` | [`AttachedTo`](#attachedto) |
+| `options?` | [`FileRequestOptions`](#filerequestoptions) |
+
+###### Returns
+
+`Promise`\<[`EgradxFile`](#egradxfile)[]\>
+
+##### objectUrl()
+
+```ts
+objectUrl(file, options?): Promise<string>;
+```
+
+The bytes as an object URL, for `<img src>`, `<iframe src>` or a link. Call `URL.revokeObjectURL(url)` when it is
+no longer shown.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `file` | `string` |
+| `options?` | [`FileRequestOptions`](#filerequestoptions) |
+
+###### Returns
+
+`Promise`\<`string`\>
+
+##### onProfilePhotoChange()
+
+```ts
+onProfilePhotoChange(listener): () => void;
+```
+
+Hears of the profile photo changing through this client: `photoUrl` is the new one, or null once removed.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `listener` | (`photoUrl`) => `void` |
+
+###### Returns
+
+() => `void`
+
+##### remove()
+
+```ts
+remove(fileId): Promise<void>;
+```
+
+Deletes the file. Throws NOT_FOUND, ACCESS_DENIED.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `fileId` | `string` |
+
+###### Returns
+
+`Promise`\<`void`\>
+
+##### removeProfilePhoto()
+
+```ts
+removeProfilePhoto(): Promise<void>;
+```
+
+Removes the signed-in person's profile photo.
+
+###### Returns
+
+`Promise`\<`void`\>
+
+##### save()
+
+```ts
+save(file, options?): Promise<void>;
+```
+
+Downloads the file and has the browser save it under its name (or `name`). Browser only.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `file` | `string` |
+| `options?` | [`FileRequestOptions`](#filerequestoptions) & `object` |
+
+###### Returns
+
+`Promise`\<`void`\>
+
+##### setProfilePhoto()
+
+```ts
+setProfilePhoto(file, options?): Promise<{
+  address?:   | {
+     city?: string | null;
+     countryCode?: string | null;
+     line1?: string | null;
+     line2?: string | null;
+     postalCode?: string | null;
+     region?: string | null;
+   }
+     | null;
+  attributes?:   | {
+   [key: string]: unknown;
+   }
+     | null;
+  contacts?: object[] | null;
+  displayName?: string | null;
+  email?: string | null;
+  firstName?: string | null;
+  jobTitle?: string | null;
+  lastName?: string | null;
+  locale?: string | null;
+  photoUrl?: string | null;
+  timeZone?: string | null;
+  updatedAt?: string | null;
+  userId?: string | null;
+  username?: string | null;
+}>;
+```
+
+Sets the signed-in person's profile photo (PNG, JPEG or WebP, 5 MB by default), replacing the earlier one. Resolves
+with the profile, whose `photoUrl` is the new photo's content URL.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `file` | `Blob` |
+| `options?` | `Omit`\<[`UploadOptions`](#uploadoptions), `"attachedType"` \| `"attachedId"` \| `"purpose"`\> |
+
+###### Returns
+
+`Promise`\<\{
+  `address?`:   \| \{
+     `city?`: `string` \| `null`;
+     `countryCode?`: `string` \| `null`;
+     `line1?`: `string` \| `null`;
+     `line2?`: `string` \| `null`;
+     `postalCode?`: `string` \| `null`;
+     `region?`: `string` \| `null`;
+   \}
+     \| `null`;
+  `attributes?`:   \| \{
+   \[`key`: `string`\]: `unknown`;
+   \}
+     \| `null`;
+  `contacts?`: `object`[] \| `null`;
+  `displayName?`: `string` \| `null`;
+  `email?`: `string` \| `null`;
+  `firstName?`: `string` \| `null`;
+  `jobTitle?`: `string` \| `null`;
+  `lastName?`: `string` \| `null`;
+  `locale?`: `string` \| `null`;
+  `photoUrl?`: `string` \| `null`;
+  `timeZone?`: `string` \| `null`;
+  `updatedAt?`: `string` \| `null`;
+  `userId?`: `string` \| `null`;
+  `username?`: `string` \| `null`;
+\}\>
+
+##### upload()
+
+```ts
+upload(file, options?): Promise<EgradxFile>;
+```
+
+Uploads one file (multipart `file`). Throws EgradxApiError: FILE_EMPTY, FILE_TOO_LARGE, FILE_TYPE_NOT_ALLOWED,
+FILE_REJECTED, FILE_STORAGE_UNAVAILABLE, ACCESS_DENIED.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `file` | `Blob` |
+| `options?` | [`UploadOptions`](#uploadoptions) |
+
+###### Returns
+
+`Promise`\<[`EgradxFile`](#egradxfile)\>
+
+***
+
 ### EgradxQuery
 
 One answer from the server, loaded for the current session and reloaded on demand.
@@ -1376,8 +2311,11 @@ One answer from the server, loaded for the current session and reloaded on deman
 #### Extended by
 
 - [`NotificationChannels`](#notificationchannels)
+- [`SignInMethods`](#signinmethods)
 - [`Contacts`](#contacts)
 - [`NotificationPreferences`](#notificationpreferences)
+- [`Attachments`](#attachments)
+- [`ProfilePhoto`](#profilephoto)
 
 #### Type Parameters
 
@@ -1399,7 +2337,7 @@ getSnapshot(): QuerySnapshot;
 
 ###### Inherited from
 
-[`EgradxStore`](#egradxstore).[`getSnapshot`](#getsnapshot-5)
+[`EgradxStore`](#egradxstore).[`getSnapshot`](#getsnapshot-6)
 
 ##### reload()
 
@@ -1423,7 +2361,7 @@ start(): void;
 
 ###### Inherited from
 
-[`EgradxStore`](#egradxstore).[`start`](#start-4)
+[`EgradxStore`](#egradxstore).[`start`](#start-5)
 
 ##### stop()
 
@@ -1437,7 +2375,7 @@ stop(): void;
 
 ###### Inherited from
 
-[`EgradxStore`](#egradxstore).[`stop`](#stop-4)
+[`EgradxStore`](#egradxstore).[`stop`](#stop-5)
 
 ##### subscribe()
 
@@ -1457,7 +2395,7 @@ subscribe(listener): () => void;
 
 ###### Inherited from
 
-[`EgradxStore`](#egradxstore).[`subscribe`](#subscribe-5)
+[`EgradxStore`](#egradxstore).[`subscribe`](#subscribe-6)
 
 ***
 
@@ -1527,6 +2465,45 @@ subscribe(listener): () => void;
 ###### Returns
 
 () => `void`
+
+***
+
+### EmailCodeSignInRequest
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-code-1"></a> `code` | `string` | The six digits emailed. |
+| <a id="property-email"></a> `email` | `string` | - |
+| <a id="property-organizationid-7"></a> `organizationId?` | `string` \| `null` | After ORG_SELECTION_REQUIRED: the organization chosen, sent with the same code. |
+
+***
+
+### FileLimits
+
+Limits to check a file against before uploading it, as the server would.
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-accept"></a> `accept?` | `string` \| readonly `string`[] | What the file may be, as an `<input accept>` lists it: media types (`image/png`), families (`image/*`) and extensions (`.pdf`), comma-separated or as an array. |
+| <a id="property-maxsize"></a> `maxSize?` | `number` | The largest size in bytes. |
+
+***
+
+### FileRequestOptions
+
+#### Extended by
+
+- [`UploadOptions`](#uploadoptions)
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-signal"></a> `signal?` | `AbortSignal` | Aborting rejects with the AbortError, not an EgradxApiError. |
 
 ***
 
@@ -1657,13 +2634,78 @@ subscribe(listener): () => void;
 
 ***
 
+### InvitationHandoff
+
+Keeps an invitation's token while the browser is away at a provider, so the callback page's exchange accepts the
+invitation. `session.startProviderSignIn(id, { invitationToken })` keeps it, `session.exchangeProviderCode` sends
+it by itself and forgets it once the exchange is settled. Per tab.
+
+#### Methods
+
+##### clear()
+
+```ts
+clear(): void;
+```
+
+###### Returns
+
+`void`
+
+##### keep()
+
+```ts
+keep(token): void;
+```
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `token` | `string` |
+
+###### Returns
+
+`void`
+
+##### peek()
+
+```ts
+peek(): string | null;
+```
+
+The token kept, or null.
+
+###### Returns
+
+`string` \| `null`
+
+***
+
+### LinkedIdentity
+
+A provider linked to the signed-in person's account.
+
+#### Properties
+
+| Property | Type |
+| ------ | ------ |
+| <a id="property-createdat-4"></a> `createdAt` | `string` |
+| <a id="property-email-1"></a> `email` | `string` \| `null` |
+| <a id="property-id-7"></a> `id` | `string` |
+| <a id="property-lastusedat"></a> `lastUsedAt` | `string` \| `null` |
+| <a id="property-provider"></a> `provider` | `string` |
+| <a id="property-providername"></a> `providerName` | `string` |
+
+***
+
 ### LoginRequest
 
 #### Properties
 
 | Property | Type | Description |
 | ------ | ------ | ------ |
-| <a id="property-organizationid-6"></a> `organizationId?` | `string` \| `null` | Needed only for someone in several organizations; without it sign-in fails with ORG_SELECTION_REQUIRED. |
+| <a id="property-organizationid-8"></a> `organizationId?` | `string` \| `null` | Needed only for someone in several organizations; without it sign-in fails with ORG_SELECTION_REQUIRED. |
 | <a id="property-password"></a> `password` | `string` | - |
 | <a id="property-username"></a> `username` | `string` | A username or an email address. |
 
@@ -1723,7 +2765,7 @@ getSnapshot(): QuerySnapshot;
 
 ###### Inherited from
 
-[`EgradxQuery`](#egradxquery).[`getSnapshot`](#getsnapshot-4)
+[`EgradxQuery`](#egradxquery).[`getSnapshot`](#getsnapshot-5)
 
 ##### reload()
 
@@ -1737,7 +2779,7 @@ reload(): Promise<void>;
 
 ###### Inherited from
 
-[`EgradxQuery`](#egradxquery).[`reload`](#reload-3)
+[`EgradxQuery`](#egradxquery).[`reload`](#reload-4)
 
 ##### remove()
 
@@ -1788,7 +2830,7 @@ start(): void;
 
 ###### Inherited from
 
-[`EgradxQuery`](#egradxquery).[`start`](#start-3)
+[`EgradxQuery`](#egradxquery).[`start`](#start-4)
 
 ##### stop()
 
@@ -1802,7 +2844,7 @@ stop(): void;
 
 ###### Inherited from
 
-[`EgradxQuery`](#egradxquery).[`stop`](#stop-3)
+[`EgradxQuery`](#egradxquery).[`stop`](#stop-4)
 
 ##### subscribe()
 
@@ -1822,7 +2864,7 @@ subscribe(listener): () => void;
 
 ###### Inherited from
 
-[`EgradxQuery`](#egradxquery).[`subscribe`](#subscribe-4)
+[`EgradxQuery`](#egradxquery).[`subscribe`](#subscribe-5)
 
 ##### test()
 
@@ -1867,7 +2909,7 @@ getSnapshot(): QuerySnapshot;
 
 ###### Inherited from
 
-[`EgradxQuery`](#egradxquery).[`getSnapshot`](#getsnapshot-4)
+[`EgradxQuery`](#egradxquery).[`getSnapshot`](#getsnapshot-5)
 
 ##### reload()
 
@@ -1881,7 +2923,7 @@ reload(): Promise<void>;
 
 ###### Inherited from
 
-[`EgradxQuery`](#egradxquery).[`reload`](#reload-3)
+[`EgradxQuery`](#egradxquery).[`reload`](#reload-4)
 
 ##### save()
 
@@ -1913,7 +2955,7 @@ start(): void;
 
 ###### Inherited from
 
-[`EgradxQuery`](#egradxquery).[`start`](#start-3)
+[`EgradxQuery`](#egradxquery).[`start`](#start-4)
 
 ##### stop()
 
@@ -1927,7 +2969,7 @@ stop(): void;
 
 ###### Inherited from
 
-[`EgradxQuery`](#egradxquery).[`stop`](#stop-3)
+[`EgradxQuery`](#egradxquery).[`stop`](#stop-4)
 
 ##### subscribe()
 
@@ -1947,7 +2989,7 @@ subscribe(listener): () => void;
 
 ###### Inherited from
 
-[`EgradxQuery`](#egradxquery).[`subscribe`](#subscribe-4)
+[`EgradxQuery`](#egradxquery).[`subscribe`](#subscribe-5)
 
 ***
 
@@ -1987,6 +3029,24 @@ subscribe(listener): () => void;
 
 ***
 
+### OrganizationChoice
+
+An organization to choose, from ORG_SELECTION_REQUIRED's `details.organizations`.
+
+#### Properties
+
+| Property | Type |
+| ------ | ------ |
+| <a id="property-current"></a> `current` | `boolean` |
+| <a id="property-name-3"></a> `name` | `string` |
+| <a id="property-organizationid-9"></a> `organizationId` | `string` |
+| <a id="property-platformorganization"></a> `platformOrganization` | `boolean` |
+| <a id="property-roleid"></a> `roleId` | `string` \| `null` |
+| <a id="property-rolename"></a> `roleName` | `string` \| `null` |
+| <a id="property-status-4"></a> `status` | `string` |
+
+***
+
 ### PreferenceOptions
 
 What a person's notification settings can offer: the channels that reach a person, and the types they may decline.
@@ -2013,6 +3073,250 @@ What a person's notification settings can offer: the channels that reach a perso
 | <a id="property-verificationavailable"></a> `verificationAvailable` | `boolean` | False when nothing can send verification codes; an administrator can still vouch for an address. |
 | <a id="property-verificationcodettlseconds"></a> `verificationCodeTtlSeconds` | `number` | - |
 | <a id="property-verificationresendintervalseconds"></a> `verificationResendIntervalSeconds` | `number` | - |
+
+***
+
+### ProfilePhoto
+
+One answer from the server, loaded for the current session and reloaded on demand.
+
+#### Extends
+
+- [`EgradxQuery`](#egradxquery)\<[`ProfilePhotoData`](#profilephotodata)\>
+
+#### Methods
+
+##### getSnapshot()
+
+```ts
+getSnapshot(): QuerySnapshot;
+```
+
+###### Returns
+
+[`QuerySnapshot`](#querysnapshot)
+
+###### Inherited from
+
+[`EgradxQuery`](#egradxquery).[`getSnapshot`](#getsnapshot-5)
+
+##### reload()
+
+```ts
+reload(): Promise<void>;
+```
+
+###### Returns
+
+`Promise`\<`void`\>
+
+###### Inherited from
+
+[`EgradxQuery`](#egradxquery).[`reload`](#reload-4)
+
+##### remove()
+
+```ts
+remove(): Promise<void>;
+```
+
+###### Returns
+
+`Promise`\<`void`\>
+
+##### set()
+
+```ts
+set(file, options?): Promise<{
+  address?:   | {
+     city?: string | null;
+     countryCode?: string | null;
+     line1?: string | null;
+     line2?: string | null;
+     postalCode?: string | null;
+     region?: string | null;
+   }
+     | null;
+  attributes?:   | {
+   [key: string]: unknown;
+   }
+     | null;
+  contacts?: object[] | null;
+  displayName?: string | null;
+  email?: string | null;
+  firstName?: string | null;
+  jobTitle?: string | null;
+  lastName?: string | null;
+  locale?: string | null;
+  photoUrl?: string | null;
+  timeZone?: string | null;
+  updatedAt?: string | null;
+  userId?: string | null;
+  username?: string | null;
+}>;
+```
+
+Replaces the photo. Every profile-photo store of this client reloads.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `file` | `Blob` |
+| `options?` | `Omit`\<[`UploadOptions`](#uploadoptions), `"attachedType"` \| `"attachedId"` \| `"purpose"`\> |
+
+###### Returns
+
+`Promise`\<\{
+  `address?`:   \| \{
+     `city?`: `string` \| `null`;
+     `countryCode?`: `string` \| `null`;
+     `line1?`: `string` \| `null`;
+     `line2?`: `string` \| `null`;
+     `postalCode?`: `string` \| `null`;
+     `region?`: `string` \| `null`;
+   \}
+     \| `null`;
+  `attributes?`:   \| \{
+   \[`key`: `string`\]: `unknown`;
+   \}
+     \| `null`;
+  `contacts?`: `object`[] \| `null`;
+  `displayName?`: `string` \| `null`;
+  `email?`: `string` \| `null`;
+  `firstName?`: `string` \| `null`;
+  `jobTitle?`: `string` \| `null`;
+  `lastName?`: `string` \| `null`;
+  `locale?`: `string` \| `null`;
+  `photoUrl?`: `string` \| `null`;
+  `timeZone?`: `string` \| `null`;
+  `updatedAt?`: `string` \| `null`;
+  `userId?`: `string` \| `null`;
+  `username?`: `string` \| `null`;
+\}\>
+
+##### start()
+
+```ts
+start(): void;
+```
+
+###### Returns
+
+`void`
+
+###### Inherited from
+
+[`EgradxQuery`](#egradxquery).[`start`](#start-4)
+
+##### stop()
+
+```ts
+stop(): void;
+```
+
+###### Returns
+
+`void`
+
+###### Inherited from
+
+[`EgradxQuery`](#egradxquery).[`stop`](#stop-4)
+
+##### subscribe()
+
+```ts
+subscribe(listener): () => void;
+```
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `listener` | () => `void` |
+
+###### Returns
+
+() => `void`
+
+###### Inherited from
+
+[`EgradxQuery`](#egradxquery).[`subscribe`](#subscribe-5)
+
+***
+
+### ProfilePhotoData
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-photourl"></a> `photoUrl` | `string` \| `null` | The photo's content URL (`/egradx/files/{id}/content`), or null when there is none. |
+
+***
+
+### ProviderExchangeRequest
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-code-2"></a> `code` | `string` | The `code` the frontend's callback page was given. |
+| <a id="property-invitationtoken"></a> `invitationToken?` | `string` \| `null` | Accepts this invitation as a new account when the provider's verified email is the invitation's. |
+| <a id="property-organizationid-10"></a> `organizationId?` | `string` \| `null` | After ORG_SELECTION_REQUIRED: the organization chosen, sent with the same code. |
+
+***
+
+### ProviderIdentityDetails
+
+The provider sign-in that found no way in: IDENTITY_LINK_REQUIRED (an account has the email; sign in another way and
+link the provider from the profile) and AUTH_NO_ACCOUNT (no account, and no sign-up) carry it.
+
+#### Properties
+
+| Property | Type |
+| ------ | ------ |
+| <a id="property-email-2"></a> `email` | `string` \| `null` |
+| <a id="property-provider-1"></a> `provider` | `string` \| `null` |
+| <a id="property-providername-1"></a> `providerName` | `string` \| `null` |
+
+***
+
+### ProviderSignInStart
+
+Starting a provider sign-in (`session.startProviderSignIn`).
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-invitationtoken-1"></a> `invitationToken?` | `string` \| `null` | An invitation to accept with the provider's verified email. It is kept for the callback page's exchange, which sends it by itself. Without it, an invitation left over from an abandoned attempt is forgotten. |
+| <a id="property-returnto"></a> `returnTo?` | `string` \| `null` | A path on this site to land on afterwards. |
+
+***
+
+### ProviderSignupDetails
+
+SIGNUP_REQUIRED's `details`: who the provider says the person is, to sign up with.
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-email-3"></a> `email` | `string` | - |
+| <a id="property-name-4"></a> `name` | `string` \| `null` | - |
+| <a id="property-provider-2"></a> `provider` | `string` | The provider's id. |
+
+***
+
+### ProviderSignupRequest
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-code-3"></a> `code` | `string` | The same code that was answered with SIGNUP_REQUIRED. |
+| <a id="property-organizationname-1"></a> `organizationName` | `string` | - |
 
 ***
 
@@ -2054,7 +3358,231 @@ What a person's notification settings can offer: the channels that reach a perso
 | Property | Modifier | Type |
 | ------ | ------ | ------ |
 | <a id="property-session-1"></a> `session` | `readonly` | \| \{ `accessToken?`: `string` \| `null`; `authorities?`: `string`[] \| `null`; `expiresAt?`: `string` \| `null`; `organizationId?`: `string` \| `null`; `organizationName?`: `string` \| `null`; `platformOrganization?`: `boolean` \| `null`; `refreshToken?`: `string` \| `null`; `roleId?`: `string` \| `null`; `roleName?`: `string` \| `null`; `tokenType?`: `string` \| `null`; `user?`: \| \{ `active?`: `boolean` \| `null`; `createdAt?`: `string` \| `null`; `displayName?`: `string` \| `null`; `email?`: `string` \| `null`; `id?`: `string` \| `null`; `username?`: `string` \| `null`; \} \| `null`; \} \| `null` |
-| <a id="property-status-4"></a> `status` | `readonly` | [`SessionStatus`](#sessionstatus) |
+| <a id="property-status-5"></a> `status` | `readonly` | [`SessionStatus`](#sessionstatus) |
+
+***
+
+### SignInMethod
+
+A method to render: what it is, the server's name for it, and its button text.
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-id-8"></a> `id` | [`SignInMethodId`](#signinmethodid) | - |
+| <a id="property-kind"></a> `kind` | `"password"` \| `"email-code"` \| `"provider"` | - |
+| <a id="property-label-3"></a> `label` | `string` | The button text: `labels[id]`, else "Continue with Google", "Email me a code", "Sign in with a password". |
+| <a id="property-name-5"></a> `name` | `string` | The provider's name from the server ("Google"), or "Email code" / "Password". |
+
+***
+
+### SignInMethodChoice
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-labels"></a> `labels?` | `Readonly`\<`Partial`\<`Record`\<[`SignInMethodId`](#signinmethodid), `string`\>\>\> | Button text by method id, e.g. `{ google: 'Sign in with Google', 'email-code': 'Send me a code' }`. |
+| <a id="property-methods"></a> `methods?` | readonly [`SignInMethodId`](#signinmethodid)[] | Which methods to show, in this order. Only those the server enabled are kept: a page can hide a method, never add one. Default: every provider, then the password, then the emailed code. |
+| <a id="property-order"></a> `order?` | readonly [`SignInMethodId`](#signinmethodid)[] | Moves these to the front, in this order; the rest keep their places after them. |
+
+***
+
+### SignInMethods
+
+One answer from the server, loaded for the current session and reloaded on demand.
+
+#### Extends
+
+- [`EgradxQuery`](#egradxquery)\<[`SignInMethodsData`](#signinmethodsdata)\>
+
+#### Methods
+
+##### getSnapshot()
+
+```ts
+getSnapshot(): QuerySnapshot;
+```
+
+###### Returns
+
+[`QuerySnapshot`](#querysnapshot)
+
+###### Inherited from
+
+[`EgradxQuery`](#egradxquery).[`getSnapshot`](#getsnapshot-5)
+
+##### link()
+
+```ts
+link(providerId, returnTo?): Promise<string>;
+```
+
+The provider's address to send the browser to (`location.assign(url)`), to link it to this account. The browser
+comes back to the frontend's callback page with `linked` or `error` (`IDENTITY_IN_USE`). `returnTo` is a path on
+this site to come back to afterwards.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `providerId` | `string` |
+| `returnTo?` | `string` |
+
+###### Returns
+
+`Promise`\<`string`\>
+
+##### reload()
+
+```ts
+reload(): Promise<void>;
+```
+
+###### Returns
+
+`Promise`\<`void`\>
+
+###### Inherited from
+
+[`EgradxQuery`](#egradxquery).[`reload`](#reload-4)
+
+##### setPassword()
+
+```ts
+setPassword(request): Promise<void>;
+```
+
+Sets the password: a first one without `currentPassword` when the person has none. Every session ends and the
+session continues as the new one the server returns. Reloads.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `request` | [`ChangePasswordRequest`](#changepasswordrequest) |
+
+###### Returns
+
+`Promise`\<`void`\>
+
+##### start()
+
+```ts
+start(): void;
+```
+
+###### Returns
+
+`void`
+
+###### Inherited from
+
+[`EgradxQuery`](#egradxquery).[`start`](#start-4)
+
+##### stop()
+
+```ts
+stop(): void;
+```
+
+###### Returns
+
+`void`
+
+###### Inherited from
+
+[`EgradxQuery`](#egradxquery).[`stop`](#stop-4)
+
+##### subscribe()
+
+```ts
+subscribe(listener): () => void;
+```
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `listener` | () => `void` |
+
+###### Returns
+
+() => `void`
+
+###### Inherited from
+
+[`EgradxQuery`](#egradxquery).[`subscribe`](#subscribe-5)
+
+##### unlink()
+
+```ts
+unlink(identityId): Promise<void>;
+```
+
+Removes a linked provider. SIGN_IN_METHOD_REQUIRED when it would leave no way in. Reloads.
+
+###### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `identityId` | `string` |
+
+###### Returns
+
+`Promise`\<`void`\>
+
+***
+
+### SignInMethodsData
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-identities"></a> `identities` | [`LinkedIdentity`](#linkedidentity)[] | - |
+| <a id="property-password-1"></a> `password` | `boolean` | Whether the person has a password. Without one, `setPassword` needs no current password. |
+
+***
+
+### SignInOptions
+
+What a sign-in page can offer here (`GET /egradx/auth/sign-in-options`, public).
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-emailcode"></a> `emailCode` | `boolean` | Signing in with an emailed code. Sign-up needs it too. |
+| <a id="property-password-2"></a> `password` | `boolean` | Signing in with a password: always offered. |
+| <a id="property-providers"></a> `providers` | `object`[] | The providers to show buttons for, in configured order. `id` goes in the URLs. |
+| <a id="property-signup"></a> `signup` | `string` & `object` \| `"invitation"` \| `"organization"` | `organization`: anyone may sign up, with a new organization of their own. `invitation`: only by invitation. |
+
+***
+
+### SignupRequest
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-email-4"></a> `email` | `string` | - |
+| <a id="property-name-6"></a> `name?` | `string` \| `null` | - |
+| <a id="property-organizationname-2"></a> `organizationName` | `string` | The new organization, which the person will administer. |
+| <a id="property-password-3"></a> `password?` | `string` \| `null` | Optional: an account needs no password, and can set one later. |
+
+***
+
+### SignupStarted
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-email-5"></a> `email` | `string` | - |
+| <a id="property-expiresat"></a> `expiresAt` | `string` | - |
+| <a id="property-resendavailableat"></a> `resendAvailableAt` | `string` | Asking again before this is refused with EMAIL_CODE_RATE_LIMITED. |
 
 ***
 
@@ -2196,6 +3724,37 @@ Calls back when another tab or window changed the stored session. Returns an uns
 
 ***
 
+### UploadOptions
+
+#### Extends
+
+- [`FileRequestOptions`](#filerequestoptions)
+
+#### Properties
+
+| Property | Type | Description | Inherited from |
+| ------ | ------ | ------ | ------ |
+| <a id="property-attachedid-2"></a> `attachedId?` | `string` | - | - |
+| <a id="property-attachedtype-2"></a> `attachedType?` | `string` | The record it belongs to: both or neither. | - |
+| <a id="property-name-7"></a> `name?` | `string` | The file name to send. Default: the File's own name, `file` for a Blob. | - |
+| <a id="property-onprogress"></a> `onProgress?` | (`progress`) => `void` | Called as the bytes go out. In a browser the upload then goes through XMLHttpRequest, the one API that reports upload progress, with the same token, refresh and retry as every other call. Elsewhere (no XMLHttpRequest) it is called once, when the upload is done. | - |
+| <a id="property-purpose-1"></a> `purpose?` | `string` | `attachment` when left out. | - |
+| <a id="property-signal-1"></a> `signal?` | `AbortSignal` | Aborting rejects with the AbortError, not an EgradxApiError. | [`FileRequestOptions`](#filerequestoptions).`signal` |
+
+***
+
+### UploadProgress
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-fraction"></a> `fraction` | `number` | From 0 to 1. |
+| <a id="property-loaded"></a> `loaded` | `number` | Bytes sent so far. |
+| <a id="property-total"></a> `total` | `number` | Bytes to send: the whole request, slightly more than the file. |
+
+***
+
 ### VerificationStarted
 
 #### Properties
@@ -2205,8 +3764,8 @@ Calls back when another tab or window changed the stored session. Returns an uns
 | <a id="property-address-2"></a> `address` | `string` |
 | <a id="property-channel-6"></a> `channel` | `string` |
 | <a id="property-contactid-1"></a> `contactId` | `string` |
-| <a id="property-expiresat"></a> `expiresAt` | `string` |
-| <a id="property-resendavailableat"></a> `resendAvailableAt` | `string` |
+| <a id="property-expiresat-1"></a> `expiresAt` | `string` |
+| <a id="property-resendavailableat-1"></a> `resendAvailableAt` | `string` |
 
 ## Type Aliases
 
@@ -2275,7 +3834,8 @@ type EgradxErrorCode =
   | GenericErrorCode
   | AuthErrorCode
   | AuditErrorCode
-  | NotificationErrorCode;
+  | NotificationErrorCode
+  | FilesErrorCode;
 ```
 
 Every code the SDK defines. An application may return codes of its own too.
@@ -2302,11 +3862,39 @@ type EgradxUser = components["schemas"]["EgradxUserDto"];
 
 ***
 
+### EgradxUserProfile
+
+```ts
+type EgradxUserProfile = components["schemas"]["EgradxUserProfileDto"];
+```
+
+The signed-in person's profile, as setting the photo answers it. Its `photoUrl` is the photo's content URL.
+
+***
+
+### FilesErrorCode
+
+```ts
+type FilesErrorCode = typeof FILES_ERROR_CODES[number];
+```
+
+***
+
 ### GenericErrorCode
 
 ```ts
 type GenericErrorCode = typeof GENERIC_ERROR_CODES[number];
 ```
+
+***
+
+### HandoffStorage
+
+```ts
+type HandoffStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
+```
+
+Where a handoff keeps the token: sessionStorage, or anything with the same three methods.
 
 ***
 
@@ -2334,6 +3922,52 @@ type NotificationErrorCode = typeof NOTIFICATION_ERROR_CODES[number];
 
 ***
 
+### ProviderCallback
+
+```ts
+type ProviderCallback = 
+  | {
+  code: string;
+  flow: ProviderFlow;
+  kind: "code";
+  returnTo: string | null;
+}
+  | {
+  flow: ProviderFlow;
+  kind: "linked";
+  provider: string;
+  providerName: string | null;
+  returnTo: string | null;
+}
+  | {
+  error: string;
+  flow: ProviderFlow;
+  kind: "error";
+  returnTo: string | null;
+};
+```
+
+What the backend's provider callback sent the browser to the frontend's callback page (`/auth/callback` by default)
+with:
+- `code`: a provider sign-in, to exchange for a session (`session.exchangeProviderCode`);
+- `linked`: a provider linked from the profile, by its id;
+- `error`: `OIDC_CANCELLED`, `OIDC_STATE_INVALID`, `OIDC_FAILED`, or `IDENTITY_IN_USE` after linking.
+
+`returnTo` is where the person was going: a path on this site, or null. `flow` is `link` for a provider linked from
+the profile (the server adds `flow=link` once it knows the flow), else `sign-in`.
+
+***
+
+### ProviderFlow
+
+```ts
+type ProviderFlow = "sign-in" | "link";
+```
+
+Signing in (or up) with a provider, or linking one from the profile.
+
+***
+
 ### SessionStatus
 
 ```ts
@@ -2341,6 +3975,17 @@ type SessionStatus = "loading" | "authenticated" | "anonymous";
 ```
 
 `loading` while a stored session whose access token has expired is being refreshed.
+
+***
+
+### SignInMethodId
+
+```ts
+type SignInMethodId = "password" | "email-code" | string & object;
+```
+
+A sign-in method a page can show: `password`, `email-code`, or a provider's id (`google`, `zoho`, `okta`…). In a
+list of choices, `providers` stands for every enabled provider not named elsewhere in the list, in the server's order.
 
 ***
 
@@ -2373,7 +4018,7 @@ const AUDIT_ERROR_CODES: readonly [];
 ### AUTH\_ERROR\_CODES
 
 ```ts
-const AUTH_ERROR_CODES: readonly ["AUTH_INVALID_CREDENTIALS", "AUTH_REFRESH_TOKEN_INVALID", "AUTH_TOO_MANY_ATTEMPTS", "SESSION_EXPIRED", "SESSION_REVOKED", "ORG_SUSPENDED", "ORG_ACCESS_DENIED", "ORG_SELECTION_REQUIRED", "PROFILE_INVALID", "CONTACT_LIMIT_REACHED", "CONTACT_DUPLICATE", "CONTACT_ALREADY_VERIFIED", "CONTACT_VERIFICATION_UNAVAILABLE", "CONTACT_VERIFICATION_RATE_LIMITED", "CONTACT_VERIFICATION_NOT_STARTED", "CONTACT_VERIFICATION_INVALID_CODE", "CONTACT_VERIFICATION_EXPIRED", "CONTACT_VERIFICATION_TOO_MANY_ATTEMPTS", "PASSWORD_INVALID", "PASSWORD_INCORRECT", "PASSWORD_RESET_INVALID", "PASSWORD_RESET_EXPIRED", "INVITATION_INVALID", "INVITATION_EXPIRED", "INVITATION_ALREADY_ACCEPTED", "INVITATION_SIGN_IN_REQUIRED", "INVITATION_EMAIL_MISMATCH", "INVITATION_ALREADY_MEMBER", "INVITATION_DELIVERY_UNAVAILABLE", "INVITATION_RATE_LIMITED", "EMAIL_IN_USE", "EMAIL_UNCHANGED", "EMAIL_CHANGE_UNAVAILABLE", "EMAIL_CHANGE_RATE_LIMITED", "EMAIL_CHANGE_NOT_STARTED", "EMAIL_CHANGE_INVALID_CODE", "EMAIL_CHANGE_EXPIRED", "EMAIL_CHANGE_TOO_MANY_ATTEMPTS"];
+const AUTH_ERROR_CODES: readonly ["AUTH_INVALID_CREDENTIALS", "AUTH_REFRESH_TOKEN_INVALID", "AUTH_TOO_MANY_ATTEMPTS", "SESSION_EXPIRED", "SESSION_REVOKED", "ORG_SUSPENDED", "ORG_ACCESS_DENIED", "ORG_SELECTION_REQUIRED", "PROFILE_INVALID", "CONTACT_LIMIT_REACHED", "CONTACT_DUPLICATE", "CONTACT_ALREADY_VERIFIED", "CONTACT_VERIFICATION_UNAVAILABLE", "CONTACT_VERIFICATION_RATE_LIMITED", "CONTACT_VERIFICATION_NOT_STARTED", "CONTACT_VERIFICATION_INVALID_CODE", "CONTACT_VERIFICATION_EXPIRED", "CONTACT_VERIFICATION_TOO_MANY_ATTEMPTS", "PASSWORD_INVALID", "PASSWORD_INCORRECT", "PASSWORD_RESET_INVALID", "PASSWORD_RESET_EXPIRED", "INVITATION_INVALID", "INVITATION_EXPIRED", "INVITATION_ALREADY_ACCEPTED", "INVITATION_SIGN_IN_REQUIRED", "INVITATION_EMAIL_MISMATCH", "INVITATION_ALREADY_MEMBER", "INVITATION_DELIVERY_UNAVAILABLE", "INVITATION_RATE_LIMITED", "EMAIL_IN_USE", "EMAIL_UNCHANGED", "EMAIL_CHANGE_UNAVAILABLE", "EMAIL_CHANGE_RATE_LIMITED", "EMAIL_CHANGE_NOT_STARTED", "EMAIL_CHANGE_INVALID_CODE", "EMAIL_CHANGE_EXPIRED", "EMAIL_CHANGE_TOO_MANY_ATTEMPTS", "SIGNUP_DISABLED", "SIGNUP_EMAIL_DOMAIN_NOT_ALLOWED", "ORGANIZATION_NAME_IN_USE", "SIGNUP_REQUIRED", "AUTH_NO_ACCOUNT", "EMAIL_CODE_UNAVAILABLE", "EMAIL_CODE_RATE_LIMITED", "EMAIL_CODE_INVALID", "EMAIL_CODE_EXPIRED", "EMAIL_CODE_TOO_MANY_ATTEMPTS", "OIDC_PROVIDER_UNKNOWN", "OIDC_CANCELLED", "OIDC_STATE_INVALID", "OIDC_FAILED", "OIDC_CODE_INVALID", "OIDC_EMAIL_NOT_VERIFIED", "IDENTITY_LINK_REQUIRED", "IDENTITY_IN_USE", "SIGN_IN_METHOD_REQUIRED"];
 ```
 
 ***
@@ -2399,11 +4044,39 @@ Where a client with `tokens: 'server'` asks the backend-for-frontend for the ses
 
 ***
 
+### DEFAULT\_SIGN\_IN\_METHODS
+
+```ts
+const DEFAULT_SIGN_IN_METHODS: readonly SignInMethodId[];
+```
+
+The methods to show by default, in this order: every provider, then the password, then the emailed code.
+
+***
+
+### FILES\_ERROR\_CODES
+
+```ts
+const FILES_ERROR_CODES: readonly ["FILE_TOO_LARGE", "FILE_TYPE_NOT_ALLOWED", "FILE_EMPTY", "FILE_REJECTED", "FILE_STORAGE_UNAVAILABLE"];
+```
+
+***
+
 ### GENERIC\_ERROR\_CODES
 
 ```ts
 const GENERIC_ERROR_CODES: readonly ["NOT_AUTHENTICATED", "ACCESS_DENIED", "NOT_FOUND", "CONFLICT", "INVALID_REQUEST", "INTERNAL_ERROR"];
 ```
+
+***
+
+### INVITATION\_HANDOFF\_KEY
+
+```ts
+const INVITATION_HANDOFF_KEY: "egradx.pendingInvitation" = 'egradx.pendingInvitation';
+```
+
+The key under which the token is kept by default.
 
 ***
 
@@ -2414,6 +4087,26 @@ const NOTIFICATION_ERROR_CODES: readonly ["NOTIFICATION_NOT_FOUND", "TEMPLATE_IN
 ```
 
 ## Functions
+
+### acceptList()
+
+```ts
+function acceptList(accept): string[];
+```
+
+`accept` as a list: `'image/*, .pdf'` → `['image/*', '.pdf']`.
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `accept` | `string` \| readonly `string`[] \| `undefined` |
+
+#### Returns
+
+`string`[]
+
+***
 
 ### asApiError()
 
@@ -2480,6 +4173,50 @@ optional; the declared ones say what every SDK sends.
 #### Returns
 
 `Promise`\<`T`\>
+
+***
+
+### checkFile()
+
+```ts
+function checkFile(file, limits?): EgradxApiError | null;
+```
+
+Checks a file against limits before it is sent, with the codes the server would answer: FILE_EMPTY, FILE_TOO_LARGE
+(details: `{ maxSize }`) or FILE_TYPE_NOT_ALLOWED (details: `{ accept }`). Null when it passes. The server still
+decides; this only saves sending a file it would refuse.
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `file` | `Blob` |
+| `limits` | [`FileLimits`](#filelimits) |
+
+#### Returns
+
+[`EgradxApiError`](#egradxapierror) \| `null`
+
+***
+
+### createAttachments()
+
+```ts
+function createAttachments(client, attachedTo): Attachments;
+```
+
+The files attached to one record (an order, a ticket…), newest first, with upload and delete.
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `client` | [`EgradxClient`](#egradxclient) |
+| `attachedTo` | [`AttachedTo`](#attachedto) |
+
+#### Returns
+
+[`Attachments`](#attachments)
 
 ***
 
@@ -2611,6 +4348,28 @@ The inbox belongs to a person in an organization: switching organization starts 
 
 ***
 
+### createInvitationHandoff()
+
+```ts
+function createInvitationHandoff(storage?, key?): InvitationHandoff;
+```
+
+An invitation handoff kept in `storage` (default: sessionStorage, per tab) under `key`. Without storage (server
+rendering, storage blocked) nothing is kept, and a provider sign-in still works, without joining.
+
+#### Parameters
+
+| Parameter | Type | Default value |
+| ------ | ------ | ------ |
+| `storage?` | \| [`HandoffStorage`](#handoffstorage) \| (() => [`HandoffStorage`](#handoffstorage) \| `undefined`) | `undefined` |
+| `key?` | `string` | `INVITATION_HANDOFF_KEY` |
+
+#### Returns
+
+[`InvitationHandoff`](#invitationhandoff)
+
+***
+
 ### createNotificationChannels()
 
 ```ts
@@ -2674,6 +4433,27 @@ The kinds of message the application sends, with the channels and templates each
 
 ***
 
+### createProfilePhoto()
+
+```ts
+function createProfilePhoto(client): ProfilePhoto;
+```
+
+The signed-in person's profile photo: where it is (`data.photoUrl`), and changing it. Stores made from the same
+client follow each other, so a header's avatar changes with the settings page's.
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `client` | [`EgradxClient`](#egradxclient) |
+
+#### Returns
+
+[`ProfilePhoto`](#profilephoto)
+
+***
+
 ### createQuery()
 
 ```ts
@@ -2701,6 +4481,26 @@ while signed out.
 #### Returns
 
 [`EgradxQuery`](#egradxquery)\<`T`\>
+
+***
+
+### createSignInMethods()
+
+```ts
+function createSignInMethods(client): SignInMethods;
+```
+
+How the signed-in person can sign in: whether they have a password, and the providers linked to the account.
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `client` | [`EgradxClient`](#egradxclient) |
+
+#### Returns
+
+[`SignInMethods`](#signinmethods)
 
 ***
 
@@ -2767,6 +4567,26 @@ The records matching `filter` as CSV, newest first. The export is itself recorde
 #### Returns
 
 `Promise`\<[`AuditExport`](#auditexport)\>
+
+***
+
+### fileNameFromDisposition()
+
+```ts
+function fileNameFromDisposition(header): string | null;
+```
+
+The file name a `Content-Disposition` header gives: `filename*` (RFC 5987) first, then `filename`.
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `header` | `string` \| `null` \| `undefined` |
+
+#### Returns
+
+`string` \| `null`
 
 ***
 
@@ -2888,6 +4708,151 @@ Returns a function that closes the stream.
 #### Returns
 
 () => `void`
+
+***
+
+### organizationChoices()
+
+```ts
+function organizationChoices(error): OrganizationChoice[] | undefined;
+```
+
+The organizations to choose from, when `error` is ORG_SELECTION_REQUIRED; otherwise undefined.
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `error` | `unknown` |
+
+#### Returns
+
+[`OrganizationChoice`](#organizationchoice)[] \| `undefined`
+
+***
+
+### providerIdentityDetails()
+
+```ts
+function providerIdentityDetails(error): ProviderIdentityDetails | undefined;
+```
+
+The provider and email, when `error` is IDENTITY_LINK_REQUIRED or AUTH_NO_ACCOUNT; otherwise undefined.
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `error` | `unknown` |
+
+#### Returns
+
+[`ProviderIdentityDetails`](#provideridentitydetails) \| `undefined`
+
+***
+
+### providerSignupDetails()
+
+```ts
+function providerSignupDetails(error): ProviderSignupDetails | undefined;
+```
+
+Who to sign up, when a provider sign-in was answered with SIGNUP_REQUIRED; otherwise undefined.
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `error` | `unknown` |
+
+#### Returns
+
+[`ProviderSignupDetails`](#providersignupdetails) \| `undefined`
+
+***
+
+### readProviderCallback()
+
+```ts
+function readProviderCallback(query): ProviderCallback | null;
+```
+
+Reads the callback page's query (`location.search`, or Next's `searchParams`). Null when it carries none of `code`,
+`linked` and `error`. `returnTo` is dropped unless it is a path on this site, as the server does: the query can be
+typed by anyone.
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `query` | \| `string` \| `URLSearchParams` \| `Record`\<`string`, `string` \| `string`[] \| `undefined`\> |
+
+#### Returns
+
+[`ProviderCallback`](#providercallback) \| `null`
+
+***
+
+### resolveSignInMethods()
+
+```ts
+function resolveSignInMethods(options, choice?): SignInMethod[];
+```
+
+The methods a sign-in page shows: the application's choice (`methods`, `order`, `labels`) intersected with what the
+server enabled (`GET /egradx/auth/sign-in-options`). Unknown or disabled ids are dropped quietly, and each method
+appears once.
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `options` | [`SignInOptions`](#signinoptions-1) \| `null` \| `undefined` |
+| `choice` | [`SignInMethodChoice`](#signinmethodchoice) |
+
+#### Returns
+
+[`SignInMethod`](#signinmethod)[]
+
+***
+
+### retryAfterSeconds()
+
+```ts
+function retryAfterSeconds(error): number | undefined;
+```
+
+How long to wait, in seconds, when `error` is AUTH_TOO_MANY_ATTEMPTS (429); otherwise undefined.
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `error` | `unknown` |
+
+#### Returns
+
+`number` \| `undefined`
+
+***
+
+### safeReturnTo()
+
+```ts
+function safeReturnTo(returnTo): string | null;
+```
+
+A path on this site, or null: never another site (`//host`, `/\host`, `https:`).
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `returnTo` | `string` \| `null` \| `undefined` |
+
+#### Returns
+
+`string` \| `null`
 
 ***
 

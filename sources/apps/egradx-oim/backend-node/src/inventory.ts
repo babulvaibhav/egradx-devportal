@@ -206,8 +206,13 @@ export function inventoryRoutes(oim: Oim, operations: InventoryOperations): Rout
       }
       const saved = await requireInventory(tx, inventoryId, organizationId);
       const result = inventoryResponse(saved);
-      await auditor.record(audit(AuditActions.INVENTORY_ADJUSTED).organization(organizationId).entity('inventory', saved.id)
-        .before(plain(before)).after(plain(result)).build());
+      // The reason is kept on the adjustment's audit record, which holds the before and after quantities, as Java does.
+      const adjusted = audit(AuditActions.INVENTORY_ADJUSTED).organization(organizationId).entity('inventory', saved.id).before(plain(before)).after(plain(result));
+      const reason = body.reason as string | null;
+      if (reason !== null && reason.trim() !== '') {
+        adjusted.detail('reason', reason);
+      }
+      await auditor.record(adjusted.build());
       await operations.notifications.inventoryUpdated(organizationId, result);
       await operations.notifyIfLowStockCrossed(organizationId, saved, -quantity);
       dashboard.evict(organizationId);

@@ -1,0 +1,194 @@
+---
+title: Add Sign in with Google and Zoho
+description: Register an OAuth client with each provider, give the SDK its id and secret, and serve the page a provider sign-in comes back to.
+---
+
+The SDK runs the whole OpenID Connect round trip: PKCE, `state` and `nonce`, the code exchange, the ID token check, and linking the provider to the account. You supply three things: the provider's client, two addresses, and the `/auth/callback` page. How it works is in [sign-up and sign-in methods](/docs/guides/sign-in-methods).
+
+## 1. Decide the two addresses
+
+| | What | Example |
+|---|---|---|
+| `callback-base-url` | your API, as the browser reaches it, with its path prefix | `https://api.example.com/api` |
+| `links.base-url` | your frontend | `https://app.example.com` |
+
+The **redirect URI** to register with each provider is `{callback-base-url}/egradx/auth/oidc/{id}/callback`, so here `https://api.example.com/api/egradx/auth/oidc/google/callback` and `…/oidc/zoho/callback`. With Next.js and the backend-for-frontend, use the BFF's public prefix instead (`https://app.example.com/bff`), so the callback goes through it too.
+
+## 2. Create the clients
+
+**Google.** In the [Google Cloud Console](https://console.cloud.google.com/), set up the OAuth consent screen, then **Credentials → Create credentials → OAuth client ID → Web application**. Add the redirect URI under **Authorized redirect URIs**, one per environment. Copy the client ID and secret.
+
+**Zoho.** In the [Zoho API Console](https://api-console.zoho.com/), **Add Client → Server-based Applications**. Add the redirect URI under **Authorized Redirect URIs**. Copy the Client ID and Client Secret. Turn on the other data centres your users are in. The SDK follows Zoho's `accounts-server` to `accounts.zoho.eu`, `.in`, `.com.au`, `.jp`, `.ca`, `.sa`, `.uk` and `.com.cn`.
+
+Keep the secrets in your secret store, as `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `ZOHO_CLIENT_ID` and `ZOHO_CLIENT_SECRET`.
+
+## 3. Configure the providers
+
+<Languages>
+<Tab value="Java">
+
+```yaml title="application.yml"
+egradx:
+  auth:
+    links:
+      base-url: ${APP_PUBLIC_URL:http://localhost:5173}
+    oidc:
+      callback-base-url: ${EGRADX_OIDC_CALLBACK_BASE_URL:http://localhost:8080}
+      providers:
+        google: { type: google, client-id: "${GOOGLE_CLIENT_ID:}", client-secret: "${GOOGLE_CLIENT_SECRET:}" }
+        zoho:   { type: zoho,   client-id: "${ZOHO_CLIENT_ID:}",   client-secret: "${ZOHO_CLIENT_SECRET:}" }
+```
+
+</Tab>
+<Tab value="Node">
+
+```ts title="src/app.ts"
+const env = (name: string) => process.env[name];
+
+auth: {
+  // …issuer, keys
+  links: { baseUrl: env('APP_PUBLIC_URL') ?? 'http://localhost:5173' },
+  oidc: {
+    callbackBaseUrl: env('EGRADX_OIDC_CALLBACK_BASE_URL') ?? 'http://localhost:8080',
+    providers: {
+      google: { type: 'google', clientId: env('GOOGLE_CLIENT_ID'), clientSecret: env('GOOGLE_CLIENT_SECRET') },
+      zoho: { type: 'zoho', clientId: env('ZOHO_CLIENT_ID'), clientSecret: env('ZOHO_CLIENT_SECRET') },
+    },
+  },
+},
+```
+
+</Tab>
+<Tab value="Python">
+
+```python title="src/<module>/app.py"
+from egradx.sdk import LinkSettings, OidcProviderSettings, OidcSettings
+
+AuthOptions(
+    # …issuer, keystore_path, keystore_passphrase
+    links=LinkSettings(base_url=os.environ.get("APP_PUBLIC_URL", "http://localhost:5173")),
+    oidc=OidcSettings(
+        callback_base_url=os.environ.get("EGRADX_OIDC_CALLBACK_BASE_URL", "http://localhost:8080"),
+        providers={
+            "google": OidcProviderSettings(type="google", client_id=os.environ.get("GOOGLE_CLIENT_ID"),
+                                           client_secret=os.environ.get("GOOGLE_CLIENT_SECRET")),
+            "zoho": OidcProviderSettings(type="zoho", client_id=os.environ.get("ZOHO_CLIENT_ID"),
+                                         client_secret=os.environ.get("ZOHO_CLIENT_SECRET")),
+        },
+    ),
+)
+```
+
+</Tab>
+</Languages>
+
+Restart, then check `GET /egradx/auth/sign-in-options`: both providers are listed. A provider without its id or secret is left out, and startup logs what it needs.
+
+## 4. The buttons
+
+Each button **navigates** to the start URL; it is not a fetch:
+
+```tsx title="frontend/src/modules/auth/ProviderButtons.tsx"
+import { useAuth, useSignInOptions } from '@babulvaibhav/egradx-react';
+
+export function ProviderButtons({ returnTo }: { returnTo?: string }) {
+  const { providerSignInUrl } = useAuth();
+  const { data } = useSignInOptions();
+  return (
+    <>
+      {data?.providers.map((provider) => (
+        <button key={provider.id} type="button" onClick={() => window.location.assign(providerSignInUrl(provider.id, returnTo))}>
+          Continue with {provider.name}
+        </button>
+      ))}
+    </>
+  );
+}
+```
+
+`returnTo` must be a path on your site (`/orders`); anything else is dropped.
+
+Or drop in the copy-in picker, which draws the buttons and can show only some providers, in your order, with your words and the providers' own marks ([choosing which methods to show](/docs/guides/sign-in-methods#choosing-which-methods-to-show)):
+
+```tsx
+<SignInMethodsPicker methods={["google", "zoho", "email-code"]} icons={{ google: <GoogleMark />, zoho: <ZohoMark /> }} onSignedIn={done} />
+```
+
+```sh
+npx shadcn@latest add https://<this portal>/r/sign-in-methods-picker.json
+```
+
+To accept an invitation with a provider, start it with `startProviderSignIn(id, { returnTo, invitationToken })` (or pass `invitationToken` to the picker): the token is kept for the callback page, whose exchange sends it by itself.
+
+## 5. The page the provider comes back to
+
+Serve `/auth/callback`. It reads the query, exchanges the code for a session, and handles what the exchange may ask for:
+
+```tsx title="frontend/src/modules/auth/AuthCallback.tsx"
+import { useEffect, useRef, useState } from 'react';
+import { organizationChoices, providerSignupDetails, readProviderCallback, type OrganizationChoice } from '@babulvaibhav/egradx-client';
+import { useAuth } from '@babulvaibhav/egradx-react';
+
+export function AuthCallback({ onSignedIn }: { onSignedIn: (returnTo: string | null) => void }) {
+  const { exchangeProviderCode, signUpWithProvider } = useAuth();
+  const [callback] = useState(() => readProviderCallback(window.location.search));
+  const [organizations, setOrganizations] = useState<OrganizationChoice[] | null>(null);
+  const [needsOrganizationName, setNeedsOrganizationName] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  const started = useRef(false); // React runs effects twice in development: exchange the code once
+
+  async function exchange(organizationId?: string) {
+    if (callback?.kind !== 'code') return;
+    try {
+      await exchangeProviderCode({ code: callback.code, organizationId });
+      onSignedIn(callback.returnTo);
+    } catch (error) {
+      const choices = organizationChoices(error);
+      if (choices) setOrganizations(choices);
+      else if (providerSignupDetails(error)) setNeedsOrganizationName(true);
+      else setProblem(error instanceof Error ? error.message : 'Signing in failed.');
+    }
+  }
+
+  async function signUp(organizationName: string) {
+    if (callback?.kind !== 'code') return;
+    await signUpWithProvider({ code: callback.code, organizationName });
+    onSignedIn(callback.returnTo);
+  }
+
+  useEffect(() => {
+    if (started.current) return;
+    started.current = true;
+    if (callback?.kind === 'error') setProblem(callback.error); // OIDC_CANCELLED, OIDC_STATE_INVALID, OIDC_FAILED
+    else void exchange();
+  }, []);
+
+  // Render: the organizations to choose from (exchange(id)), an organization-name form (signUp(name)), or the problem.
+  return null;
+}
+```
+
+Or copy the finished page in, which also confirms a provider linked from the profile and words every refusal:
+
+```sh
+npx shadcn@latest add https://<this portal>/r/auth-callback.json https://<this portal>/r/sign-in.json
+```
+
+With Next.js, make it a client component, and let signed-out people open it: `bff.guard(request, { signInPath: '/login', publicPaths: ['/auth/callback', '/sign-up'] })`.
+
+## What can go wrong
+
+| Code | When |
+|---|---|
+| The provider shows `redirect_uri_mismatch` | the registered redirect URI isn't exactly `{callback-base-url}/egradx/auth/oidc/{id}/callback` |
+| `?error=OIDC_CANCELLED` | the person declined at the provider |
+| `?error=OIDC_STATE_INVALID` | the round trip expired (10 minutes) or was used: start again |
+| `?error=OIDC_FAILED` | the code exchange or the ID token check failed: wrong secret, wrong issuer, clock skew over 60 s |
+| `IDENTITY_LINK_REQUIRED` (409) | an account has that email, the provider isn't trusted for it: sign in another way and [link it](/docs/recipes/link-a-provider) |
+| `SIGNUP_REQUIRED` (409) | no account, sign-up open: ask for an organization name, then `signUpWithProvider` |
+| `AUTH_NO_ACCOUNT` (403) | no account, sign-up closed: they need an invitation |
+| `OIDC_CODE_INVALID` (400) | the page was reloaded after the code was used |
+
+## See also
+
+- [Sign-up and sign-in methods](/docs/guides/sign-in-methods) · [Let people sign up](/docs/recipes/let-people-sign-up) · [Link a provider from the profile](/docs/recipes/link-a-provider)

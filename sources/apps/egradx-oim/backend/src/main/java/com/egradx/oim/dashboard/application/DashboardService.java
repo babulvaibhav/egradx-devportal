@@ -13,6 +13,7 @@ import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -60,16 +61,18 @@ public class DashboardService {
         long lowStockProducts = inventoryRepository.countLowStockByOrganizationId(organizationId, InventoryService.LOW_STOCK_THRESHOLD);
 
         List<Order> recentOrders = orderRepository.findTop5ByOrganizationIdOrderByCreatedAtDesc(organizationId);
+        // One query for all their customers, scoped to the organization (was one findById per order).
+        Map<UUID, String> customerNames = customerRepository.findByOrganizationIdAndIdIn(organizationId,
+                        recentOrders.stream().map(Order::getCustomerId).collect(Collectors.toSet()))
+                .stream()
+                .collect(Collectors.toMap(Customer::getId, Customer::getName));
         List<DashboardSummaryResponse.RecentOrder> recentOrderResponses = recentOrders.stream()
-                .map(order -> {
-                    Customer customer = customerRepository.findById(order.getCustomerId()).orElse(null);
-                    return new DashboardSummaryResponse.RecentOrder(
-                            order.getId(),
-                            customer != null ? customer.getName() : "Unknown",
-                            order.getTotalAmount(),
-                            order.getStatus().name()
-                    );
-                })
+                .map(order -> new DashboardSummaryResponse.RecentOrder(
+                        order.getId(),
+                        customerNames.getOrDefault(order.getCustomerId(), "Unknown"),
+                        order.getTotalAmount(),
+                        order.getStatus().name()
+                ))
                 .collect(Collectors.toList());
 
         return new DashboardSummaryResponse(

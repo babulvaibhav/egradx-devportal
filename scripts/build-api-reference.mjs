@@ -148,7 +148,7 @@ function describe(packageDir) {
 
 if (want('node')) {
   const root = path.join(monorepo, 'sdks', 'node', 'packages');
-  const order = ['sdk', 'core', 'auth', 'audit', 'notification', 'events', 'observability', 'express', 'security', 'migrations', 'tls-provider', 'audit-auth', 'notification-auth'];
+  const order = ['sdk', 'core', 'auth', 'audit', 'notification', 'events', 'observability', 'express', 'security', 'migrations', 'tls-provider', 'audit-auth', 'notification-auth', 'redis', 'file-storage'];
   const packages = order.filter((name) => existsSync(path.join(root, name, 'src', 'index.ts'))).map((name) => path.join(root, name));
   const pages = typedoc(packages, 'node', 'Node');
   fixLinks('node');
@@ -201,6 +201,17 @@ function javaConfiguration(reactor) {
     { name: 'egradx.security.crypto.keystorePath', type: 'java.lang.String', module: 'egradx-tls-provider', description: 'The folder holding the signing and encryption keys; created with them on the first start. Every instance shares it. Written exactly so: it is read as written.' },
     { name: 'egradx.security.crypto.passphrase', type: 'java.lang.String', module: 'egradx-tls-provider', description: 'Encrypts the private keys in the keys folder. Required; keep it stable and secret.' },
     { name: 'egradx.service.token.enabled', type: 'java.lang.Boolean', module: 'egradx-web-security', defaultValue: false, description: 'Creates the EgradxServiceTokenManager, which gets client-credentials tokens from an outside OAuth server (egradx.security.client.*).' },
+    // A map's values have no metadata of their own: each provider's keys, as EgradxAuthProperties.OidcProvider declares them.
+    ...[
+      ['type', 'java.lang.String', 'oidc', 'What kind of provider, so which EgradxSignInProviderFactory makes it: {@code oidc} (any OpenID Connect provider, from its issuer), {@code google}, {@code zoho}, or a type an application adds with an {@code EgradxSignInProviderFactory} bean. {@code google} and {@code zoho} fill in the issuer, the name and {@code trust-email}.'],
+      ['name', 'java.lang.String', undefined, 'Shown on the button. Defaults to the type\'s name ({@code Google}, {@code Zoho}), else the id.'],
+      ['issuer', 'java.lang.String', undefined, 'The provider\'s issuer; its discovery document is at {@code {issuer}/.well-known/openid-configuration}. Required for {@code type: oidc}.'],
+      ['client-id', 'java.lang.String', undefined, 'The client id the provider issued for this application. Without it the provider is left out, with a warning.'],
+      ['client-secret', 'java.lang.String', undefined, 'The client secret the provider issued for this application. Without it the provider is left out, with a warning.'],
+      ['scopes', 'java.util.List<java.lang.String>', ['openid', 'email', 'profile'], 'Scopes asked for.'],
+      ['trust-email', 'java.lang.Boolean', undefined, 'Take the provider\'s verified emails as proof of owning the address: a sign-in whose email matches an account is linked to it. Defaults to true for the google and zoho types and false otherwise.'],
+      ['enabled', 'java.lang.Boolean', true, 'Turn the provider off without removing its settings.'],
+    ].map(([key, type, defaultValue, description]) => ({ name: `egradx.auth.oidc.providers.<id>.${key}`, type, module: 'egradx-auth', ...(defaultValue !== undefined ? { defaultValue } : {}), description })),
   ];
   // Declared but never registered: setting them does nothing (restructure log, finding 17).
   const ignored = /EgradxSdkProperties/;

@@ -1,0 +1,511 @@
+---
+title: Files
+description: Store the files people upload — attachments on your records and profile photos — on local disk or any S3-compatible bucket, with permissions, a per-record access check, scanning, streamed downloads with Range, and ready upload screens.
+---
+
+<Parity id="files.storage" />
+
+## What it is
+
+People attach delivery notes to orders, invoices to tickets, a photo to their profile. `egradx-file-storage` keeps those files for your application, in every language, from the same `/egradx/files/**` endpoints:
+
+- **Files belong to an organization.** A file of another organization doesn't exist for the caller: asking for it answers 404.
+- **A file can be attached to one of your records**, named by a type and an id (`order` / `42`). Who may see and add those files is your rule: you plug in an **access policy** for the type.
+- **Built-in permissions** decide everything else: `egradx.file.read`, `egradx.file.write` and `egradx.file.delete`, held by every organization's Admin role. The person who uploaded a file may always read and delete it.
+- **Profile photos**, one per person, readable by everyone in the organization.
+- **Two backends:** a folder on local disk, the default, or any S3-compatible store (AWS S3, MinIO, Cloudflare R2, Wasabi) through the official AWS SDK.
+- **Downloads** stream through your application after the check, with `Range`, `ETag` and the right `Content-Disposition`. On S3, they can redirect to a short-lived pre-signed URL instead.
+- **A scanning hook** to refuse a file before it is kept (a virus scanner).
+
+You write none of the storage: no upload endpoint, no files table, no S3 code. You add the package, choose a backend, and register a policy for each kind of record that has files.
+
+## How it works
+
+<Mermaid chart={`sequenceDiagram
+  participant B as Browser
+  participant A as Your API (with egradx-file-storage)
+  participant P as Your access policy
+  participant S as Disk or bucket
+  B->>A: POST /egradx/files (multipart: file, attachedType=order, attachedId=42)
+  A->>P: may this person WRITE to order 42?
+  P-->>A: ALLOW, DENY or DEFAULT (the permissions decide)
+  A->>S: stream the bytes, counting size and sha256, cut off at max-size
+  A->>A: scanners, then the row and the audit record in one transaction
+  A-->>B: 201 { id, name, size, contentUrl, … }
+  B->>A: GET /egradx/files/{id}/content (Range: bytes=0-1023)
+  A->>P: may this person READ it?
+  A->>S: read that range
+  A-->>B: 206, streamed`} />
+
+1. **Upload.** `POST /egradx/files`, multipart, with the `file` part and optionally `purpose` (`attachment` by default, or a word of yours), `attachedType` and `attachedId` (both or neither). An empty file, one over `max-size`, or one whose content type isn't in `allowed-content-types` is refused first. The bytes are then streamed to the backend while their sha256 is counted.
+2. **Keep or refuse.** Each scanner looks at the stored bytes, and then the row is written in the same transaction as the audit record. If anything fails, the stored bytes are deleted.
+3. **List.** `GET /egradx/files?attachedType=order&attachedId=42`: the record's files the caller may read, newest first, at most 200.
+4. **Download.** `GET /egradx/files/{id}/content` streams the bytes; `GET /egradx/files/{id}` gives the details.
+5. **Delete.** `DELETE /egradx/files/{id}` (204) marks the row deleted, then removes the bytes. Bytes that fail to go are retried by an hourly clean-up.
+
+The bytes are stored under `org/{organizationId}/{yyyy}/{mm}/{id}`; the row is in `egradx_file`, which the library migrates itself ([database](/docs/reference/database#file-storage)). The [HTTP reference](/docs/reference/http/files) has every request and answer.
+
+## Wiring it in
+
+<Languages>
+<Tab value="Java">
+
+`egradx-file-storage` sits beside `egradx-sdk` (versions from `egradx-bom`):
+
+```xml title="pom.xml"
+<dependency>
+  <groupId>com.egradx</groupId>
+  <artifactId>egradx-file-storage</artifactId>
+</dependency>
+```
+
+It configures itself: the endpoints, the table (migrated at startup into `egradx_files_schema_history`), the permissions on every organization's Admin role, and Spring's multipart limits, raised to fit `max-size`. Files go to `./egradx-files` until you say otherwise:
+
+```yaml title="application.yml"
+egradx:
+  files:
+    local:
+      root: ${EGRADX_FILES_ROOT:./files}
+```
+
+</Tab>
+<Tab value="Node">
+
+```sh
+npm install @babulvaibhav/egradx-file-storage
+```
+
+Pass it to `createEgradx`. It is connected to sign-in, started and closed with the rest, its routes are mounted by `egradxRoutes`, and `migrateEgradx` migrates its table whenever the package is installed:
+
+```ts title="src/app.ts"
+import { createFileStorage } from '@babulvaibhav/egradx-file-storage';
+
+const egradx = createEgradx({
+  prisma,
+  auth: { … },
+  files: createFileStorage({ local: { root: './files' } }),
+});
+```
+
+Without `egradx-sdk`: `migrateFiles(url)`, `createFiles({ prisma, auth })` before `auth.start()`, `app.use(fileRoutes(files))` from `@babulvaibhav/egradx-file-storage/express`, and `files.start()`.
+
+</Tab>
+<Tab value="Python">
+
+```sh
+pip install "egradx-sdk[files]"
+```
+
+```python title="src/<module>/app.py"
+from egradx.files import FilesOptions, LocalSettings
+
+sdk = EgradxSdk(engine, SdkOptions(
+    auth=AuthOptions(...),
+    files=FilesOptions(local=LocalSettings(root="./files")),
+))
+```
+
+The SDK mounts the routes, starts and closes it, and `migrate_egradx` migrates its table whenever the package is installed. Without `egradx-sdk`: `migrate_files(url)`, `EgradxFiles(engine, auth, FilesOptions(...))` before `auth.start()`, `app.include_router(file_routes(files))` from `egradx.files.fastapi`, and `files.start()` / `close()` in the lifespan.
+
+</Tab>
+</Languages>
+
+The endpoints need a signed-in session **in an organization**. Behind the Next.js backend-for-frontend, they pass through its catch-all route with nothing more to wire ([the frontend](#the-frontend)).
+
+## Backends
+
+### Local disk
+
+The default. `local.root` is the folder (created if missing). With several instances, it must be **one folder they all share**, such as a network volume; in a container, a volume, or the files go with the container.
+
+### S3 and S3-compatible stores
+
+`backend: s3` stores the bytes in a bucket, which must exist. The S3 client is optional, so local disk needs nothing more:
+
+| Java | Node | Python |
+|---|---|---|
+| add `software.amazon.awssdk:s3` (and the AWS BOM, or a version) | `npm install @aws-sdk/client-s3 @aws-sdk/s3-request-presigner` | `pip install "egradx-file-storage[s3]"` (aioboto3) |
+
+Without keys, the AWS SDK's default credentials are used (environment, profile, instance role). Anything but AWS itself needs `endpoint` and, usually, path-style addressing:
+
+| Store | `endpoint` | `region` | `path-style` |
+|---|---|---|---|
+| AWS S3 | none | the bucket's region | `false` |
+| MinIO | `http://minio:9000` (yours) | `us-east-1` | `true` |
+| Cloudflare R2 | `https://<account id>.r2.cloudflarestorage.com` | `auto` | `true` |
+| Wasabi | `https://s3.<region>.wasabisys.com` | the bucket's region | `true` |
+
+<Languages>
+<Tab value="Java">
+
+```yaml title="application.yml"
+egradx:
+  files:
+    backend: s3
+    s3:
+      bucket: app-files
+      endpoint: ${EGRADX_FILES_S3_ENDPOINT:}       # empty for AWS
+      region: us-east-1
+      path-style: true
+      access-key: ${EGRADX_FILES_S3_ACCESS_KEY:}   # empty: the AWS default credentials
+      secret-key: ${EGRADX_FILES_S3_SECRET_KEY:}
+```
+
+</Tab>
+<Tab value="Node">
+
+```ts
+files: createFileStorage({
+  backend: 's3',
+  s3: {
+    bucket: 'app-files',
+    endpoint: process.env.EGRADX_FILES_S3_ENDPOINT,   // undefined for AWS
+    region: 'us-east-1',
+    pathStyle: true,
+    accessKey: process.env.EGRADX_FILES_S3_ACCESS_KEY, // undefined: the AWS default credentials
+    secretKey: process.env.EGRADX_FILES_S3_SECRET_KEY,
+  },
+}),
+```
+
+</Tab>
+<Tab value="Python">
+
+```python
+from egradx.files import FilesOptions, S3Settings
+
+files=FilesOptions(
+    backend="s3",
+    s3=S3Settings(
+        bucket="app-files",
+        endpoint=os.environ.get("EGRADX_FILES_S3_ENDPOINT"),   # None for AWS
+        region="us-east-1",
+        path_style=True,
+        access_key=os.environ.get("EGRADX_FILES_S3_ACCESS_KEY"),  # None: the AWS default credentials
+        secret_key=os.environ.get("EGRADX_FILES_S3_SECRET_KEY"),
+    ),
+),
+```
+
+</Tab>
+</Languages>
+
+The three languages use the same keys and table, so a Java, a Node and a Python service can share one database and one bucket. The [recipe](/docs/recipes/store-files-in-s3) runs MinIO next to the application.
+
+## Limits and types
+
+| | Java (`egradx.files.*`) | Node (`createFileStorage({…})`) | Python (`FilesOptions(...)`) | Default |
+|---|---|---|---|---|
+| Where the bytes go | `backend` | `backend` | `backend` | `local` |
+| The folder | `local.root` | `local: { root }` | `local=LocalSettings(root=…)` | `./egradx-files` |
+| The bucket | `s3.bucket`, `.region`, `.endpoint`, `.path-style`, `.access-key`, `.secret-key` | `s3: { bucket, region, endpoint, pathStyle, accessKey, secretKey }` | `s3=S3Settings(bucket, region, endpoint, path_style, access_key, secret_key)` | region `us-east-1`, virtual-host style |
+| Pre-signed downloads | `s3.presigned-downloads`, `s3.presigned-ttl` | `s3: { presignedDownloads, presignedTtlMs }` | `S3Settings(presigned_downloads, presigned_ttl_seconds)` | off, 5 minutes |
+| The largest file | `max-size` | `maxSize` (bytes or `'25MB'`) | `max_size` (bytes) | 25 MB |
+| Types that may be uploaded | `allowed-content-types` | `allowedContentTypes` | `allowed_content_types` | any |
+| Profile photos | `profile-photo.max-size`, `.content-types` | `profilePhoto: { maxSize, contentTypes }` | `profile_photo=ProfilePhotoSettings(…)` | 5 MB; PNG, JPEG, WebP |
+| Clean-up of bytes a delete left | `cleanup.enabled`, `.interval` | `cleanup: { enabled, intervalMs }` | `cleanup_enabled`, `cleanup_interval_seconds` | on, hourly |
+| Migrating the table | `schema.migrate` | `migrateEgradx` / `migrateFiles` | `migrate_egradx` / `migrate_files` | on |
+
+Content types are written `image/*` or `application/pdf`; a file sent without one is `application/octet-stream`. The file name is cleaned: no path, no control characters, at most 255 characters. The [configuration reference](/docs/reference/configuration#file-storage-egradx-file-storage) lists every Java key.
+
+<Callout type="warn" title="A proxy in front has its own limit">
+  nginx refuses bodies over 1 MB by default, with a bare 413 the browser can't explain. Raise `client_max_body_size` above `max-size` (OIM uses `30m` for 25 MB), so the API answers `FILE_TOO_LARGE` itself. The same goes for a load balancer or ingress with a body limit.
+</Callout>
+
+## Who may do what
+
+| | Reading (details, bytes, list) | Uploading | Deleting |
+|---|---|---|---|
+| A file not attached to a record | `egradx.file.read` | `egradx.file.write` | `egradx.file.delete` |
+| A file attached to a record with a policy | the policy, `READ` | the policy, `WRITE` | the policy, `DELETE` |
+| The file's uploader | always | — | always |
+| A profile photo | everyone in the organization | its owner, through `/my/profile/photo` | its owner |
+| Another organization's file | 404 | — | 404 |
+
+- **Inside the caller's organization, a refusal answers 403** `ACCESS_DENIED`, for reading and deleting alike, and a refused download is recorded (`files.file.download_denied`).
+- **Listing** without leave to read the record's files still shows the files the caller uploaded to it.
+- The three permissions are on every organization's Admin role. Give them to other roles as you would [your own](/docs/guides/authorization), or let a policy decide for your records.
+
+### The access check for your records
+
+A policy answers for one `attachedType`. It sees who is asking (user, organization, authorities), what they want to do (`READ`, `WRITE` or `DELETE`), the record's id, and the file's id (none when uploading or listing). It answers:
+
+- **`ALLOW`** or **`DENY`**: settled.
+- **`DEFAULT`**: the built-in permission decides, as if there were no policy.
+
+Check that the record exists **in the caller's organization**. The id comes from the client; without that check, someone could attach files to another organization's record id.
+
+<Languages>
+<Tab value="Java">
+
+A bean per type:
+
+```java title="order/infrastructure/OrderFileAccess.java"
+@Component
+public class OrderFileAccess implements EgradxFileAccessPolicy {
+
+    private final OrderRepository orders;
+
+    public OrderFileAccess(OrderRepository orders) {
+        this.orders = orders;
+    }
+
+    @Override
+    public String attachedType() {
+        return "order";
+    }
+
+    @Override
+    public Decision decide(Request request) {
+        UUID orderId;
+        try {
+            orderId = UUID.fromString(request.attachedId());
+        } catch (IllegalArgumentException notAnId) {
+            return Decision.DENY;
+        }
+        if (orders.findByIdAndOrganizationId(orderId, request.organizationId()).isEmpty()) {
+            return Decision.DENY;                                    // not an order of this organization
+        }
+        String needed = request.action() == Action.READ ? "order.read" : "order.create";
+        return request.authorities().contains(needed) ? Decision.ALLOW : Decision.DENY;
+    }
+}
+```
+
+Or in one line: `EgradxFileAccessPolicy.of("order", request -> …)`.
+
+</Tab>
+<Tab value="Node">
+
+```ts title="src/order/order-files.ts"
+import { isUuid } from '@babulvaibhav/egradx-sdk';
+import { fileAccessPolicy } from '@babulvaibhav/egradx-file-storage';
+
+export const orderFiles = (prisma: PrismaClient) =>
+  fileAccessPolicy('order', async (request) => {
+    if (!isUuid(request.attachedId)) return 'DENY';
+    const order = await prisma.order.findFirst({ where: { id: request.attachedId, organizationId: request.organizationId }, select: { id: true } });
+    if (!order) return 'DENY';                                     // not an order of this organization
+    const needed = request.action === 'READ' ? 'order.read' : 'order.create';
+    return request.authorities.has(needed) ? 'ALLOW' : 'DENY';
+  });
+
+// createFileStorage({ …, policies: [orderFiles(prisma)] })
+```
+
+</Tab>
+<Tab value="Python">
+
+```python title="src/<module>/order/files.py"
+from sqlalchemy import text
+
+from egradx.core import is_uuid
+from egradx.files import EgradxFileAccessPolicy, FileAccessRequest, FileAction, FileDecision
+
+
+def order_files(engine) -> EgradxFileAccessPolicy:
+    async def decide(request: FileAccessRequest) -> FileDecision:
+        if not is_uuid(request.attached_id):
+            return FileDecision.DENY
+        async with engine.connect() as connection:
+            found = (await connection.execute(
+                text("SELECT 1 FROM orders WHERE id = CAST(:id AS uuid) AND organization_id = CAST(:org AS uuid)"),
+                {"id": request.attached_id, "org": request.organization_id})).first()
+        if found is None:
+            return FileDecision.DENY                                   # not an order of this organization
+        needed = "order.read" if request.action == FileAction.READ else "order.create"
+        return FileDecision.ALLOW if needed in request.authorities else FileDecision.DENY
+
+    return EgradxFileAccessPolicy("order", decide)
+
+# FilesOptions(..., policies=[order_files(engine)])
+```
+
+`decide` may be a plain function or a coroutine.
+
+</Tab>
+</Languages>
+
+A policy is called on every read of a file attached to that type, so keep it to one indexed query. The [recipe](/docs/recipes/attach-files-to-records) puts the policy and the upload screen together.
+
+## Scanning uploads
+
+A scanner sees each upload **after the bytes are stored and before the row is committed**. It returns a reason to refuse the file, or nothing to keep it. A refusal deletes the bytes and answers `FILE_REJECTED` (422). There is none by default.
+
+<Languages>
+<Tab value="Java">
+
+```java
+@Component
+class ClamAvScanner implements EgradxFileScanner {
+    @Override
+    public Optional<String> scan(Upload upload) throws IOException {
+        try (InputStream bytes = upload.open()) {          // from the start, each time it is called
+            return clamAv.isClean(bytes) ? Optional.empty() : Optional.of("A virus was found");
+        }
+    }
+}
+```
+
+</Tab>
+<Tab value="Node">
+
+```ts
+import type { EgradxFileScanner } from '@babulvaibhav/egradx-file-storage';
+
+const clamAvScanner: EgradxFileScanner = {
+  async scan(upload) {
+    return (await clamAv.isClean(await upload.open())) ? undefined : 'A virus was found';
+  },
+};
+// createFileStorage({ …, scanners: [clamAvScanner] })
+```
+
+</Tab>
+<Tab value="Python">
+
+```python
+from egradx.files import ScannedUpload
+
+
+class ClamAvScanner:
+    async def scan(self, upload: ScannedUpload) -> str | None:
+        chunks = await upload.open()                      # an async iterator of bytes
+        return None if await clam_av.is_clean(chunks) else "A virus was found"
+
+# FilesOptions(..., scanners=[ClamAvScanner()])
+```
+
+</Tab>
+</Languages>
+
+`upload` also carries the organization, name, content type and size. A scanner that can't reach its service should raise rather than keep the file: the upload then fails (`FILE_STORAGE_UNAVAILABLE` for an I/O error). See [scan uploads](/docs/recipes/scan-uploads).
+
+## Downloads
+
+`GET /egradx/files/{id}/content` answers:
+
+- **The bytes, streamed**, with `Content-Type`, `Content-Length`, `ETag` (the sha256) and `X-Content-Type-Options: nosniff`.
+- **`Content-Disposition`**: `inline` for images (but not SVG, which can carry script) and PDF, so the browser shows them; `attachment` for everything else, so it saves them. The name is RFC 5987-encoded.
+- **`Range`**: one range answers **206** with `Content-Range`; several ranges answer 200 with everything; a range past the end answers 416.
+- **Pre-signed redirect** (S3 only, `s3.presigned-downloads: true`): after the same check, **302** to a URL on the bucket that works for `s3.presigned-ttl` (5 minutes), with the same disposition. The bytes then don't pass through your application. `<img>` and links follow it as they are; a script's `fetch()` needs [CORS on the bucket](/docs/operate/troubleshooting#a-download-fails-from-a-script-with-pre-signed-downloads-on).
+
+A download is a plain `GET` that needs the session. A `<img src>` sends no bearer token, so with tokens in the browser use the client's `displayUrl` or `useFileObjectUrl`, which download into a `blob:` URL. Behind the Next.js backend-for-frontend the cookie goes with the plain URL. See [the frontend](#the-frontend).
+
+## Profile photos
+
+- **`PUT /egradx/auth/my/profile/photo`** (multipart `file`) stores the photo, deletes the previous one, and answers with the profile, whose `photoUrl` is now `/egradx/files/{id}/content`. PNG, JPEG or WebP, at most 5 MB by default (`profile-photo.*`).
+- **`DELETE /egradx/auth/my/profile/photo`** (204) deletes it and clears `photoUrl`.
+- **One per person.** Setting a photo while in another organization replaces it there too.
+- **Readable by everyone in the organization it was uploaded in.** In another organization it answers 404, so a person in several organizations shows their initials in the others until they set it again there.
+- `photoUrl` in `PUT /egradx/auth/my/profile` accepts an `http(s)` URL or a stored photo's `/egradx/files/{id}/content`, nothing else.
+
+These endpoints are served by `egradx-file-storage`, not by sign-in: without the package, `photoUrl` is an `http(s)` URL only. See [let people set a profile photo](/docs/recipes/set-a-profile-photo).
+
+## The frontend
+
+| | `@babulvaibhav/egradx-client` | `@babulvaibhav/egradx-react` | Copy-in screen |
+|---|---|---|---|
+| Upload, with progress and cancel | `client.files.upload(file, { attachedType, attachedId, onProgress, signal })` | `useFileUpload({ attachedType, attachedId, accept, maxSize, onUploaded })` | `file-upload` |
+| A record's files | `createAttachments(client, { attachedType, attachedId })`, `client.files.list(…)` | `useAttachments({ attachedType, attachedId })`: `files`, `upload`, `remove`, `download` | `attachments` |
+| Show or save one | `displayUrl(file)`, `objectUrl(file)`, `download(file, { range })`, `save(file)`, `contentUrl(file)` | `useFileObjectUrl(file)` | — |
+| Delete | `client.files.remove(id)` | `useAttachments().remove` | `attachments` |
+| The profile photo | `setProfilePhoto(blob)`, `removeProfilePhoto()`, `createProfilePhoto(client)` | `useProfilePhoto()`: `url`, `set`, `remove` | `avatar-upload` (`AvatarUpload`, `ProfilePhoto`) |
+| Checking before sending | `checkFile(file, { accept, maxSize })` | `accept`, `maxSize` | built in |
+
+```tsx
+// An order's files, with the copy-in screen.
+<Attachments attachedType="order" attachedId={order.id} maxSize={25 * 1024 * 1024} onNotify={notify} />
+
+// The person's photo, anywhere: every use follows a change made in another.
+const photo = useProfilePhoto();
+{photo.url ? <img src={photo.url} alt="" /> : initials}
+```
+
+- **Uploads report progress** through XMLHttpRequest, the one browser API that does; without `onProgress` they go through the client's fetch. Every upload and download gets the token, the refresh and the retry every call gets.
+- **`checkFile`, `accept` and `maxSize`** refuse a file before it is sent, with the same codes the server uses, so one wording covers both. Keep them in step with the server's `max-size`, `allowed-content-types` and `profile-photo.*`: they only save sending a file the server would refuse.
+- **Showing a file with tokens in the browser** (Vite): `displayUrl` and `useFileObjectUrl` download into a `blob:` URL and revoke it when done. A Content-Security-Policy must allow `blob:` in `img-src` (and `frame-src` for PDFs).
+- **With Next.js**, the backend-for-frontend passes multipart bodies on byte for byte and streams downloads back with their headers, `Range` included. The cookie goes with a plain URL, so `<img src="/bff/egradx/files/{id}/content">` works and `displayUrl` returns it without downloading. **Keep the BFF's path out of `proxy.ts`'s matcher**: a request the proxy matches has its body cut at `experimental.proxyClientMaxBodySize` (10 MB by default), so a larger upload reaches the API broken. The BFF holds an upload in memory while it passes, so it can resend it after a refresh.
+- **The copy-in screens** word every refusal in `components/egradx/files/file-format.ts` (`fileErrorText`).
+
+```sh
+npx shadcn@latest add https://<this portal>/r/attachments.json https://<this portal>/r/avatar-upload.json
+```
+
+| Item | What you get |
+|---|---|
+| [`/r/file-upload.json`](/r/file-upload.json) | `FileUpload`: a drop zone and a button, with progress and cancel; `accept` and `maxSize` checked and shown as a hint; `attachedType`/`attachedId`, `multiple`, `compact`, `onUploaded` |
+| [`/r/attachments.json`](/r/attachments.json) | `Attachments`: a record's files with name, size and date, download, delete with a confirmation, and `FileUpload` above. `canUpload` and `canDelete` hide what a role may not do; the server still decides |
+| [`/r/avatar-upload.json`](/r/avatar-upload.json) | `AvatarUpload`: the person's photo, previewed while it uploads, changed by choosing or dropping a file, removed with a confirmation. `ProfilePhoto`: the photo or the initials, for a header or menu |
+
+## Errors
+
+| Code | When | What to do |
+|---|---|---|
+| `FILE_TOO_LARGE` (413) | over `max-size`, or `profile-photo.max-size` | say the limit; a bare 413 with no envelope came from a proxy in front |
+| `FILE_TYPE_NOT_ALLOWED` (415) | not in `allowed-content-types`, or not PNG, JPEG or WebP for a photo | say what is allowed |
+| `FILE_EMPTY` (400) | no bytes | |
+| `FILE_REJECTED` (422) | a scanner refused it | |
+| `FILE_STORAGE_UNAVAILABLE` (503) | the folder can't be written, or the bucket doesn't answer | try again later; check the backend |
+| `INVALID_REQUEST` (400) | `attachedType` without `attachedId` or the other way round, a bad `purpose`, or `purpose: profile-photo` on `POST /egradx/files` | |
+| `ACCESS_DENIED` (403) | in the caller's organization, but not allowed | |
+| `NOT_FOUND` (404) | no such file, deleted, or another organization's | |
+
+The [error codes reference](/docs/reference/errors#file-storage) has them all.
+
+## Audit and observations
+
+| Audit action | Recorded when |
+|---|---|
+| `files.file.uploaded` | a file is kept, with its name, size, type, purpose and record |
+| `files.file.deleted` | a file is deleted, by someone or by replacing a profile photo |
+| `files.file.download_denied` | a read is refused in the caller's organization. Successful reads are not recorded |
+
+The upload's audit record is written in the row's transaction. Uploads and downloads are observed as `egradx.files.upload` and `egradx.files.download` (traces and metrics, [observability](/docs/guides/observability)).
+
+## Guarantees and limits
+
+- **No row without bytes, no bytes left without a row.** The bytes are stored first; a failure in the scanners, the row or the audit record deletes them. A delete marks the row first, so the file is gone at once; bytes that fail to delete are removed by the hourly clean-up.
+- **Organization-scoped**: a file is never visible outside its organization, whatever the policy says.
+- **Sizes are enforced while streaming**, not after: an oversized upload is cut off at the limit.
+- **The same table, keys and endpoints in every language**: Java, Node and Python services can share one database and one bucket.
+- **One request per upload.** There is no resumable or chunked upload yet: a large file on a bad connection starts again. That is the next step, on the same files API.
+- **Profile photos are one per person** and readable only within the organization they were uploaded in.
+- **No image processing**: photos are kept as uploaded (no resizing or thumbnails), and the browser scales them.
+- **Downloads go through your application** unless pre-signed downloads are on, which needs S3.
+- **Local disk with several instances** needs one shared folder; otherwise each instance sees only what it stored.
+
+## In OIM
+
+All three OIM backends store files on local disk, in the `oim_files` volume of `docker-compose.yml` (`EGRADX_FILES_BACKEND=s3` and the `EGRADX_FILES_S3_*` variables switch to a bucket). Orders have attachments, decided by `OrderFileAccess`: whoever may see the order sees its files; whoever may create orders adds and deletes them.
+
+<Languages>
+<Tab value="Java">
+
+<RepoSnippet file="apps/egradx-oim/backend/src/main/java/com/egradx/oim/order/infrastructure/OrderFileAccess.java" title="order/infrastructure/OrderFileAccess.java" />
+
+<RepoSnippet file="apps/egradx-oim/backend/src/main/resources/application.yml" region="sdk-config" title="backend/src/main/resources/application.yml" />
+
+</Tab>
+<Tab value="Node">
+
+<RepoSnippet file="apps/egradx-oim/backend-node/src/runtime.ts" region="sdk-wiring" title="backend-node/src/runtime.ts" />
+
+The policy, `orderFileAccess(prisma)`, is in the same file.
+
+</Tab>
+<Tab value="Python">
+
+<RepoSnippet file="apps/egradx-oim/backend-python/src/egradx_oim/main.py" region="sdk-wiring" title="backend-python/src/egradx_oim/main.py" />
+
+The policy, `order_file_access(engine)`, is in `orders.py`.
+
+</Tab>
+</Languages>
+
+The Vite frontend shows an order's files with `OrderAttachments` (on `useAttachments` and `useFileUpload`), the photo on the account page with `ProfilePhotoCard`, and the photo in the header with `UserAvatar` (both on `useProfilePhoto`). Its nginx allows bodies of 30 MB (`client_max_body_size 30m`) for the 25 MB limit, and its Content-Security-Policy allows `blob:` in `img-src`. The Next.js frontend uses the copy-in `attachments` and `avatar-upload` screens.
+
+## See also
+
+- Recipes: [attach files to your records](/docs/recipes/attach-files-to-records) · [let people set a profile photo](/docs/recipes/set-a-profile-photo) · [store files in S3 or MinIO](/docs/recipes/store-files-in-s3) · [scan uploads](/docs/recipes/scan-uploads)
+- [HTTP: file storage](/docs/reference/http/files) · [Error codes](/docs/reference/errors#file-storage) · [Web](/docs/guides/web#files)

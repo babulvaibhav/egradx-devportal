@@ -13,9 +13,15 @@ Each recipe does one task. The code comes from [the example applications](/docs/
 | [Add a permission and give it to a role](/docs/recipes/add-a-permission) | your authorities in the catalog, on every new organization's roles |
 | [Get the current user and organization](/docs/recipes/current-user-and-organization) | in a request, and in work that outlives it |
 | [Invite a user into an organization](/docs/recipes/invite-a-user) | the invite form and the page the link opens |
+| [Let people sign up](/docs/recipes/let-people-sign-up) | an account and an organization of their own, confirmed by code |
+| [Add Sign in with Google and Zoho](/docs/recipes/sign-in-with-google-and-zoho) | the OAuth clients, the redirect URI, the callback page |
+| [Add another sign-in provider](/docs/recipes/add-a-sign-in-provider) | GitHub, or any provider not built in: one class |
+| [Sign in with an emailed code](/docs/recipes/sign-in-with-an-emailed-code) | "email me a code", no password needed |
+| [Link a provider from the profile](/docs/recipes/link-a-provider) | link, unlink, set a first password |
 | [Build a password-reset screen](/docs/recipes/password-reset) | "forgot your password?" and the reset page |
 | [Switch organization in the UI](/docs/recipes/switch-organization) | at sign-in, and from a menu |
 | [Handle SESSION_REVOKED in the frontend](/docs/recipes/handle-session-revoked) | when a session ends elsewhere |
+| [List and end sessions](/docs/recipes/list-and-end-sessions) | where you're signed in; sign one device out |
 | [Call another service](/docs/recipes/service-token) | forwarding the user's token, or client credentials |
 
 ## Audit
@@ -51,6 +57,15 @@ Each recipe does one task. The code comes from [the example applications](/docs/
 | [Read dead letters and replay them](/docs/recipes/dead-letters) | outbox, RabbitMQ, Kafka |
 | [Ship logs](/docs/recipes/ship-logs) | every line as an event |
 | [Add request ids to your own log format](/docs/recipes/request-ids-in-logs) | Logback, pino, Python logging |
+
+## Files
+
+| Recipe | |
+|---|---|
+| [Attach files to your records](/docs/recipes/attach-files-to-records) | an access policy, and the Attachments screen |
+| [Let people set a profile photo](/docs/recipes/set-a-profile-photo) | upload, preview, replace, show it in the header |
+| [Store files in S3 or MinIO](/docs/recipes/store-files-in-s3) | a bucket instead of local disk, pre-signed downloads |
+| [Scan uploads](/docs/recipes/scan-uploads) | refuse a file before it is kept |
 
 ## Data
 

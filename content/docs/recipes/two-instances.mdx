@@ -22,14 +22,59 @@ Most of the SDK coordinates through PostgreSQL, so a second instance needs littl
 | Audit retention purge | one instance at a time; or turn it off on all but one (`retention.enabled: false`) |
 | Migrations | an advisory lock: the first instance migrates, the others wait |
 
-## Per instance
+## Shared through Redis, with egradx-redis
 
-| | What it means | What to do |
+Three things are per instance unless the instances share a Redis. Add `egradx-redis` and point it at one; nothing else changes:
+
+| | Per instance, without it | With it |
 |---|---|---|
-| **Role cache** | a change to a role's authorities applies at once on the instance that made it, and within 60 seconds on the others | usually nothing; lower `role-authorities-cache-ttl-seconds` if 60 s is too long |
-| **Live notices** | a notice reaches the streams open **on the instance that published it**; people connected elsewhere see it on their next load | a broadcaster of your own (Redis pub/sub) to make it live everywhere |
-| **Sign-in attempt limit** | counted on each instance separately: with *n* instances, up to *n* × the limit | a limit at the load balancer as well |
-| **Your own caches** | — | key them by organization, and expire them, or share them (OIM uses Redis) |
+| **Sign-in attempt limit** | counted on each instance: with *n* instances, up to *n* × the limit | counted together, in Redis |
+| **Role cache** | a change to a role's authorities applies on the others within 60 seconds | evicted on every instance at once |
+| **Live notices** | reach the streams open on the instance that published it | reach every instance's streams |
+
+<Languages>
+<Tab value="Java">
+
+```xml
+<dependency><groupId>com.egradx</groupId><artifactId>egradx-redis</artifactId></dependency>
+```
+
+```yaml
+spring:
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+```
+
+</Tab>
+<Tab value="Node">
+
+```ts
+import { createRedisCoordination } from '@babulvaibhav/egradx-redis';
+
+const redis = createRedisCoordination({ url: process.env.REDIS_URL });
+const egradx = createEgradx({ prisma, auth: { … }, redis });
+await egradx.start();   // starts it too; egradx.close() closes it
+```
+
+</Tab>
+<Tab value="Python">
+
+```python
+# pip install "egradx-sdk[redis]"
+from egradx.redis import EgradxRedisCoordination
+
+sdk = EgradxSdk(engine, SdkOptions(auth=AuthOptions(...), redis=EgradxRedisCoordination(os.environ["REDIS_URL"])))
+```
+
+</Tab>
+</Languages>
+
+**It fails open.** While Redis is down nothing fails with it: sign-in is allowed and uncounted, role changes wait for the 60-second expiry, notices reach this instance's streams only. Failures are counted (`egradx.redis.failures`) and logged once a minute; an instance starts without Redis and subscribes once it is back. Instances in different languages behind one Redis act together: they use the same keys and messages. `egradx.redis.key-prefix` (`keyPrefix`, `key_prefix`) separates applications sharing one Redis.
+
+## Your own caches
+
+Key them by organization and expire them, or share them (OIM uses Redis).
 
 ## Different services, one database
 

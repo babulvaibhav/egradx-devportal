@@ -1,0 +1,45 @@
+{
+  "description": "Messages egradx-redis publishes, in every SDK. Each SDK reads every 'message' here into its own type and writes it back to JSON equal to 'message' (key order aside, timestamps compared as instants: 09:16:00Z and 09:16:00.000Z are equal). See README.md.",
+  "role-authorities-changed": [
+    {
+      "name": "a role",
+      "message": { "roleId": "0f8e9a3c-2b7d-4c1e-9a5f-3d2c1b0a9e8f" }
+    }
+  ],
+  "notification-published": [
+    {
+      "name": "to one user, unread, with metadata",
+      "message": {
+        "item": {
+          "id": "1b2c3d4e-5f60-4718-8a9b-0c1d2e3f4a5b",
+          "scope": "USER",
+          "organizationId": "7a6b5c4d-3e2f-4a1b-9c8d-7e6f5a4b3c2d",
+          "notificationKey": "oim.inventory.low",
+          "title": "Low stock",
+          "body": "Inventory running low: 7 left",
+          "metadata": { "productId": "c3d4e5f6-0718-4293-a4b5-c6d7e8f90a1b", "remaining": 7 },
+          "createdAt": "2026-10-30T09:15:42.123Z",
+          "readAt": null
+        },
+        "recipientUserId": "9e8d7c6b-5a49-4382-9170-6f5e4d3c2b1a"
+      }
+    },
+    {
+      "name": "to an organization, no metadata",
+      "message": {
+        "item": {
+          "id": "2c3d4e5f-6071-4829-9bac-1d2e3f4a5b6c",
+          "scope": "ORGANIZATION",
+          "organizationId": "7a6b5c4d-3e2f-4a1b-9c8d-7e6f5a4b3c2d",
+          "notificationKey": "notes.note.created",
+          "title": "New note",
+          "body": null,
+          "metadata": {},
+          "createdAt": "2026-10-30T09:16:00Z",
+          "readAt": null
+        },
+        "recipientUserId": null
+      }
+    }
+  ]
+}

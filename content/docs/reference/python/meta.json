@@ -14,6 +14,8 @@
     "egradx-migrations",
     "egradx-tls-provider",
     "egradx-audit-auth",
-    "egradx-notification-auth"
+    "egradx-notification-auth",
+    "egradx-redis",
+    "egradx-file-storage"
   ]
 }

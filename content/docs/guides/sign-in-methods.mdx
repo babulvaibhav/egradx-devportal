@@ -1,0 +1,526 @@
+---
+title: Sign-up and sign-in methods
+description: Let people sign up with an organization of their own, sign in with an emailed code, or with Google, Zoho or any OpenID Connect provider — accounts with or without a password, linked by email or from the profile.
+---
+
+<Parity id="identity.sign-in-methods" />
+
+## What it is
+
+A password is one way in. The SDK serves the others too, from the same `/egradx/auth/**` endpoints, in every language:
+
+- **Sign-up.** With `signup.mode: organization`, anyone may make an account. They confirm their email with a code and become the administrator of a **new organization of their own**. With `invitation`, the default, accounts are made only by an administrator or by accepting an invitation. Joining an *existing* organization always takes an invitation.
+- **An emailed code.** Six digits sent to the account's address sign the person in. No password is needed.
+- **OpenID Connect providers.** "Sign in with Google" and "Sign in with Zoho" are built-in provider types. Microsoft, Okta, Keycloak or any other OpenID Connect provider is added by configuration; a provider that isn't OpenID Connect, such as GitHub, is [one class of yours](#adding-a-provider). Providers are set for the whole application. Single sign-on per organization is planned.
+- **Accounts without a password.** An account made by a code, a provider or an invitation may have no password. The person can set one later.
+- **Linking.** A provider whose verified email matches an account is linked to it automatically, if the provider is trusted for that. Otherwise the person signs in another way first and links the provider from their profile.
+
+You write none of it. You choose the mode, give each provider a client id and secret, and serve the pages: the sign-in page, a sign-up page, and `/auth/callback`, where a provider sign-in comes back. The [copy-in screens](/docs/guides/web#copy-in-screens) are those pages, ready made.
+
+## How it works
+
+The sign-in page first asks what it can offer: `GET /egradx/auth/sign-in-options`, which is public.
+
+```json
+{ "password": true, "emailCode": true, "signup": "organization",
+  "providers": [ { "id": "google", "name": "Google" }, { "id": "zoho", "name": "Zoho" } ] }
+```
+
+`emailCode` is true when codes are on (`email-code.enabled`, the default) **and** something delivers account messages: `egradx-notification-auth`, which `egradx-sdk` includes. Sign-up needs the same. A provider is listed only once it has everything it needs (below).
+
+### A provider sign-in, end to end
+
+<Mermaid chart={`sequenceDiagram
+  participant B as Browser
+  participant F as Your frontend
+  participant A as Your API (with the SDK)
+  participant P as Google / Zoho
+  B->>A: GET /egradx/auth/oidc/google/start?returnTo=/orders
+  A-->>B: 302 to the provider (PKCE, state, nonce)
+  B->>P: the person signs in and agrees
+  P-->>B: 302 to {callback-base-url}/egradx/auth/oidc/google/callback?code&state
+  B->>A: the callback
+  A->>P: exchange the code, verify the ID token
+  A-->>B: 302 to {links.base-url}/auth/callback?code=…&returnTo=/orders
+  B->>F: /auth/callback
+  F->>A: POST /egradx/auth/oidc/exchange { code }
+  A-->>F: the session (or ORG_SELECTION_REQUIRED, SIGNUP_REQUIRED…)`} />
+
+1. **Start.** The browser *navigates* (it does not fetch) to `GET /egradx/auth/oidc/{id}/start?returnTo=/somewhere`. The SDK keeps the round trip for `oidc.flow-ttl` (10 minutes) and sends the browser to the provider. `returnTo` must be a path on your site: it starts with `/`, not with `//` or `/\`.
+2. **Callback.** The provider sends the browser back to `{callback-base-url}/egradx/auth/oidc/{id}/callback`. The SDK exchanges the code and checks the ID token against the provider's published keys: signature (RS256 or ES256), issuer, audience, expiry and nonce. It then sends the browser to your frontend, `{links.base-url}/auth/callback`:
+   - with `?code=…&returnTo=…` when the provider's answer checked out. The code is a one-time **result code**, not the provider's.
+   - with `?error=OIDC_CANCELLED` when the person declined, `OIDC_STATE_INVALID` for an unknown or expired round trip, or `OIDC_FAILED` when the exchange or the token check failed.
+3. **Exchange.** Your `/auth/callback` page posts `POST /egradx/auth/oidc/exchange { code }`. What happens depends on who the provider says this is:
+
+| The provider's person | Answer |
+|---|---|
+| Already linked to an account (same issuer and subject) | that account signs in |
+| Has the email of an active account, the email is verified, and the provider is `trust-email` | the provider is **linked** to the account, its owner is emailed that a sign-in method was added, and they sign in |
+| Has the email of an account, but not verified or the provider isn't trusted | `409 IDENTITY_LINK_REQUIRED`: sign in another way, then [link it from the profile](/docs/recipes/link-a-provider) |
+| No account, and an `invitationToken` was sent for this email | the invitation is accepted as a new account with no password, the provider linked |
+| No account, and `signup.mode: organization` | `409 SIGNUP_REQUIRED` with `details: { email, name, provider }`: ask for an organization name, then `POST /egradx/auth/oidc/signup { code, organizationName }` with the **same** code |
+| No account otherwise | `403 AUTH_NO_ACCOUNT`: joining takes an invitation |
+
+An unverified email can't make an account or be linked to one (`OIDC_EMAIL_NOT_VERIFIED`). `ORG_SELECTION_REQUIRED` keeps the code usable: send it again with `organizationId`. A used, unknown or expired code is `OIDC_CODE_INVALID`.
+
+### An emailed code
+
+`POST /egradx/auth/email-code { email }` always answers **204**, so the form never reveals whether an account exists. A code goes only to an active account. Then `POST /egradx/auth/email-code/verify { email, code, organizationId? }` answers with the usual sign-in result. A code lasts 10 minutes, survives 5 wrong tries, and a new one can be asked for after 60 seconds. Codes are stored as Argon2 hashes, one per address and purpose.
+
+### Signing up
+
+`POST /egradx/auth/signup { email, name?, organizationName, password? }` checks the email and organization name, and emails a code (**202** `{ email, expiresAt, resendAvailableAt }`). `POST /egradx/auth/signup/confirm { email, code }` creates in one transaction the organization, its `Admin` role, the user (username = email, a password only if one was given), the membership and a session in the new organization (**201**). Your [`onOrganizationCreated` listeners](/docs/guides/identity#organizations-and-their-first-administrator) run as for any other new organization, so its roles and permissions are in place.
+
+Signing up with a provider is the same, with the provider's verified email, no password and no code.
+
+## Configuration
+
+<Languages>
+<Tab value="Java">
+
+```yaml title="application.yml"
+egradx:
+  auth:
+    links:
+      base-url: https://app.example.com              # your frontend: where the browser lands afterwards
+    signup:
+      mode: organization                             # or invitation (the default)
+      allowed-email-domains: []                      # e.g. [example.com]; empty allows any
+    email-code:
+      enabled: true                                  # the default
+    oidc:
+      callback-base-url: https://api.example.com/api # this API, as the browser reaches it
+      providers:
+        google:
+          type: google
+          client-id: ${GOOGLE_CLIENT_ID:}
+          client-secret: ${GOOGLE_CLIENT_SECRET:}
+        zoho:
+          type: zoho
+          client-id: ${ZOHO_CLIENT_ID:}
+          client-secret: ${ZOHO_CLIENT_SECRET:}
+```
+
+</Tab>
+<Tab value="Node">
+
+```ts title="src/app.ts"
+const egradx = createEgradx({
+  prisma,
+  auth: {
+    issuer: 'https://notes.local',
+    keys: { keystorePath: config.keystorePath, passphrase: config.keyPassphrase },
+    links: { baseUrl: 'https://app.example.com' },     // your frontend: where the browser lands afterwards
+    signup: { mode: 'organization' },                  // or 'invitation' (the default)
+    emailCode: { enabled: true },                      // the default
+    oidc: {
+      callbackBaseUrl: 'https://api.example.com/api',  // this API, as the browser reaches it
+      providers: {
+        google: { type: 'google', clientId: process.env.GOOGLE_CLIENT_ID, clientSecret: process.env.GOOGLE_CLIENT_SECRET },
+        zoho: { type: 'zoho', clientId: process.env.ZOHO_CLIENT_ID, clientSecret: process.env.ZOHO_CLIENT_SECRET },
+      },
+    },
+  },
+});
+```
+
+</Tab>
+<Tab value="Python">
+
+```python title="src/<module>/app.py"
+from egradx.sdk import AuthOptions, LinkSettings, OidcProviderSettings, OidcSettings, SdkOptions, SignupSettings
+
+sdk = EgradxSdk(engine, SdkOptions(
+    auth=AuthOptions(
+        issuer="https://notes.local",
+        keystore_path=config.keystore_path,
+        keystore_passphrase=config.key_passphrase,
+        links=LinkSettings(base_url="https://app.example.com"),  # your frontend: where the browser lands afterwards
+        signup=SignupSettings(mode="organization"),              # or "invitation" (the default)
+        oidc=OidcSettings(
+            callback_base_url="https://api.example.com/api",     # this API, as the browser reaches it
+            providers={
+                "google": OidcProviderSettings(type="google", client_id=os.environ.get("GOOGLE_CLIENT_ID"),
+                                               client_secret=os.environ.get("GOOGLE_CLIENT_SECRET")),
+                "zoho": OidcProviderSettings(type="zoho", client_id=os.environ.get("ZOHO_CLIENT_ID"),
+                                             client_secret=os.environ.get("ZOHO_CLIENT_SECRET")),
+            },
+        ),
+    ),
+))
+```
+
+</Tab>
+</Languages>
+
+A provider missing its client id or secret, or with no `callback-base-url` or `links.base-url`, is **left out with a warning at startup**: the application starts, and the sign-in page shows no button for it. So the same configuration runs on a laptop without credentials.
+
+| | Java (`egradx.auth.*`) | Node (`auth: {…}`) | Python (`AuthOptions(...)`) | Default |
+|---|---|---|---|---|
+| Who may make an account | `signup.mode` | `signup: { mode }` | `signup=SignupSettings(mode=…)` | `invitation` |
+| Email domains allowed to sign up | `signup.allowed-email-domains` | `signup: { allowedEmailDomains }` | `SignupSettings(allowed_email_domains=[…])` | any |
+| The deprecated `POST /register` | `signup.legacy-register` | `signup: { legacyRegister }` | `SignupSettings(legacy_register=…)` | off: `SIGNUP_DISABLED` |
+| Emailed codes | `email-code.enabled`, `.ttl`, `.max-attempts`, `.resend-interval` | `emailCode: { enabled, ttlMs, maxAttempts, resendIntervalMs }` | `email_code=EmailCodeSettings(enabled, ttl_ms, max_attempts, resend_interval_ms)` | on, 10 min, 5, 60 s |
+| This API as the provider's redirect reaches it | `oidc.callback-base-url` | `oidc: { callbackBaseUrl }` | `OidcSettings(callback_base_url=…)` | none: no providers |
+| Your frontend's callback page | `oidc.frontend-callback-path` | `oidc: { frontendCallbackPath }` | `OidcSettings(frontend_callback_path=…)` | `/auth/callback` |
+| How long a round trip may take | `oidc.flow-ttl` | `oidc: { flowTtlMs }` | `OidcSettings(flow_ttl_ms=…)` | 10 min |
+| The providers, by id | `oidc.providers.<id>.*` | `oidc: { providers: { <id>: {…} } }` | `OidcSettings(providers={"<id>": OidcProviderSettings(…)})` | none |
+| Where the browser lands afterwards | `links.base-url` | `links: { baseUrl }` | `links=LinkSettings(base_url=…)` | none: no providers |
+
+Each provider takes `type` (`oidc`, the default; `google`; `zoho`; or [a type of your own](#adding-a-provider)), `name`, `issuer`, `client-id`, `client-secret`, `scopes` (default `openid email profile`), `trust-email` and `enabled` (Node `clientId`, `trustEmail`…; Python `client_id`, `trust_email`…). The [configuration reference](/docs/reference/configuration#sign-in-and-identity) lists every Java key.
+
+## Two addresses to get right
+
+<Callout type="warn" title="The redirect URI must match exactly">
+  Register `{callback-base-url}/egradx/auth/oidc/{id}/callback` with the provider, character for character: scheme, host, port, path, no trailing slash. With `callback-base-url: https://api.example.com/api` and the id `google`, that is `https://api.example.com/api/egradx/auth/oidc/google/callback`. A mismatch makes the provider refuse before the SDK sees anything.
+</Callout>
+
+- **`callback-base-url`** is where the **provider** sends the browser back: your API, as the browser reaches it, including any path prefix your API is mounted under.
+- **`links.base-url`** is where the **API** then sends the browser: your frontend. It is also where password-reset and invitation links point.
+
+Both must be public addresses the browser can reach. With [Next.js and the backend-for-frontend](/docs/guides/web#nextjs-with-the-backend-for-frontend), bring the callback through the BFF as well: `callback-base-url` is the BFF's public prefix (`https://app.example.com/bff` in the generated project; `/api` in the package's README) and `links.base-url` the Next app (`https://app.example.com`). Locally with the examples: `http://localhost:8080` for the API and `http://localhost:5173` (Vite) or `http://localhost:3000` (Next.js) for the frontend.
+
+## Google
+
+1. In the [Google Cloud Console](https://console.cloud.google.com/), choose or create a project.
+2. Set up the **OAuth consent screen** (Google Auth Platform, "Branding" and "Audience"): the app name, a support email, and who may sign in: *External* for anyone with a Google account, *Internal* for your Google Workspace only. While an external app is in *Testing*, only the test users you list can sign in; publish it for everyone.
+3. **Credentials → Create credentials → OAuth client ID**, application type **Web application**.
+4. Under **Authorized redirect URIs**, add `{callback-base-url}/egradx/auth/oidc/google/callback`, one per environment (local, staging, production). Authorized JavaScript origins are not needed: the browser never talks to Google from a script.
+5. Copy the **client ID** and **client secret** into `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`, from your secret store, never from the repository.
+
+The `google` type sets the issuer `https://accounts.google.com`, the name "Google" and `trust-email: true`: Google's verified emails link to existing accounts.
+
+## Zoho
+
+1. In the [Zoho API Console](https://api-console.zoho.com/), **Add Client** and choose **Server-based Applications**.
+2. Give the client name, your homepage URL, and under **Authorized Redirect URIs** `{callback-base-url}/egradx/auth/oidc/zoho/callback`.
+3. Copy the **Client ID** and **Client Secret** into `ZOHO_CLIENT_ID` and `ZOHO_CLIENT_SECRET`.
+4. If your users' Zoho accounts are in other data centres, turn those on for the client in its settings (multi-DC), so the same client works there.
+
+**Data centres.** The `zoho` type's issuer is `https://accounts.zoho.com`. A person whose account lives in another data centre comes back with Zoho's `accounts-server` parameter, for example `https://accounts.zoho.in`. The SDK then uses that data centre as the issuer for the code exchange and the ID token, but only for Zoho's own: `accounts.zoho.` followed by `com`, `eu`, `in`, `com.au`, `jp`, `ca`, `sa`, `uk` or `com.cn`. Anything else is refused. The type has `trust-email: true`. This is the one thing `EgradxZohoSignInProvider` does differently from any OpenID Connect provider: it overrides `issuerFor` ([adding a provider](#an-openid-connect-provider-with-a-quirk)).
+
+## Any other provider
+
+Any OpenID Connect provider with discovery at `{issuer}/.well-known/openid-configuration` works. Give it an id (it appears in the URLs), a `name` (on the button; the id when left out) and its `issuer`:
+
+<Languages>
+<Tab value="Java">
+
+```yaml
+egradx.auth.oidc.providers:
+  okta:
+    name: Okta
+    issuer: https://example.okta.com
+    client-id: ${OKTA_CLIENT_ID:}
+    client-secret: ${OKTA_CLIENT_SECRET:}
+    trust-email: false   # the default for type oidc, which is the default type
+```
+
+Microsoft Entra ID: `issuer: https://login.microsoftonline.com/<tenant id>/v2.0`. Keycloak: `issuer: https://keycloak.example.com/realms/<realm>`.
+
+</Tab>
+<Tab value="Node">
+
+```ts
+oidc: {
+  callbackBaseUrl: 'https://api.example.com/api',
+  providers: {
+    okta: { name: 'Okta', issuer: 'https://example.okta.com', clientId: process.env.OKTA_CLIENT_ID, clientSecret: process.env.OKTA_CLIENT_SECRET, trustEmail: false },
+  },
+},
+```
+
+</Tab>
+<Tab value="Python">
+
+```python
+oidc=OidcSettings(
+    callback_base_url="https://api.example.com/api",
+    providers={"okta": OidcProviderSettings(name="Okta", issuer="https://example.okta.com",
+                                            client_id=os.environ.get("OKTA_CLIENT_ID"),
+                                            client_secret=os.environ.get("OKTA_CLIENT_SECRET"),
+                                            trust_email=False)},
+),
+```
+
+</Tab>
+</Languages>
+
+The client secret is sent in the token request's body (`client_secret_post`): allow that method when the provider asks. The flow is the authorization code flow with PKCE (S256), `state` and `nonce`.
+
+## Adding a provider
+
+A provider the SDK doesn't have, such as GitHub (OAuth 2, not OpenID Connect) or a company's own identity server, is **one class of yours**. No code of the SDK's changes, and you write no callback endpoint, state, PKCE or linking.
+
+Providers follow the **Strategy pattern**. egradx-auth runs the round trip: the state, PKCE and nonce, the callback endpoint, the result code, linking to an account, and the session. It asks a provider only for the two steps that differ between providers: **where to send the browser**, and **who came back**. Google and Zoho are built this way too: `EgradxGoogleSignInProvider` and `EgradxZohoSignInProvider` extend the generic `EgradxOidcSignInProvider`. Google changes only its defaults; Zoho also changes the issuer it checks for a data centre.
+
+| Piece | Java | Node | Python |
+|---|---|---|---|
+| The strategy | `EgradxSignInProvider` | `EgradxSignInProvider` | `EgradxSignInProvider` (a protocol) |
+| What it gets to start | `EgradxSignInProvider.Authorization` | `EgradxSignInAuthorization` | `SignInAuthorization` |
+| What it gets back | `EgradxSignInProvider.Callback` | `EgradxSignInCallback` | `SignInCallback` |
+| What it returns | `EgradxProviderIdentity` | `EgradxProviderIdentity` | `EgradxProviderIdentity` |
+| What it throws | `EgradxSignInProviderException` | `EgradxSignInProviderException` | `EgradxSignInProviderException` |
+| A factory per `type` | `EgradxSignInProviderFactory` | `SignInProviderFactory` | `SignInProviderFactory` |
+| The built-ins | `EgradxOidcSignInProvider` (`oidc`), `EgradxGoogleSignInProvider` (`google`), `EgradxZohoSignInProvider` (`zoho`), each with its `Factory` | the same | the same |
+
+A provider has:
+
+- **`id`**, **`name`** and **`trustEmail`** (Python `trust_email`). The id is in the URLs: `/egradx/auth/oidc/{id}/start`, and the redirect URI `{callback-base-url}/egradx/auth/oidc/{id}/callback`.
+- **`authorizationUrl(request)`**: where to send the browser. `request` carries `redirectUri`, `state`, `nonce` and `codeChallenge`. Put `state` in the URL; use `nonce` and `codeChallenge` if the provider supports them.
+- **`complete(callback)`**: who came back. `callback` carries `code`, every query parameter of the callback (`parameters`), `redirectUri`, `codeVerifier` and `nonce`. Exchange the code and return `{ issuer, subject, email, emailVerified, name }`.
+  - `(issuer, subject)` is what gets linked to an account. A provider that isn't OpenID Connect uses a fixed issuer, such as `https://github.com`.
+  - `emailVerified` null means the provider doesn't say; `trustEmail` then decides, as for a missing `email_verified` claim.
+- **A failure** throws `EgradxSignInProviderException`. The browser comes back to `/auth/callback?error=OIDC_FAILED`, and the message is only logged.
+
+There are **two ways** to register one:
+
+1. **A provider object.** Java: a bean; Node: `oidc.extraProviders`; Python: `OidcSettings(extra_providers=[…])`. It needs `callback-base-url` and `links.base-url`, as configured ones do. Its client id and secret are yours to read.
+2. **A factory for a new `type`.** Java: an `EgradxSignInProviderFactory` bean; Node: `oidc.providerFactories`; Python: `OidcSettings(provider_factories=[…])`. Then configure providers of that type under `providers`, as for Google: the client id and secret are checked, and a provider missing them is left out with a warning. A factory with the type of a built-in (`oidc`, `google`, `zoho`) replaces the built-in.
+
+Two providers with the same id are an error at startup.
+
+<Languages>
+<Tab value="Java">
+
+```java title="src/main/java/com/example/notes/auth/GitHubSignInProviderFactory.java"
+// 2. A factory for type: github. (1. would be: @Bean EgradxSignInProvider github(...) { return new GitHubSignInProvider(...); })
+@Component
+class GitHubSignInProviderFactory implements EgradxSignInProviderFactory {
+
+    private final RestTemplate http; // the SDK's
+
+    GitHubSignInProviderFactory(RestTemplate http) {
+        this.http = http;
+    }
+
+    @Override
+    public String type() {
+        return "github";
+    }
+
+    @Override
+    public EgradxSignInProvider create(String id, EgradxAuthProperties.OidcProvider settings) {
+        return new GitHubSignInProvider(id, settings.getClientId().strip(), settings.getClientSecret(),
+                Boolean.TRUE.equals(settings.getTrustEmail()), http);
+    }
+}
+```
+
+```yaml title="application.yml"
+egradx.auth.oidc.providers:
+  github: { type: github, client-id: "${GITHUB_CLIENT_ID:}", client-secret: "${GITHUB_CLIENT_SECRET:}" }
+```
+
+</Tab>
+<Tab value="Node">
+
+```ts title="src/app.ts"
+import { createEgradx, type SignInProviderFactory } from '@babulvaibhav/egradx-sdk';
+import { GitHubSignInProvider } from './auth/github.js';
+
+// 2. A factory for type: 'github'. (1. would be: oidc: { extraProviders: [new GitHubSignInProvider('github', …)] })
+const github: SignInProviderFactory = {
+  type: 'github',
+  create: (id, settings) => new GitHubSignInProvider(id, settings.clientId!, settings.clientSecret!, settings.trustEmail ?? false),
+};
+
+const egradx = createEgradx({
+  prisma,
+  auth: {
+    // …issuer, keys, links
+    oidc: {
+      callbackBaseUrl: 'https://api.example.com/api',
+      providerFactories: [github],
+      providers: {
+        github: { type: 'github', clientId: process.env.GITHUB_CLIENT_ID, clientSecret: process.env.GITHUB_CLIENT_SECRET },
+      },
+    },
+  },
+});
+```
+
+</Tab>
+<Tab value="Python">
+
+```python title="src/<module>/app.py"
+from egradx.sdk import EgradxSignInProvider, OidcProviderSettings, OidcSettings
+
+from .auth.github import GitHubSignInProvider
+
+
+class GitHubSignInProviderFactory:  # 2. a factory for type="github" (1. would be: OidcSettings(extra_providers=[GitHubSignInProvider(...)]))
+    type = "github"
+
+    def create(self, provider_id: str, settings: OidcProviderSettings) -> EgradxSignInProvider:
+        return GitHubSignInProvider(provider_id, settings.client_id, settings.client_secret, bool(settings.trust_email))
+
+
+oidc = OidcSettings(
+    callback_base_url="https://api.example.com/api",
+    provider_factories=[GitHubSignInProviderFactory()],
+    providers={"github": OidcProviderSettings(type="github", client_id=os.environ.get("GITHUB_CLIENT_ID"),
+                                              client_secret=os.environ.get("GITHUB_CLIENT_SECRET"))},
+)
+```
+
+</Tab>
+</Languages>
+
+`GitHubSignInProvider` itself, in all three languages, is in the recipe [add another sign-in provider](/docs/recipes/add-a-sign-in-provider). Once registered, the provider is in `GET /egradx/auth/sign-in-options`, so the sign-in page and the picker show its button with no frontend change.
+
+### An OpenID Connect provider with a quirk
+
+An OpenID Connect provider that differs in one thing extends `EgradxOidcSignInProvider` and overrides that thing. Everything else comes with it: discovery, PKCE, the code exchange and the ID token check.
+
+- **`issuerFor(callbackParameters)`** (Python `issuer_for`) gives the issuer to exchange the code with and to expect in the ID token. It is the configured issuer by default. Zoho overrides it to follow `accounts-server` to its other data centres.
+- **Its defaults** (issuer, name, `trustEmail`) go to the protected `settings(id, configured, defaultIssuer, defaultName, defaultTrustEmail)` helper (Python `settings_from`) in its factory. That is all Google does.
+
+The recipe has [a full example](/docs/recipes/add-a-sign-in-provider#an-openid-connect-provider-with-a-quirk).
+
+## Trusting a provider's email
+
+`trust-email` decides whether a provider's **verified** email is proof enough to link it to an existing account with that email, with no other step.
+
+- **True** for the `google` and `zoho` types: they verify the addresses they hand out. For them, an email with no `email_verified` claim also counts as verified.
+- **False** by default for every other provider. Set it to true only for a provider you control, or one that verifies every email. A provider that lets people type any address would otherwise let anyone take over an account.
+
+Untrusted, an email match answers `IDENTITY_LINK_REQUIRED`, and the person links the provider [from their profile](/docs/recipes/link-a-provider) after signing in another way. Either way, an unverified email never links or makes an account, and the account's owner is emailed whenever a provider is linked.
+
+## Accounts without a password
+
+- An account made by a code, a provider or an invitation may have **no password**. A password sign-in to it fails exactly as a wrong password does, and takes as long.
+- `POST /egradx/auth/my/password` **without** `currentPassword` sets a first password; `GET /egradx/auth/my/sign-in-methods` says whether there is one (`password: true|false`).
+- Accepting an invitation as a new account needs only a name: the password is optional ([invite a user](/docs/recipes/invite-a-user)).
+- Administrators may create users with or without a password.
+- A person can't remove their last way in: unlinking the only provider of an account with no password, while codes are off, answers `SIGN_IN_METHOD_REQUIRED`.
+
+## The frontend
+
+The browser packages do the calls; the copy-in screens are the pages.
+
+| | `@babulvaibhav/egradx-client` (`client.session`) | `@babulvaibhav/egradx-react` | Copy-in screen |
+|---|---|---|---|
+| What to offer | `signInOptions()` | `useSignInOptions()` | — |
+| Which methods, in what order, with what words | `resolveSignInMethods(options, { methods?, order?, labels? })` | `useSignInMethodList(options)` | `sign-in-methods-picker` |
+| Emailed code | `requestEmailCode(email)`, `verifyEmailCode({ email, code, organizationId? })` | `useAuth()`, same names | `sign-in` |
+| Sign-up | `startSignup({ email, name?, organizationName, password? })`, `confirmSignup({ email, code })` | `useAuth()` | `sign-up` |
+| Provider sign-in | `providerSignInUrl(id, returnTo?)` or `startProviderSignIn(id, { returnTo?, invitationToken? })`, then on `/auth/callback` `readProviderCallback(query)` and `exchangeProviderCode({ code, organizationId?, invitationToken? })` | `useAuth()` | `sign-in`, `auth-callback` |
+| Provider sign-up | `signUpWithProvider({ code, organizationName })` after `SIGNUP_REQUIRED` (`providerSignupDetails(error)`) | `useAuth()` | `auth-callback` |
+| The profile | `createSignInMethods(client)`: `password`, `identities`, `link(id, returnTo?)`, `unlink(identityId)`, `setPassword(…)` | `useSignInMethods()` | `sign-in-methods` |
+| A first password | `changePassword({ newPassword })` | `useAuth().changePassword` | `sign-in-methods` |
+
+Every call that returns a session stores it, as `login` does. With Next.js, the backend-for-frontend sets the cookies for `email-code/verify`, `signup/confirm`, `oidc/exchange` and `oidc/signup` as it does for `login`, and sends the public sign-in endpoints to the API without the current session. The provider's `start` goes through it too: navigate to `providerSignInUrl(id)`, which is under the BFF's prefix.
+
+Your pages:
+
+- **`/login`**: the `sign-in` screen. It shows a button per provider, the password form, "email me a code", and a link to sign up when sign-up is open.
+- **`/sign-up`**: the `sign-up` screen. It says "by invitation" when sign-up is closed.
+- **`/auth/callback`**: the `auth-callback` screen. It must be **public**: add it, and `/sign-up`, to the Next.js guard's `publicPaths`.
+- **The profile**: the `sign-in-methods` card.
+
+```sh
+npx shadcn@latest add https://<this portal>/r/sign-in.json https://<this portal>/r/sign-up.json https://<this portal>/r/auth-callback.json https://<this portal>/r/sign-in-methods.json
+```
+
+### Choosing which methods to show
+
+The server decides what is **on** (`sign-in-options`); the page decides which of those to **show**, in what order and with what words. It can never show a method the server has off. Method ids are `password`, `email-code` and a provider's id (`google`, `zoho`, …); `providers` stands for every enabled provider not named.
+
+```tsx
+// Only Google.
+<SignInMethodsPicker methods={["google"]} onSignedIn={done} />
+
+// Google, then a code by email, as a list of buttons.
+<SignInMethodsPicker methods={["google", "email-code"]} layout="list" onSignedIn={done} />
+
+// Everything, in a custom order, with custom words and the providers' own marks.
+<SignIn
+  order={["email-code", "zoho"]}
+  labels={{ "email-code": "Send me a sign-in code", google: "Sign in with Google" }}
+  icons={{ google: <GoogleMark />, zoho: <ZohoMark /> }}
+  layout="compact"
+  forgotPasswordHref="/forgot-password"
+  onSignedIn={done}
+/>
+```
+
+- **`SignInMethodsPicker`** (copy-in `sign-in-methods-picker`) is just the methods, for a sign-in page of your own; `SignIn` wraps it in a card with a title and the sign-up link, and takes every picker prop. Both handle the emailed code and the organization choice. `classNames`, `dividerText`, `defaultEmail`, `returnTo` and `renderLink` (your router's links) restyle and connect them.
+- **No provider logo ships with them**: the marks belong to their owners. Providers get a monogram; pass the official marks through `icons`.
+- **`onBeforeNavigate({ providerId, url, returnTo, invitationToken })`** runs before the browser leaves for a provider; return `false` to stay.
+- **Invitations:** pass `invitationToken`. It is kept for the callback page (sessionStorage, per tab), whose exchange sends it by itself.
+- **Your own design:** `useSignInMethodList({ methods, order, labels, returnTo, onSignedIn })` from `@babulvaibhav/egradx-react` gives the methods to render, the step (`methods`, `code`, `organization`) and the actions (`startProvider`, `requestEmailCode`, `resendEmailCode`, `verifyEmailCode`, `signInWithPassword`, `chooseOrganization`, `back`). Its actions never throw: they set `error`. Without React, `resolveSignInMethods(options, { methods, order, labels })` from the client does the choosing.
+
+## Errors to handle
+
+| Code | When | What to do |
+|---|---|---|
+| `ORG_SELECTION_REQUIRED` (400) | the person is in several organizations | show `organizationChoices(error)`, send the **same** code (or password) again with `organizationId` |
+| `EMAIL_CODE_INVALID` (400) | wrong code, unknown address, or no code sent: all the same | "That code is not right" |
+| `EMAIL_CODE_EXPIRED`, `EMAIL_CODE_TOO_MANY_ATTEMPTS` (400) | the code is gone | ask for a new one |
+| `EMAIL_CODE_RATE_LIMITED` (400) | a sign-up code was asked for again within 60 s | wait until `resendAvailableAt` |
+| `EMAIL_CODE_UNAVAILABLE` (400) | codes are off, or no email is set up | hide the option: `signInOptions().emailCode` is false |
+| `AUTH_TOO_MANY_ATTEMPTS` (429) | 5 failures (codes count too) from one address | wait `retryAfterSeconds(error)` |
+| `SIGNUP_DISABLED` (403) | sign-up is closed (`invitation`) | say joining is by invitation |
+| `SIGNUP_EMAIL_DOMAIN_NOT_ALLOWED` (400) | the domain isn't allowed | |
+| `EMAIL_IN_USE`, `ORGANIZATION_NAME_IN_USE` (409) | already taken | sign in instead; choose another name |
+| `PASSWORD_INVALID` (400) | a password was given and is not 8 to 128 characters | |
+| `OIDC_CANCELLED`, `OIDC_STATE_INVALID`, `OIDC_FAILED` | given to `/auth/callback` as `?error=` | offer to try again |
+| `OIDC_PROVIDER_UNKNOWN` (404) | no such provider, or it is left out | |
+| `OIDC_CODE_INVALID` (400) | the callback's code was used or expired (a reload) | start the sign-in again |
+| `OIDC_EMAIL_NOT_VERIFIED` (400) | the provider doesn't vouch for the email | |
+| `IDENTITY_LINK_REQUIRED` (409) | an account has that email, the provider isn't trusted for it | sign in another way, then link it from the profile |
+| `SIGNUP_REQUIRED` (409) | no account, sign-up open | ask for an organization name, then `signUpWithProvider` |
+| `AUTH_NO_ACCOUNT` (403) | no account, sign-up closed | joining takes an invitation |
+| `IDENTITY_IN_USE` (409) | linking a provider already linked to another account | |
+| `SIGN_IN_METHOD_REQUIRED` (400) | unlinking would leave no way in | set a password first |
+
+The [error codes reference](/docs/reference/errors) has them all; the `auth-shared.tsx` file the screens bring words every one.
+
+## Audit and messages
+
+| Audit action | Recorded when |
+|---|---|
+| `auth.login` | every sign-in, with `method`: `password`, `email_code` or `oidc` (with `provider`) |
+| `auth.signup.completed` | a sign-up, with `method`, `organizationName` and whether a password was set |
+| `auth.identity.linked` | a provider linked, with `linkedBy`: `email`, `profile` or `invitation` |
+| `auth.identity.unlinked` | a provider removed from the profile |
+
+The emails are [notification types](/docs/reference/notification-types) of the SDK's: `egradx.auth.sign-in-code`, `egradx.auth.signup-code` and `egradx.auth.sign-in-method-added`, sent through the same outbox as yours.
+
+## Guarantees and limits
+
+- **No account is revealed.** Asking for a sign-in code always answers 204, and a code is sent only to an active account. Asking again within 60 seconds is quietly ignored, and a code that couldn't be sent is not kept.
+- **Codes are rate-limited** by the same attempt limiter as passwords: each send counts on the address, and 5 wrong tries end the code. Without `egradx-redis`, the limiter counts per instance.
+- **The provider's identity is its issuer and subject**, not the email: changing the email at the provider keeps the link.
+- **ID tokens are verified locally** against the provider's published keys, which are cached. The provider must be reachable from your API at sign-in.
+- **Round trips and codes expire**: a round trip after 10 minutes, a code after 10 minutes. The hourly clean-up deletes them.
+- **`POST /egradx/auth/register` is deprecated.** It makes an account in no organization, and answers `SIGNUP_DISABLED` unless `signup.legacy-register` is on. Use sign-up.
+- **Not yet:** single sign-on per organization (each organization bringing its own provider), SAML, a second factor.
+
+## In OIM
+
+OIM turns sign-up on and offers Google and Zoho once their credentials are set: `EGRADX_SIGNUP_MODE` (default `organization`), `EGRADX_OIDC_CALLBACK_BASE_URL` (default `http://localhost:8080/api`), and `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `ZOHO_CLIENT_ID`, `ZOHO_CLIENT_SECRET`. Without them, OIM starts with passwords and emailed codes only, and logs that each provider is left out.
+
+<Languages>
+<Tab value="Java">
+
+<RepoSnippet file="apps/egradx-oim/backend/src/main/resources/application.yml" region="sdk-config" title="backend/src/main/resources/application.yml" />
+
+</Tab>
+<Tab value="Node">
+
+<RepoSnippet file="apps/egradx-oim/backend-node/src/runtime.ts" region="sdk-wiring" title="backend-node/src/runtime.ts" />
+
+</Tab>
+<Tab value="Python">
+
+<RepoSnippet file="apps/egradx-oim/backend-python/src/egradx_oim/main.py" region="sdk-wiring" title="backend-python/src/egradx_oim/main.py" />
+
+</Tab>
+</Languages>
+
+## See also
+
+- Recipes: [add Sign in with Google and Zoho](/docs/recipes/sign-in-with-google-and-zoho) · [add another sign-in provider](/docs/recipes/add-a-sign-in-provider) · [let people sign up](/docs/recipes/let-people-sign-up) · [sign in with an emailed code](/docs/recipes/sign-in-with-an-emailed-code) · [link a provider from the profile](/docs/recipes/link-a-provider)
+- [Sign-in & identity](/docs/guides/identity) · [Web](/docs/guides/web) · [HTTP: sign-up and other sign-in methods](/docs/reference/http/auth#sign-up-and-other-sign-in-methods)
